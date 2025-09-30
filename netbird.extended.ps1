@@ -19,8 +19,9 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.10.0
+    Script Version: 1.10.1
     Last Updated: 2025-09-30
+    PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
     Version History:
     1.0.0 - Initial version with basic install/register functionality
@@ -39,6 +40,7 @@
     1.8.3 - Fixed parsing errors in Write-Log calls by using ${} for variables followed by colons
     1.9.0 - Enhanced registration: increased wait to 60s, added retries (3 attempts) for DeadlineExceeded, added network pre-check for gRPC endpoint
     1.10.0 - Major registration enhancement: intelligent daemon readiness detection (5-level validation), smart auto-recovery system, registration verification, and diagnostic export. Eliminates need for manual FullClear operations in enterprise deployments.
+    1.10.1 - Fixed PowerShell 5.1 compatibility issue: replaced null-conditional operator (?.) with explicit null check for broader Windows PowerShell support.
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -50,7 +52,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.10.0"
+$ScriptVersion = "1.10.1"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -1024,10 +1026,16 @@ function Export-RegistrationDiagnostics {
             Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
             ComputerName = $env:COMPUTERNAME
             ScriptVersion = $ScriptVersion
-            ServiceStatus = (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue)?.Status
+            ServiceStatus = $null
             NetBirdVersion = Get-InstalledVersion
             ConfigExists = Test-Path $ConfigFile
             LogFiles = @()
+        }
+        
+        # Get service status with PowerShell 5.1 compatibility
+        $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($service) {
+            $diagnostics.ServiceStatus = $service.Status
         }
         
         # Collect log files
