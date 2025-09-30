@@ -1,0 +1,25 @@
+# OS and editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.history/
+*.swp
+*.swo
+
+# Logs and temp
+logs/
+output/
+tmp/
+temp/
+*.log
+*.tmp
+*.bak
+
+# PowerShell
+PesterTestResults.xml
+*.ps1xml
+
+# Build artifacts
+dist/
+build/
