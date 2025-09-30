@@ -31,5 +31,13 @@ Refer to the script header for parameter descriptions and examples.
   - A new Git tag vX.Y.Z
   - A new GitHub Release for that tag
 
+## Documentation
+
+Comprehensive documentation is available:
+- **[Script Analysis](docs/SCRIPT_ANALYSIS.md)** - Detailed technical analysis of the script architecture and functions
+- **[Usage Guide](docs/USAGE_GUIDE.md)** - Complete usage scenarios, deployment strategies, and troubleshooting
+- **[Enhancement Recommendations](docs/ENHANCEMENT_RECOMMENDATIONS.md)** - Detailed enhancement proposals and implementation roadmap
+- **[Release Process](docs/RELEASE_PROCESS.md)** - Version management and release workflow
+
 ## Version History (summary)
 - v1.9.0 — Initial publication to this GitHub repository. See the script header for the full historical changelog.
