@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.18.1
+    Script Version: 1.18.2
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -40,6 +40,7 @@
     1.17.0 - Code cleanup: removed unused functions, added helpers, reduced ~265 lines
     1.18.0 - Intune Event Log support, fail-fast network validation, auto config clear on fresh install
     1.18.1 - Fixed MSI config conflict: clear default.json and client.conf in addition to config.json
+    1.18.2 - Simplified config clearing: full directory delete + 15s stabilization wait
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -51,7 +52,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.18.1"
+$ScriptVersion = "1.18.2"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -2033,42 +2034,40 @@ if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
         $script:JustInstalled = $true
         $script:NetBirdExe = $NetBirdExe
 
-        # Clear any MSI-created config on fresh install (prevents conflicts)
-        # MSI may create: config.json, default.json, and other config files
-        Write-Log "Fresh installation detected - clearing any MSI-created config files"
+        # Full clear of NetBird data directory on fresh install (prevents conflicts)
+        # Simple approach: stop service, delete everything, restart service
+        Write-Log "Fresh installation detected - performing full clear of NetBird data directory"
 
-        # Stop service before clearing config (MSI starts service automatically)
-        Write-Log "Stopping NetBird service to clear config files..."
+        # Stop service before clearing (MSI starts service automatically)
+        Write-Log "Stopping NetBird service for full clear..."
         if (-not (Stop-NetBirdService)) {
-            Write-Log "Could not stop service, attempting to clear config anyway" "WARN" -Source "SYSTEM"
+            Write-Log "Could not stop service, attempting to clear anyway" "WARN" -Source "SYSTEM"
         }
 
-        # Clear specific config files that cause registration conflicts
-        $configFiles = @("config.json", "default.json", "client.conf")
-        foreach ($configFile in $configFiles) {
-            $configPath = Join-Path $NetBirdDataPath $configFile
-            if (Test-Path $configPath) {
-                try {
-                    Remove-Item $configPath -Force -ErrorAction Stop
-                    Write-Log "Removed pre-existing config: $configPath"
-                } catch {
-                    Write-Log "Could not remove config file $configPath : $($_.Exception.Message)" "WARN" -Source "SYSTEM"
-                }
-            }
-        }
-
-        # Clear other data directory files (preserve logs)
+        # Delete entire data directory
         if (Test-Path $NetBirdDataPath) {
             try {
-                Get-ChildItem $NetBirdDataPath -File | Where-Object { $_.Name -notmatch '\.log$' } | Remove-Item -Force -ErrorAction SilentlyContinue
-                Write-Log "Cleared NetBird data directory (preserved log files)"
+                Remove-Item $NetBirdDataPath -Recurse -Force -ErrorAction Stop
+                Write-Log "Removed entire NetBird data directory: $NetBirdDataPath"
             } catch {
-                Write-Log "Could not clear data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+                Write-Log "Could not remove data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
             }
         }
 
-        Write-Log "Restarting NetBird service after config clear..."
+        # Recreate empty data directory
+        try {
+            New-Item -Path $NetBirdDataPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+            Write-Log "Recreated empty data directory"
+        } catch {
+            Write-Log "Could not recreate data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        }
+
+        Write-Log "Starting NetBird service after full clear..."
         if (Start-NetBirdService) {
+            # Wait 15 seconds for service to stabilize after full clear
+            Write-Log "Waiting 15 seconds for service to stabilize after full clear..."
+            Start-Sleep -Seconds 15
+
             if (-not (Wait-ForServiceRunning)) {
                 Write-Log "Warning: Service did not fully start in time, but proceeding..." "WARN" -Source "SYSTEM"
             }
