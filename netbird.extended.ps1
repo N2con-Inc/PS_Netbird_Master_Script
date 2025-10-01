@@ -8,6 +8,7 @@
     Only proceeds with installation if a newer version is available or if not installed.
 .PARAMETER SetupKey
     The NetBird setup key for registration (optional). If not provided, the script will install/upgrade without registration.
+    Supports multiple formats: UUID (77530893-E8C4-44FC-AABF-7A0511D9558E), Base64 (YWJjZGVmZ2hpamts=), or NetBird prefixed (nb_setup_abc123).
 .PARAMETER ManagementUrl
     The NetBird management server URL (optional, defaults to https://app.netbird.io)
 .PARAMETER FullClear
@@ -19,8 +20,8 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.10.1
-    Last Updated: 2025-09-30
+    Script Version: 1.10.2
+    Last Updated: 2025-10-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
     Version History:
@@ -41,6 +42,7 @@
     1.9.0 - Enhanced registration: increased wait to 60s, added retries (3 attempts) for DeadlineExceeded, added network pre-check for gRPC endpoint
     1.10.0 - Major registration enhancement: intelligent daemon readiness detection (5-level validation), smart auto-recovery system, registration verification, and diagnostic export. Eliminates need for manual FullClear operations in enterprise deployments.
     1.10.1 - Fixed PowerShell 5.1 compatibility issue: replaced null-conditional operator (?.) with explicit null check for broader Windows PowerShell support.
+    1.10.2 - Fixed setup key validation to support UUID format (e.g., 77530893-E8C4-44FC-AABF-7A0511D9558E) in addition to Base64 and NetBird prefixed formats. Resolves false positive validation failures for valid UUID-based setup keys.
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -52,7 +54,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.10.1"
+$ScriptVersion = "1.10.2"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -823,8 +825,11 @@ function Test-RegistrationPrerequisites {
     Write-Log "Validating registration prerequisites..."
     $prerequisites = @{}
     
-    # Check 1: Setup key format
-    $prerequisites.ValidSetupKey = ($SetupKey -match '^[A-Za-z0-9+/]+=*$' -and $SetupKey.Length -ge 20)
+    # Check 1: Setup key format (supports UUID, Base64, and NetBird prefixed formats)
+    $isUuidFormat = $SetupKey -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+    $isBase64Format = ($SetupKey -match '^[A-Za-z0-9+/]+=*$' -and $SetupKey.Length -ge 20)
+    $isNetBirdFormat = ($SetupKey -match '^[A-Za-z0-9_-]+$' -and $SetupKey.Length -ge 20)
+    $prerequisites.ValidSetupKey = ($isUuidFormat -or $isBase64Format -or $isNetBirdFormat)
     
     # Check 2: Management URL accessibility
     try {
