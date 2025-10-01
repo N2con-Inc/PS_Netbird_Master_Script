@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.2
+    Script Version: 1.16.3
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -52,6 +52,7 @@
     1.16.0 - Major logic refactor: 4-scenario execution model for predictable behavior
     1.16.1 - CRITICAL BUG FIX: Fixed syntax error (missing try block) in Confirm-RegistrationSuccess function
     1.16.2 - Fixed false-positive network prerequisites failures (Get-NetAdapter/Get-DnsClientServerAddress cmdlet issues)
+    1.16.3 - Fixed unnecessary retries when netbird status returns exit code 1 (not connected state)
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -63,7 +64,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.2"
+$ScriptVersion = "1.16.3"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -138,11 +139,18 @@ function Invoke-NetBirdStatusCommand {
             $output = & $executablePath $statusArgs 2>&1
             $exitCode = $LASTEXITCODE
 
-            if ($exitCode -eq 0) {
-                return @{
-                    Success = $true
-                    Output = $output
-                    ExitCode = $exitCode
+            # Exit codes 0 and 1 are both valid:
+            # - 0: NetBird is connected
+            # - 1: NetBird is not connected/registered (but status output is valid)
+            # Only exit codes 2+ indicate actual errors (daemon not responding, etc.)
+            if ($exitCode -eq 0 -or $exitCode -eq 1) {
+                # Check if we got actual output
+                if ($output -and $output.ToString().Trim().Length -gt 0) {
+                    return @{
+                        Success = $true
+                        Output = $output
+                        ExitCode = $exitCode
+                    }
                 }
             }
 
