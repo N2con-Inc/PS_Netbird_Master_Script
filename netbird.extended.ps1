@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.5
+    Script Version: 1.16.6
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -55,6 +55,7 @@
     1.16.3 - Fixed unnecessary retries when netbird status returns exit code 1 (not connected state)
     1.16.4 - CRITICAL: Fixed Test-NetConnection hanging indefinitely - replaced with timeout-safe TCP test (5s)
     1.16.5 - Removed redundant TCP test from prerequisites - HTTPS test validates TLS/certs/connectivity properly
+    1.16.6 - Optimization: skip --management-url when default; extended daemon restart wait from 60s to 120s
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -66,7 +67,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.5"
+$ScriptVersion = "1.16.6"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -792,7 +793,17 @@ function Register-NetBird {
         while (-not $success -and $retryCount -lt $maxRetries) {
             $retryCount++
             Write-Log "Registration attempt $retryCount of $maxRetries..."
-            $registerArgs = @("up", "--setup-key", $SetupKey, "--management-url", $ManagementUrl)
+
+            # Build registration arguments
+            $registerArgs = @("up", "--setup-key", $SetupKey)
+
+            # Only add --management-url if it's not the default value
+            if ($ManagementUrl -ne "https://app.netbird.io") {
+                $registerArgs += "--management-url"
+                $registerArgs += $ManagementUrl
+                Write-Log "Using custom management URL: $ManagementUrl"
+            }
+
             Write-Log "Executing: $executablePath $($registerArgs -join ' ')"
             Write-Log "This may take up to 60 seconds..."
             $process = Start-Process -FilePath $executablePath -ArgumentList $registerArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\netbird_reg_out.txt" -RedirectStandardError "$env:TEMP\netbird_reg_err.txt"
@@ -1744,7 +1755,16 @@ function Invoke-NetBirdRegistration {
             $NetBirdExe
         }
         
-        $registerArgs = @("up", "--setup-key", $SetupKey, "--management-url", $ManagementUrl)
+        # Build registration arguments
+        $registerArgs = @("up", "--setup-key", $SetupKey)
+
+        # Only add --management-url if it's not the default value
+        if ($ManagementUrl -ne "https://app.netbird.io") {
+            $registerArgs += "--management-url"
+            $registerArgs += $ManagementUrl
+            Write-Log "Using custom management URL: $ManagementUrl"
+        }
+
         Write-Log "Executing: $executablePath $($registerArgs -join ' ')"
         
         $process = Start-Process -FilePath $executablePath -ArgumentList $registerArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\netbird_reg_out.txt" -RedirectStandardError "$env:TEMP\netbird_reg_err.txt"
@@ -1818,7 +1838,8 @@ function Register-NetBirdEnhanced {
                 Write-Log "Failed to restart service - registration cannot proceed" "ERROR" -Source "SYSTEM"
                 return $false
             }
-            if (-not (Wait-ForDaemonReady -MaxWaitSeconds 60)) {
+            Write-Log "Waiting up to 120 seconds for daemon to become ready after service restart"
+            if (-not (Wait-ForDaemonReady -MaxWaitSeconds 120)) {
                 Write-Log "Daemon still not ready after service restart" "ERROR" -Source "NETBIRD"
                 return $false
             }
