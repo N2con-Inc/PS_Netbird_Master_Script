@@ -1,7 +1,7 @@
 # NetBird PowerShell Script Usage Guide
 
-**Script Version**: 1.9.0  
-**Guide Date**: 2025-09-30  
+**Script Version**: 1.16.0
+**Guide Date**: 2025-10-01  
 **Script File**: `netbird.extended.ps1`
 
 ## Table of Contents
@@ -39,24 +39,26 @@
 
 ```powershell
 # Download the script (example methods)
-curl -o netbird.extended.ps1 https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.9.0/netbird.extended.ps1
+curl -o netbird.extended.ps1 https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.16.0/netbird.extended.ps1
 
 # Or using PowerShell
-Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.9.0/netbird.extended.ps1" -OutFile "netbird.extended.ps1"
+Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.16.0/netbird.extended.ps1" -OutFile "netbird.extended.ps1"
 
 # Execute with administrator privileges
 .\netbird.extended.ps1 -SetupKey "your-setup-key-here"
 ```
 
-**What happens**:
+**What happens** (SCENARIO 3 - Fresh install with key):
 1. ✅ Checks for existing NetBird installation (none found)
 2. 🔍 Fetches latest NetBird version from GitHub
 3. 📥 Downloads NetBird MSI installer
 4. ⚙️ Installs NetBird silently
 5. 🔧 Starts NetBird service
-6. 🔄 Resets client state for clean registration
-7. 🔗 Registers with provided setup key
-8. ✅ Verifies connection status
+6. 🌐 Validates network prerequisites (8 comprehensive checks)
+7. 🔄 Resets client state for clean registration
+8. 🔗 Registers with provided setup key
+9. ✅ Verifies connection status with enhanced validation
+10. 📊 Creates persistent installation log file
 
 ### 2. Upgrade Existing Installation
 **Use Case**: Update NetBird to the latest version
@@ -66,13 +68,14 @@ Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/re
 .\netbird.extended.ps1
 ```
 
-**What happens**:
-1. 🔍 Detects current NetBird version
-2. 📊 Compares with latest available version
-3. ⬆️ Upgrades if newer version available
-4. 🔧 Preserves existing configuration
+**What happens** (SCENARIO 2 - Upgrade without key):
+1. 📊 Pre-upgrade status check and logging
+2. 🔍 Detects current NetBird version
+3. 📊 Compares with latest available version
+4. ⬆️ Upgrades if newer version available
 5. 🔄 Restarts services
-6. ⏭️ Skips upgrade if already up-to-date
+6. 📊 Post-upgrade status check and logging
+7. 🔧 Preserves existing connection state
 
 ### 3. Full Reset and Re-registration
 **Use Case**: Complete client reset with new setup key
@@ -278,13 +281,33 @@ Get-Content "C:\ProgramData\Netbird\client.log" -Tail 50
 - Check key expiration
 - Ensure correct management URL
 
+#### Issue 6: "Status command failed after retries" (v1.14.0+)
+**Cause**: Persistent daemon communication failures despite automatic retry logic  
+**Solutions**:
+- Check persistent log files: `Get-ChildItem "$env:TEMP\NetBird-Installation-*.log"`
+- Verify service is actually running: `Get-Service NetBird`
+- Check gRPC endpoint accessibility: `Test-NetConnection localhost -Port 33071`
+- Review JSON status parsing errors in log files
+
+#### Issue 7: "Relays/Nameservers unavailable" warnings (v1.14.0+)
+**Cause**: Network infrastructure components not accessible (normal in some environments)  
+**Impact**: 
+- **No Relays**: P2P-only mode, may impact connectivity through NAT/firewalls
+- **No Nameservers**: NetBird DNS resolution disabled, uses system DNS
+- **No Peers**: Normal for fresh setup or isolated networks
+**Solutions**:
+- These are diagnostic warnings, not errors
+- Contact NetBird administrator if functionality is required
+- Check corporate firewall policies
+
 ### Diagnostic Commands
 
+#### Basic Diagnostics
 ```powershell
 # Test network connectivity
 Test-NetConnection api.netbird.io -Port 443
 
-# Check NetBird status
+# Check NetBird status (with automatic retry and JSON parsing)
 & "C:\Program Files\NetBird\netbird.exe" status --detail
 
 # View NetBird logs
@@ -296,6 +319,23 @@ Get-WmiObject win32_service | Where-Object {$_.Name -eq "NetBird"} | Format-List
 
 # Registry investigation
 Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" | Where-Object {$_.DisplayName -like "*NetBird*"}
+```
+
+#### Enhanced Diagnostics (v1.14.0+)
+```powershell
+# View persistent installation logs (automatically created since v1.14.0)
+Get-ChildItem "$env:TEMP\NetBird-Installation-*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+
+# View latest installation log
+$latestLog = Get-ChildItem "$env:TEMP\NetBird-Installation-*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Get-Content $latestLog.FullName
+
+# Check enhanced status with JSON parsing (available in v1.14.0+)
+& "C:\Program Files\NetBird\netbird.exe" status --json | ConvertFrom-Json | Format-Table
+
+# Enhanced connectivity testing
+Test-NetConnection api.netbird.io -Port 443 -InformationLevel Detailed
+Invoke-WebRequest -Uri "https://api.netbird.io" -Method Head -TimeoutSec 10
 ```
 
 ## Best Practices

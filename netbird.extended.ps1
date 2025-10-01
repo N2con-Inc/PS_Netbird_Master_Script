@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.11.1
+    Script Version: 1.16.0
     Last Updated: 2025-10-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -45,6 +45,11 @@
     1.10.2 - Fixed setup key validation to support UUID format (e.g., 77530893-E8C4-44FC-AABF-7A0511D9558E) in addition to Base64 and NetBird prefixed formats. Resolves false positive validation failures for valid UUID-based setup keys.
     1.11.0 - Enhanced error classification system: errors now categorized by source (NETBIRD/SCRIPT/SYSTEM) for improved troubleshooting. Format: [SOURCE-ERROR] or [SOURCE-WARN] for error/warning messages, enabling faster diagnosis and better enterprise monitoring integration.
     1.11.1 - CRITICAL FIX: Enhanced registration validation with stricter success criteria. Now requires ALL critical checks (Management Connected, IP Assigned, Daemon Running, No Errors) to pass before claiming success. Prevents false positive "success" reports when management server connection fails.
+    1.12.0 - 🚀 OOBE/PROVISIONING ENHANCEMENT: Major improvements for fresh Windows installs and automated provisioning scenarios. Added: (1) Aggressive fresh-install state clearing to prevent MSI config issues causing DeadlineExceeded errors, (2) Critical gRPC connection validation in daemon readiness checks, (3) Network stack readiness validation for OOBE scenarios, (4) Full reset escalation in recovery actions (now 5 retry attempts with progressive recovery: wait → partial reset → full reset), (5) Extended timeouts for fresh installs (180s daemon wait), (6) Smart detection of fresh vs. upgrade installs to avoid clearing existing connections. Preserves upgrade-only mode (no setup key = no state changes). Resolves RPC timeout issues in Intune/RMM deployments.
+    1.13.0 - ✅ VALIDATION HARDENING: Fixed critical false-positive detection issues in connection status validation. (1) Check-NetBirdStatus: Now uses multiline regex anchors ((?m)^) to match only status lines (not peer details), validates exit code, requires BOTH Management AND Signal connected PLUS IP assigned. (2) Confirm-RegistrationSuccess: Added Signal to critical checks (was optional, now required), uses line-start anchors to prevent peer status false matches, extracts and logs assigned IP address, validates Interface type field, expanded error pattern detection (added "context deadline exceeded", "rpc error", "NeedsLogin"). Eliminates false positives where script reported "connected" but only found peer connection status or was in connecting state.
+    1.14.0 - 🔧 ROBUSTNESS ENHANCEMENTS: (1) Added automatic retry logic for status commands (3 attempts with 3s delay) to handle transient daemon communication failures. (2) Implemented JSON status parsing with automatic fallback to text parsing for more reliable status detection. (3) Added persistent logging to file ($env:TEMP\NetBird-Installation-{timestamp}.log) for Intune/RMM troubleshooting - all console output now also written to file. (4) Added diagnostic checks for Relays (P2P fallback), Nameservers (DNS), and Peer connectivity with detailed warnings when unavailable. (5) Enhanced pre-registration connectivity test: now validates both TCP (port 443) and HTTPS accessibility to management server, detects proxy/SSL interception issues. (6) Check-NetBirdStatus now attempts JSON parsing first before falling back to text parsing. All enhancements maintain backward compatibility and improve reliability in corporate/restricted network environments.
+    1.15.0 - 🌐 COMPREHENSIVE NETWORK PREREQUISITES: Implemented comprehensive network validation before registration attempts to prevent wasted cycles and improve OOBE reliability. New Test-NetworkPrerequisites function performs 8 checks in two phases: (1) CRITICAL checks (blocking): active network adapter detection, default gateway configuration, DNS servers configured, DNS resolution functional (api.netbird.io), internet connectivity (ICMP with HTTP fallback for restricted environments). (2) HIGH-VALUE checks (warnings only): time synchronization via Windows Time service, corporate proxy detection, signal server connectivity (signal2.wiretrustee.com, signal.netbird.io). Returns structured results with separate arrays for blocking issues vs warnings. Detailed logging with ✓/✗ indicators and summary output. Prevents registration attempts when network is not ready, saving time in automated provisioning scenarios. Test-NetworkStackReady now acts as backward-compatible wrapper calling the comprehensive function.
+    1.16.0 - 🔄 MAJOR LOGIC REFACTOR: Complete rewrite of main execution flow into 4 explicit scenarios for clarity and maintainability. (1) SCENARIO 1 - Fresh install without key: Install and exit. (2) SCENARIO 2 - Upgrade without key: Check pre-upgrade status, upgrade if needed, check post-upgrade status, preserve existing connection. (3) SCENARIO 3 - Fresh install with key: Install, register, verify. (4) SCENARIO 4 - Upgrade with key: Check pre-upgrade status, upgrade if needed, check post-upgrade status, only register if NOT connected (unless -FullClear specified). Moved connection check from Register-NetBirdEnhanced into main flow for better control. FullClear now properly forces re-registration even when already connected. Each scenario has explicit logging with clear "Pre-Upgrade" and "Post-Upgrade" status checks. Eliminates confusion about when state clearing happens and when registration is attempted. Makes script behavior predictable and traceable in Intune/RMM logs.
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -56,7 +61,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.11.1"
+$ScriptVersion = "1.16.0"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -66,24 +71,123 @@ $NetBirdDataPath = "C:\ProgramData\Netbird"
 $ConfigFile = "$NetBirdDataPath\config.json"
 $DesktopShortcut = "C:\Users\Public\Desktop\NetBird.lnk"
 
+# Track installation state for smart recovery decisions
+$script:JustInstalled = $false
+$script:WasFreshInstall = $false
+
+# Log file path for persistent logging
+$script:LogFile = "$env:TEMP\NetBird-Installation-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
 function Write-Log {
     param(
-        [string]$Message, 
+        [string]$Message,
         [string]$Level = "INFO",
         [ValidateSet("SCRIPT", "NETBIRD", "SYSTEM")]
         [string]$Source = "SCRIPT"
     )
-    
+
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    
+
     # Format output based on level and source
     $logPrefix = switch ($Level) {
         "ERROR" { "[$Source-ERROR]" }
         "WARN"  { "[$Source-WARN]" }
         default { "[$Level]" }
     }
-    
-    Write-Host "[$timestamp] $logPrefix $Message"
+
+    $logMessage = "[$timestamp] $logPrefix $Message"
+    Write-Host $logMessage
+
+    # Also write to persistent log file for Intune/RMM troubleshooting
+    try {
+        $logMessage | Out-File -FilePath $script:LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch {
+        # Silently fail if log file write fails - don't want to interrupt script execution
+    }
+}
+
+function Invoke-NetBirdStatusCommand {
+    param(
+        [switch]$Detailed,
+        [switch]$JSON,
+        [int]$MaxAttempts = 3,
+        [int]$RetryDelay = 3
+    )
+
+    $executablePath = if ($script:NetBirdExe -and (Test-Path $script:NetBirdExe)) {
+        $script:NetBirdExe
+    } else {
+        $NetBirdExe
+    }
+
+    if (-not (Test-Path $executablePath)) {
+        Write-Log "NetBird executable not found at $executablePath" "WARN" -Source "SCRIPT"
+        return $null
+    }
+
+    # Build command arguments
+    $statusArgs = @("status")
+    if ($Detailed) { $statusArgs += "--detail" }
+    if ($JSON) { $statusArgs += "--json" }
+
+    # Retry logic for transient failures
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            $output = & $executablePath $statusArgs 2>&1
+            $exitCode = $LASTEXITCODE
+
+            if ($exitCode -eq 0) {
+                return @{
+                    Success = $true
+                    Output = $output
+                    ExitCode = $exitCode
+                }
+            }
+
+            Write-Log "Status command failed with exit code $exitCode (attempt $attempt/$MaxAttempts)" "WARN" -Source "NETBIRD"
+
+            if ($attempt -lt $MaxAttempts) {
+                Write-Log "Retrying in ${RetryDelay}s..." "WARN" -Source "NETBIRD"
+                Start-Sleep -Seconds $RetryDelay
+            }
+        }
+        catch {
+            Write-Log "Status command exception (attempt $attempt/$MaxAttempts): $($_.Exception.Message)" "WARN" -Source "NETBIRD"
+
+            if ($attempt -lt $MaxAttempts) {
+                Start-Sleep -Seconds $RetryDelay
+            }
+        }
+    }
+
+    # All attempts failed
+    return @{
+        Success = $false
+        Output = $output
+        ExitCode = $exitCode
+    }
+}
+
+function Get-NetBirdStatusJSON {
+    Write-Log "Attempting to get NetBird status in JSON format..."
+
+    $result = Invoke-NetBirdStatusCommand -JSON -MaxAttempts 2 -RetryDelay 2
+
+    if (-not $result.Success) {
+        Write-Log "Failed to get JSON status output" "WARN" -Source "NETBIRD"
+        return $null
+    }
+
+    try {
+        $statusObj = $result.Output | ConvertFrom-Json -ErrorAction Stop
+        Write-Log "Successfully parsed JSON status output"
+        return $statusObj
+    }
+    catch {
+        Write-Log "Failed to parse JSON status output: $($_.Exception.Message)" "WARN" -Source "SCRIPT"
+        Write-Log "Falling back to text parsing" "WARN" -Source "SCRIPT"
+        return $null
+    }
 }
 
 function Get-LatestVersionAndDownloadUrl {
@@ -512,44 +616,71 @@ function Install-NetBird {
 }
 
 function Check-NetBirdStatus {
-    # Use the discovered NetBird executable path if we found one
-    $executablePath = if ($script:NetBirdExe -and (Test-Path $script:NetBirdExe)) {
-        $script:NetBirdExe
-    } else {
-        $NetBirdExe
-    }
-    if (-not (Test-Path $executablePath)) {
-        Write-Log "NetBird executable not found at $executablePath - cannot check status"
-        return $false
-    }
-    try {
-        Write-Log "Checking NetBird connection status using: $executablePath"
-        # Check current status
-        $statusArgs = @("status")
-        $output = & $executablePath $statusArgs 2>&1
-        Write-Log "Status output: $output"
-        # Look for indicators that NetBird is connected
-        $connectedPatterns = @(
-            "Connected",
-            "connected",
-            "Status: Connected",
-            "Daemon status: Up",
-            "Management: Connected",
-            "Signal: Connected"
-        )
-        foreach ($pattern in $connectedPatterns) {
-            if ($output -match $pattern) {
-                Write-Log "NetBird appears to be connected (found: $pattern)"
-                return $true
-            }
+    Write-Log "Checking NetBird connection status..."
+
+    # Try JSON format first for more reliable parsing
+    $statusJSON = Get-NetBirdStatusJSON
+    if ($statusJSON) {
+        # Use JSON parsing if available
+        $managementConnected = ($statusJSON.managementState -eq "Connected")
+        $signalConnected = ($statusJSON.signalState -eq "Connected")
+        $hasIP = ($null -ne $statusJSON.netbirdIP -and $statusJSON.netbirdIP -ne "")
+
+        if ($managementConnected -and $signalConnected -and $hasIP) {
+            Write-Log "✓ NetBird is fully connected (JSON): Management: Connected, Signal: Connected, IP: $($statusJSON.netbirdIP)"
+            return $true
         }
-        Write-Log "NetBird does not appear to be connected"
+
+        Write-Log "NetBird not fully connected (JSON): Management=$managementConnected, Signal=$signalConnected, IP=$hasIP"
         return $false
     }
-    catch {
-        Write-Log "Failed to check NetBird status: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
+
+    # Fallback to text parsing with retry logic
+    Write-Log "JSON parsing unavailable, falling back to text parsing with retries"
+    $result = Invoke-NetBirdStatusCommand -MaxAttempts 3 -RetryDelay 3
+
+    if (-not $result.Success) {
+        Write-Log "Status command failed after retries" "WARN" -Source "NETBIRD"
         return $false
     }
+
+    $output = $result.Output
+    Write-Log "Status output: $output"
+
+    # Strict validation: Check for BOTH Management AND Signal connected
+    # These must appear as standalone lines in the status output (not in peer details)
+    $hasManagementConnected = ($output -match "(?m)^Management:\s+Connected")
+    $hasSignalConnected = ($output -match "(?m)^Signal:\s+Connected")
+
+    # Additional check: Look for NetBird IP assignment (proves registration succeeded)
+    $hasNetBirdIP = ($output -match "(?m)^NetBird IP:\s+\d+\.\d+\.\d+\.\d+")
+
+    if ($hasManagementConnected -and $hasSignalConnected) {
+        if ($hasNetBirdIP) {
+            Write-Log "✓ NetBird is fully connected (Management: Connected, Signal: Connected, IP: Assigned)"
+            return $true
+        } else {
+            Write-Log "⚠ Management and Signal connected, but no NetBird IP assigned yet" "WARN" -Source "NETBIRD"
+            return $false
+        }
+    }
+
+    # Check for error states
+    if ($output -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
+        Write-Log "✗ Management server not connected" "WARN" -Source "NETBIRD"
+    }
+    if ($output -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
+        Write-Log "✗ Signal server not connected" "WARN" -Source "NETBIRD"
+    }
+
+    # Check for login requirement
+    if ($output -match "NeedsLogin|not logged in|login required") {
+        Write-Log "✗ NetBird requires login/registration" "WARN" -Source "NETBIRD"
+        return $false
+    }
+
+    Write-Log "NetBird is not fully connected (Management connected: $hasManagementConnected, Signal connected: $hasSignalConnected, IP assigned: $hasNetBirdIP)"
+    return $false
 }
 
 function Log-NetBirdStatusDetailed {
@@ -740,35 +871,48 @@ function Wait-ForDaemonReady {
         [int]$MaxWaitSeconds = 120,
         [int]$CheckInterval = 5
     )
-    
+
     Write-Log "Waiting for NetBird daemon to be fully ready for registration..."
     $startTime = Get-Date
     $timeout = $startTime.AddSeconds($MaxWaitSeconds)
-    
+
     while ((Get-Date) -lt $timeout) {
         # Multi-level readiness check
         $readinessChecks = @{
             ServiceRunning = $false
             DaemonResponding = $false
+            GRPCConnectionOpen = $false
             APIResponding = $false
             NoActiveConnections = $false
             ConfigWritable = $false
         }
-        
+
         # Check 1: Service is running
         $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         $readinessChecks.ServiceRunning = ($service -and $service.Status -eq "Running")
-        
+
         if ($readinessChecks.ServiceRunning) {
-            # Check 2: Daemon responds to status command
+            # Check 2: Daemon responds to status command (basic gRPC check)
             try {
                 $statusOutput = & $script:NetBirdExe "status" 2>&1
                 $readinessChecks.DaemonResponding = ($LASTEXITCODE -eq 0)
-                
-                # Check 3: API endpoint is responsive (not just TCP connection)
+
+                # Check 3: gRPC connection is actually open and not showing connection errors
+                # This is critical - the CLI uses gRPC to talk to the daemon
                 if ($readinessChecks.DaemonResponding) {
+                    # Check for gRPC connection errors in output
+                    $hasConnectionError = ($statusOutput -match "connection refused|failed to connect|dial|rpc error|DeadlineExceeded")
+                    $readinessChecks.GRPCConnectionOpen = (-not $hasConnectionError)
+
+                    if (-not $readinessChecks.GRPCConnectionOpen) {
+                        Write-Log "  gRPC connection issue detected in status output: $statusOutput" "WARN" -Source "NETBIRD"
+                    }
+                }
+
+                # Check 4: API endpoint is responsive with detailed status (full gRPC validation)
+                if ($readinessChecks.GRPCConnectionOpen) {
                     try {
-                        # Try to get daemon info - this ensures gRPC API is ready
+                        # Try to get daemon info - this ensures gRPC API is fully ready
                         $infoOutput = & $script:NetBirdExe "status" "--detail" 2>&1
                         $readinessChecks.APIResponding = ($LASTEXITCODE -eq 0 -and $infoOutput -notmatch "connection refused")
                     }
@@ -776,13 +920,13 @@ function Wait-ForDaemonReady {
                         $readinessChecks.APIResponding = $false
                     }
                 }
-                
-                # Check 4: Not already connected (prevents registration conflicts)
+
+                # Check 5: Not already connected (prevents registration conflicts)
                 if ($readinessChecks.APIResponding) {
                     $readinessChecks.NoActiveConnections = ($statusOutput -notmatch "Connected|connected")
                 }
-                
-                # Check 5: Config directory is writable (prevents permission issues)
+
+                # Check 6: Config directory is writable (prevents permission issues)
                 if ($readinessChecks.NoActiveConnections) {
                     try {
                         $testFile = Join-Path $NetBirdDataPath "readiness_test.tmp"
@@ -799,37 +943,291 @@ function Wait-ForDaemonReady {
                 $readinessChecks.DaemonResponding = $false
             }
         }
-        
+
         # Log readiness status
         $readyCount = ($readinessChecks.Values | Where-Object {$_ -eq $true}).Count
-        Write-Log "Daemon readiness: $readyCount/5 checks passed"
+        $totalChecks = $readinessChecks.Count
+        Write-Log "Daemon readiness: $readyCount/$totalChecks checks passed"
         foreach ($check in $readinessChecks.GetEnumerator()) {
             $status = if ($check.Value) { "✓" } else { "✗" }
             Write-Log "  $status $($check.Key)"
         }
-        
+
         # All checks passed - daemon is ready
         if (($readinessChecks.Values | Where-Object {$_ -eq $false}).Count -eq 0) {
             $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
             Write-Log "NetBird daemon is fully ready for registration (took $elapsedSeconds seconds)"
             return $true
         }
-        
+
         Write-Log "Daemon not ready yet, waiting $CheckInterval seconds..."
         Start-Sleep -Seconds $CheckInterval
     }
-    
+
     $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
     Write-Log "Timeout waiting for daemon readiness after $elapsedSeconds seconds" "ERROR" -Source "NETBIRD"
-    
+
     # Log final status for troubleshooting
     Write-Log "Final readiness status:"
     foreach ($check in $readinessChecks.GetEnumerator()) {
         $status = if ($check.Value) { "✓" } else { "✗" }
         Write-Log "  $status $($check.Key)"
     }
-    
+
     return $false
+}
+
+function Test-NetworkPrerequisites {
+    Write-Log "=== Comprehensive Network Prerequisites Validation ==="
+
+    $networkChecks = @{
+        # Critical checks (must pass)
+        ActiveAdapter = $false
+        DefaultGateway = $false
+        DNSServersConfigured = $false
+        DNSResolution = $false
+        InternetConnectivity = $false
+
+        # High-value checks (warnings if fail)
+        TimeSynchronized = $false
+        NoProxyDetected = $false
+        SignalServerReachable = $false
+    }
+
+    $blockingIssues = @()
+    $warnings = @()
+
+    # ===== CRITICAL CHECKS (Must Pass) =====
+
+    # Check 1: Active network adapter
+    try {
+        $activeAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+        if ($activeAdapters.Count -gt 0) {
+            $networkChecks.ActiveAdapter = $true
+            Write-Log "✓ Active network adapter(s): $($activeAdapters.Count) found"
+            foreach ($adapter in $activeAdapters) {
+                Write-Log "  - $($adapter.Name) ($($adapter.InterfaceDescription))"
+            }
+        } else {
+            $blockingIssues += "No active network adapters"
+            Write-Log "✗ No active network adapters found" "ERROR" -Source "SYSTEM"
+        }
+    } catch {
+        $blockingIssues += "Cannot enumerate network adapters"
+        Write-Log "✗ Failed to enumerate network adapters: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+    }
+
+    # Check 2: Default gateway configured
+    if ($networkChecks.ActiveAdapter) {
+        try {
+            $hasGateway = $false
+            foreach ($adapter in $activeAdapters) {
+                $ipConfig = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue
+                if ($ipConfig.IPv4DefaultGateway -or $ipConfig.IPv6DefaultGateway) {
+                    $gateway = if ($ipConfig.IPv4DefaultGateway) { $ipConfig.IPv4DefaultGateway.NextHop } else { $ipConfig.IPv6DefaultGateway.NextHop }
+                    $networkChecks.DefaultGateway = $true
+                    $hasGateway = $true
+                    Write-Log "✓ Default gateway: $gateway on $($adapter.Name)"
+                    break
+                }
+            }
+
+            if (-not $hasGateway) {
+                $blockingIssues += "No default gateway configured"
+                Write-Log "✗ No default gateway - cannot route to internet" "ERROR" -Source "SYSTEM"
+            }
+        } catch {
+            $warnings += "Could not verify default gateway"
+            Write-Log "⚠ Could not verify default gateway: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        }
+    }
+
+    # Check 3: DNS servers configured
+    try {
+        $dnsServers = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.ServerAddresses.Count -gt 0 -and $_.InterfaceAlias -notmatch "Loopback" }
+
+        if ($dnsServers.Count -gt 0) {
+            $networkChecks.DNSServersConfigured = $true
+            $primaryDNS = $dnsServers[0].ServerAddresses[0]
+            Write-Log "✓ DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')"
+        } else {
+            $blockingIssues += "No DNS servers configured"
+            Write-Log "✗ No DNS servers configured" "ERROR" -Source "SYSTEM"
+        }
+    } catch {
+        $warnings += "Could not verify DNS configuration"
+        Write-Log "⚠ Could not verify DNS servers: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+    }
+
+    # Check 4: DNS resolution working
+    if ($networkChecks.DNSServersConfigured) {
+        try {
+            $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
+            $networkChecks.DNSResolution = $true
+            $resolvedIP = ($dnsTest | Where-Object { $_.Type -eq "A" } | Select-Object -First 1).IPAddress
+            Write-Log "✓ DNS resolution functional (api.netbird.io → $resolvedIP)"
+        } catch {
+            $blockingIssues += "DNS resolution failing"
+            Write-Log "✗ DNS resolution failing for api.netbird.io" "ERROR" -Source "SYSTEM"
+            Write-Log "  Error: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+        }
+    }
+
+    # Check 5: Internet connectivity (with ICMP fallback to HTTP)
+    try {
+        $pingTest = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction Stop
+        if ($pingTest) {
+            $networkChecks.InternetConnectivity = $true
+            Write-Log "✓ Internet connectivity confirmed (ICMP to 8.8.8.8)"
+        } else {
+            # Fallback: Try HTTP request instead of ICMP
+            try {
+                $httpTest = Invoke-WebRequest -Uri "http://www.gstatic.com/generate_204" -Method Head -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+                if ($httpTest.StatusCode -eq 204 -or $httpTest.StatusCode -eq 200) {
+                    $networkChecks.InternetConnectivity = $true
+                    Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP blocked)"
+                }
+            } catch {
+                $blockingIssues += "No internet connectivity"
+                Write-Log "✗ Internet connectivity test failed (both ICMP and HTTP)" "ERROR" -Source "SYSTEM"
+            }
+        }
+    } catch {
+        # Try HTTP fallback
+        try {
+            $httpTest = Invoke-WebRequest -Uri "http://www.gstatic.com/generate_204" -Method Head -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+            $networkChecks.InternetConnectivity = $true
+            Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP not available)"
+        } catch {
+            $blockingIssues += "No internet connectivity"
+            Write-Log "✗ No internet connectivity detected" "ERROR" -Source "SYSTEM"
+        }
+    }
+
+    # ===== HIGH-VALUE CHECKS (Warnings Only) =====
+
+    # Check 6: Time synchronization
+    try {
+        $w32timeStatus = w32tm /query /status 2>&1
+        if ($LASTEXITCODE -eq 0 -and $w32timeStatus -match "Source:") {
+            $networkChecks.TimeSynchronized = $true
+            Write-Log "✓ System time synchronized via Windows Time"
+        } else {
+            # Try web-based time check as fallback
+            try {
+                $webTime = (Invoke-WebRequest -Uri "http://worldtimeapi.org/api/timezone/Etc/UTC" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop |
+                    ConvertFrom-Json).unixtime
+                $localTime = [int][double]::Parse((Get-Date -UFormat %s))
+                $timeDiff = [Math]::Abs($webTime - $localTime)
+
+                if ($timeDiff -lt 300) {  # Within 5 minutes
+                    $networkChecks.TimeSynchronized = $true
+                    Write-Log "✓ System time appears synchronized (diff: ${timeDiff}s)"
+                } else {
+                    $warnings += "System time may be incorrect (diff: ${timeDiff}s)"
+                    Write-Log "⚠ System time may be incorrect (${timeDiff}s difference) - SSL/TLS may fail" "WARN" -Source "SYSTEM"
+                }
+            } catch {
+                $warnings += "Could not verify time synchronization"
+                Write-Log "⚠ Could not verify time synchronization" "WARN" -Source "SYSTEM"
+            }
+        }
+    } catch {
+        $warnings += "Could not check time synchronization"
+        Write-Log "⚠ Could not check Windows Time service" "WARN" -Source "SYSTEM"
+    }
+
+    # Check 7: Corporate proxy detection
+    try {
+        $proxySettings = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
+        if ($proxySettings.ProxyEnable -eq 1) {
+            $proxyServer = $proxySettings.ProxyServer
+            $warnings += "System proxy detected: $proxyServer"
+            Write-Log "⚠ System proxy detected: $proxyServer" "WARN" -Source "SYSTEM"
+            Write-Log "  NetBird requires direct access for gRPC (port 443) and relay servers" "WARN" -Source "SYSTEM"
+
+            if ($proxySettings.ProxyOverride) {
+                Write-Log "  Proxy bypass list: $($proxySettings.ProxyOverride)"
+            }
+        } else {
+            $networkChecks.NoProxyDetected = $true
+            Write-Log "✓ No system proxy detected"
+        }
+    } catch {
+        Write-Log "  Could not check proxy settings"
+    }
+
+    # Check 8: Signal server connectivity
+    if ($networkChecks.InternetConnectivity) {
+        try {
+            # NetBird's signal servers (these may vary, but testing the main one)
+            $signalHosts = @("signal2.wiretrustee.com", "signal.netbird.io")
+            $signalReachable = $false
+
+            foreach ($signalHost in $signalHosts) {
+                try {
+                    $signalTest = Test-NetConnection -ComputerName $signalHost -Port 443 -WarningAction SilentlyContinue -ErrorAction Stop
+                    if ($signalTest.TcpTestSucceeded) {
+                        $networkChecks.SignalServerReachable = $true
+                        $signalReachable = $true
+                        Write-Log "✓ Signal server reachable: ${signalHost}:443"
+                        break
+                    }
+                } catch {
+                    # Try next server
+                }
+            }
+
+            if (-not $signalReachable) {
+                $warnings += "Signal servers unreachable"
+                Write-Log "⚠ Could not reach NetBird signal servers - registration may fail" "WARN" -Source "SYSTEM"
+            }
+        } catch {
+            Write-Log "  Could not test signal server connectivity"
+        }
+    }
+
+    # ===== SUMMARY =====
+
+    $passedCritical = ($networkChecks.ActiveAdapter -and $networkChecks.DefaultGateway -and
+                       $networkChecks.DNSServersConfigured -and $networkChecks.DNSResolution -and
+                       $networkChecks.InternetConnectivity)
+
+    $totalChecks = $networkChecks.Count
+    $passedChecks = ($networkChecks.Values | Where-Object {$_ -eq $true}).Count
+
+    Write-Log "=== Network Prerequisites Summary: $passedChecks/$totalChecks passed ==="
+
+    if ($blockingIssues.Count -gt 0) {
+        Write-Log "❌ BLOCKING ISSUES FOUND:" "ERROR" -Source "SYSTEM"
+        foreach ($issue in $blockingIssues) {
+            Write-Log "   - $issue" "ERROR" -Source "SYSTEM"
+        }
+        Write-Log "Registration will likely fail due to network issues" "ERROR" -Source "SYSTEM"
+        return $false
+    }
+
+    if ($warnings.Count -gt 0) {
+        Write-Log "⚠ WARNINGS (non-blocking):" "WARN" -Source "SYSTEM"
+        foreach ($warning in $warnings) {
+            Write-Log "   - $warning" "WARN" -Source "SYSTEM"
+        }
+    }
+
+    if ($passedCritical) {
+        Write-Log "✅ All critical network prerequisites met"
+        return $true
+    } else {
+        Write-Log "❌ Critical network prerequisites not met" "ERROR" -Source "SYSTEM"
+        return $false
+    }
+}
+
+function Test-NetworkStackReady {
+    # This function is now a wrapper around the more comprehensive Test-NetworkPrerequisites
+    # Kept for backward compatibility
+    return Test-NetworkPrerequisites
 }
 
 function Test-RegistrationPrerequisites {
@@ -837,27 +1235,65 @@ function Test-RegistrationPrerequisites {
         [string]$SetupKey,
         [string]$ManagementUrl
     )
-    
+
     Write-Log "Validating registration prerequisites..."
     $prerequisites = @{}
-    
+
     # Check 1: Setup key format (supports UUID, Base64, and NetBird prefixed formats)
     $isUuidFormat = $SetupKey -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
     $isBase64Format = ($SetupKey -match '^[A-Za-z0-9+/]+=*$' -and $SetupKey.Length -ge 20)
     $isNetBirdFormat = ($SetupKey -match '^[A-Za-z0-9_-]+$' -and $SetupKey.Length -ge 20)
     $prerequisites.ValidSetupKey = ($isUuidFormat -or $isBase64Format -or $isNetBirdFormat)
-    
-    # Check 2: Management URL accessibility
+
+    # Check 2: Management URL TCP accessibility
     try {
         $testUrl = if ($ManagementUrl -eq "https://app.netbird.io") { "api.netbird.io" } else { ([uri]$ManagementUrl).Host }
+        Write-Log "Testing TCP connection to management server: ${testUrl}:443"
         $connectionTest = Test-NetConnection -ComputerName $testUrl -Port 443 -WarningAction SilentlyContinue
-        $prerequisites.ManagementReachable = $connectionTest.TcpTestSucceeded
+        $prerequisites.ManagementTCPReachable = $connectionTest.TcpTestSucceeded
+
+        if ($prerequisites.ManagementTCPReachable) {
+            Write-Log "✓ Management server TCP reachable at ${testUrl}:443"
+        } else {
+            Write-Log "✗ Management server TCP unreachable at ${testUrl}:443" "WARN" -Source "SYSTEM"
+        }
     }
     catch {
-        $prerequisites.ManagementReachable = $false
+        Write-Log "TCP connectivity test failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        $prerequisites.ManagementTCPReachable = $false
+    }
+
+    # Check 3: Management URL HTTPS accessibility (ensures no proxy/SSL interception issues)
+    try {
+        # Try to access management server health endpoint or root
+        $healthUrl = "$ManagementUrl"
+        Write-Log "Testing HTTPS connectivity to: $healthUrl"
+
+        $webRequest = Invoke-WebRequest -Uri $healthUrl -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
+        $prerequisites.ManagementHTTPSReachable = ($webRequest.StatusCode -ge 200 -and $webRequest.StatusCode -lt 500)
+
+        if ($prerequisites.ManagementHTTPSReachable) {
+            Write-Log "✓ Management server HTTPS reachable (Status: $($webRequest.StatusCode))"
+        }
+    }
+    catch {
+        # 404 or other HTTP errors are acceptable - means server is responding
+        if ($_.Exception.Response.StatusCode) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+            if ($statusCode -lt 500) {
+                $prerequisites.ManagementHTTPSReachable = $true
+                Write-Log "✓ Management server HTTPS reachable (Status: $statusCode)"
+            } else {
+                Write-Log "⚠ Management server returned error status: $statusCode" "WARN" -Source "SYSTEM"
+                $prerequisites.ManagementHTTPSReachable = $false
+            }
+        } else {
+            Write-Log "✗ Cannot reach management server via HTTPS: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+            $prerequisites.ManagementHTTPSReachable = $false
+        }
     }
     
-    # Check 3: No conflicting registration state
+    # Check 4: No conflicting registration state
     try {
         $configExists = Test-Path $ConfigFile
         if ($configExists) {
@@ -871,11 +1307,11 @@ function Test-RegistrationPrerequisites {
         $prerequisites.NoConflictingState = $true # If we can't read it, assume it's okay to overwrite
     }
     
-    # Check 4: Sufficient disk space
+    # Check 5: Sufficient disk space
     $freeSpace = (Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'").FreeSpace
     $prerequisites.SufficientDiskSpace = ($freeSpace -gt 100MB)
-    
-    # Check 5: Windows Firewall not blocking (common enterprise issue)
+
+    # Check 6: Windows Firewall not blocking (common enterprise issue)
     try {
         $firewallProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
         $activeProfiles = $firewallProfiles | Where-Object { $_.Enabled -eq $true }
@@ -903,7 +1339,8 @@ function Test-RegistrationPrerequisites {
     }
     
     # All critical prerequisites must pass
-    $criticalPrereqs = @("ValidSetupKey", "ManagementReachable", "NoConflictingState")
+    # Note: ManagementHTTPSReachable is checked but not critical (TCP test is sufficient, HTTPS might be blocked by corp proxy)
+    $criticalPrereqs = @("ValidSetupKey", "ManagementTCPReachable", "NoConflictingState")
     $criticalFailed = $criticalPrereqs | Where-Object { -not $prerequisites[$_] }
     
     if ($criticalFailed) {
@@ -919,22 +1356,25 @@ function Get-RecoveryAction {
         [string]$ErrorType,
         [int]$Attempt
     )
-    
+
     $recoveryActions = @{
         "DeadlineExceeded" = @{
-            1 = @{Action="RestartService"; Description="Restart NetBird service"; WaitSeconds=15}
+            1 = @{Action="WaitLonger"; Description="Wait for daemon initialization"; WaitSeconds=30}
             2 = @{Action="PartialReset"; Description="Reset client configuration"; WaitSeconds=30}
-            3 = @{Action="None"; Description="No further recovery available"; WaitSeconds=0}
+            3 = @{Action="FullReset"; Description="Full data directory clear and service restart"; WaitSeconds=45}
+            4 = @{Action="None"; Description="No further recovery available"; WaitSeconds=0}
         }
         "ConnectionRefused" = @{
             1 = @{Action="WaitLonger"; Description="Wait for daemon initialization"; WaitSeconds=30}
             2 = @{Action="RestartService"; Description="Restart NetBird service"; WaitSeconds=15}
-            3 = @{Action="PartialReset"; Description="Reset client state"; WaitSeconds=30}
+            3 = @{Action="FullReset"; Description="Full data directory clear"; WaitSeconds=45}
+            4 = @{Action="None"; Description="No further recovery available"; WaitSeconds=0}
         }
         "VerificationFailed" = @{
             1 = @{Action="WaitAndVerify"; Description="Wait for connection stabilization"; WaitSeconds=45}
             2 = @{Action="PartialReset"; Description="Reset and re-register"; WaitSeconds=30}
-            3 = @{Action="None"; Description="Manual intervention required"; WaitSeconds=0}
+            3 = @{Action="FullReset"; Description="Full clear and re-register"; WaitSeconds=45}
+            4 = @{Action="None"; Description="Manual intervention required"; WaitSeconds=0}
         }
         "InvalidSetupKey" = @{
             1 = @{Action="None"; Description="Setup key validation failed - no retry"; WaitSeconds=0}
@@ -945,12 +1385,12 @@ function Get-RecoveryAction {
             3 = @{Action="None"; Description="Network issues persist"; WaitSeconds=0}
         }
     }
-    
+
     $actionSet = $recoveryActions[$ErrorType]
     if ($actionSet -and $actionSet[$Attempt]) {
         return $actionSet[$Attempt]
     }
-    
+
     # Default action for unknown errors
     return @{Action="WaitLonger"; Description="Unknown error - wait and retry"; WaitSeconds=30}
 }
@@ -961,13 +1401,22 @@ function Invoke-RecoveryAction {
         [string]$SetupKey,
         [string]$ManagementUrl
     )
-    
+
     switch ($Action.Action) {
         "RestartService" {
             return (Restart-NetBirdService)
         }
         "PartialReset" {
             return (Reset-NetBirdState -Full:$false)
+        }
+        "FullReset" {
+            Write-Log "Performing full reset (clearing all NetBird data) as recovery action"
+            if (-not (Reset-NetBirdState -Full:$true)) {
+                return $false
+            }
+            # After full reset, ensure daemon is ready again
+            Start-Sleep -Seconds 10
+            return (Wait-ForDaemonReady -MaxWaitSeconds 90)
         }
         "WaitLonger" {
             # Just return true, the wait happens in the caller
@@ -988,77 +1437,152 @@ function Invoke-RecoveryAction {
 
 function Confirm-RegistrationSuccess {
     param([int]$MaxWaitSeconds = 120)  # Increased timeout for better validation
-    
+
     Write-Log "Verifying registration was successful..."
     $startTime = Get-Date
     $timeout = $startTime.AddSeconds($MaxWaitSeconds)
-    
+
     while ((Get-Date) -lt $timeout) {
-        try {
-            # Get detailed status
-            $statusOutput = & $script:NetBirdExe "status" "--detail" 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Status command successful, analyzing output..."
+        # Use retry wrapper for status command
+        $result = Invoke-NetBirdStatusCommand -Detailed -MaxAttempts 2 -RetryDelay 3
+
+        if ($result.Success) {
+            $statusOutput = $result.Output
+            Write-Log "Status command successful, analyzing output..."
                 
-                # Enhanced validation with stricter criteria
-                $validationChecks = @{
-                    ManagementConnected = $false
-                    SignalConnected = $false
-                    HasNetBirdIP = $false
-                    DaemonUp = $false
-                    HasActiveInterface = $false
-                    NoErrorMessages = $false
-                }
+            # Enhanced validation with stricter criteria
+            $validationChecks = @{
+                ManagementConnected = $false
+                SignalConnected = $false
+                HasNetBirdIP = $false
+                DaemonUp = $false
+                HasActiveInterface = $false
+                NoErrorMessages = $false
+            }
+
+            # Additional diagnostic checks (not critical for success, but logged for troubleshooting)
+            $diagnosticChecks = @{
+                RelaysAvailable = $false
+                NameserversAvailable = $false
+                PeersConnected = $false
+            }
                 
-                # Check for management connection
-                if ($statusOutput -match "Management:\s+Connected" -or $statusOutput -match "Management: Connected") {
+                # Check for management connection (use line-start anchor to avoid matching peer status)
+                if ($statusOutput -match "(?m)^Management:\s+Connected") {
                     $validationChecks.ManagementConnected = $true
                     Write-Log "✓ Management server connected"
-                } elseif ($statusOutput -match "Management:\s+(Disconnected|Failed|Error)") {
-                    Write-Log "✗ Management server connection failed" -Source "NETBIRD"
+                } elseif ($statusOutput -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
+                    Write-Log "✗ Management server connection failed or connecting" "WARN" -Source "NETBIRD"
                 }
-                
-                # Check for signal connection
-                if ($statusOutput -match "Signal:\s+Connected" -or $statusOutput -match "Signal: Connected") {
+
+                # Check for signal connection (use line-start anchor)
+                if ($statusOutput -match "(?m)^Signal:\s+Connected") {
                     $validationChecks.SignalConnected = $true
                     Write-Log "✓ Signal server connected"
-                } elseif ($statusOutput -match "Signal:\s+(Disconnected|Failed|Error)") {
-                    Write-Log "✗ Signal server connection failed" -Source "NETBIRD"
+                } elseif ($statusOutput -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
+                    Write-Log "✗ Signal server connection failed or connecting" "WARN" -Source "NETBIRD"
                 }
-                
-                # Check for NetBird IP assignment
-                if ($statusOutput -match "NetBird IP:\s+\d+\.\d+\.\d+\.\d+" -or $statusOutput -match "FQDN:\s+\w+") {
+
+                # Check for NetBird IP assignment with proper format validation
+                if ($statusOutput -match "(?m)^NetBird IP:\s+(\d+\.\d+\.\d+\.\d+)(/\d+)?") {
+                    $assignedIP = $matches[1]
                     $validationChecks.HasNetBirdIP = $true
-                    Write-Log "✓ NetBird IP assigned"
+                    Write-Log "✓ NetBird IP assigned: $assignedIP"
+                } else {
+                    Write-Log "✗ No NetBird IP assigned" "WARN" -Source "NETBIRD"
                 }
-                
-                # Check daemon status
-                if ($statusOutput -match "Daemon version:\s+[0-9]" -or $statusOutput -match "OS:\s+\w+") {
+
+                # Check daemon version is present (proves daemon is responding)
+                if ($statusOutput -match "(?m)^Daemon version:\s+[\d\.]+") {
                     $validationChecks.DaemonUp = $true
                     Write-Log "✓ Daemon is responding"
+                } else {
+                    Write-Log "✗ Daemon version not found in status" "WARN" -Source "NETBIRD"
                 }
-                
-                # Check for active interface
-                if ($statusOutput -match "Interface type:\s+\w+" -or $statusOutput -match "Connected" -and $statusOutput -notmatch "0 Connected") {
-                    $validationChecks.HasActiveInterface = $true
-                    Write-Log "✓ Network interface active"
+
+            # Check for active interface type
+            if ($statusOutput -match "(?m)^Interface type:\s+(\w+)") {
+                $interfaceType = $matches[1]
+                $validationChecks.HasActiveInterface = $true
+                Write-Log "✓ Network interface active: $interfaceType"
+            } else {
+                Write-Log "✗ No network interface type found" "WARN" -Source "NETBIRD"
+            }
+
+            # Diagnostic Check: Relays availability
+            if ($statusOutput -match "(?m)^Relays:\s+(\d+)/(\d+)\s+Available") {
+                $availableRelays = [int]$matches[1]
+                $totalRelays = [int]$matches[2]
+
+                if ($availableRelays -gt 0) {
+                    $diagnosticChecks.RelaysAvailable = $true
+                    Write-Log "✓ Relays: $availableRelays/$totalRelays available"
+                } else {
+                    Write-Log "⚠ No relay servers available - P2P-only mode (may impact connectivity through NAT/firewalls)" "WARN" -Source "NETBIRD"
                 }
-                
+            }
+
+            # Diagnostic Check: Nameservers availability
+            if ($statusOutput -match "(?m)^Nameservers:\s+(\d+)/(\d+)\s+Available") {
+                $availableNS = [int]$matches[1]
+                $totalNS = [int]$matches[2]
+
+                if ($availableNS -gt 0) {
+                    $diagnosticChecks.NameserversAvailable = $true
+                    Write-Log "✓ Nameservers: $availableNS/$totalNS available"
+                } else {
+                    Write-Log "⚠ No nameservers available - NetBird DNS resolution disabled" "WARN" -Source "NETBIRD"
+                }
+            }
+
+            # Diagnostic Check: Peer connectivity
+            if ($statusOutput -match "(?m)^Peers count:\s+(\d+)/(\d+)\s+Connected") {
+                $connectedPeers = [int]$matches[1]
+                $totalPeers = [int]$matches[2]
+
+                if ($totalPeers -eq 0) {
+                    Write-Log "⚠ No peers configured in network (fresh setup or isolated network)" "WARN" -Source "NETBIRD"
+                } elseif ($connectedPeers -eq 0) {
+                    Write-Log "⚠ 0/$totalPeers peers connected - possible firewall/NAT traversal issue" "WARN" -Source "NETBIRD"
+                } else {
+                    $diagnosticChecks.PeersConnected = $true
+                    Write-Log "✓ Peers: $connectedPeers/$totalPeers connected"
+                }
+            }
+
                 # Check for absence of critical error messages
-                if ($statusOutput -notmatch "connection refused|timeout|failed to connect|authentication failed|invalid|error connecting") {
+                $errorPatterns = @(
+                    "connection refused",
+                    "context deadline exceeded",
+                    "DeadlineExceeded",
+                    "timeout",
+                    "failed to connect",
+                    "authentication failed",
+                    "invalid",
+                    "error connecting",
+                    "rpc error",
+                    "NeedsLogin"
+                )
+                $foundErrors = @()
+                foreach ($pattern in $errorPatterns) {
+                    if ($statusOutput -match $pattern) {
+                        $foundErrors += $pattern
+                    }
+                }
+
+                if ($foundErrors.Count -eq 0) {
                     $validationChecks.NoErrorMessages = $true
                     Write-Log "✓ No critical error messages detected"
                 } else {
-                    Write-Log "✗ Critical error messages found in status output" "WARN" -Source "NETBIRD"
+                    Write-Log "✗ Critical error messages found: $($foundErrors -join ', ')" "WARN" -Source "NETBIRD"
                 }
-                
+
                 # Count successful validations
                 $passedChecks = ($validationChecks.Values | Where-Object {$_ -eq $true}).Count
                 $totalChecks = $validationChecks.Count
-                
+
                 Write-Log "Registration validation: $passedChecks/$totalChecks checks passed"
-                
+
                 # Log failed checks for debugging
                 $failedChecks = $validationChecks.GetEnumerator() | Where-Object { -not $_.Value }
                 if ($failedChecks) {
@@ -1067,15 +1591,16 @@ function Confirm-RegistrationSuccess {
                         Write-Log "  ✗ $($check.Key)" "WARN" -Source "NETBIRD"
                     }
                 }
-                
+
                 # Require ALL critical checks to pass for successful validation
-                $criticalChecks = @("ManagementConnected", "HasNetBirdIP", "DaemonUp", "NoErrorMessages")
+                # Signal is now required because registration should fully connect both Management AND Signal
+                $criticalChecks = @("ManagementConnected", "SignalConnected", "HasNetBirdIP", "DaemonUp", "NoErrorMessages")
                 $criticalFailed = $criticalChecks | Where-Object { -not $validationChecks[$_] }
-                
+
                 if ($criticalFailed.Count -eq 0) {
                     $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
                     Write-Log "✅ Registration verification successful after $elapsedSeconds seconds"
-                    Write-Log "   Management: Connected, IP: Assigned, Daemon: Running, Errors: None"
+                    Write-Log "   Management: Connected, Signal: Connected, IP: Assigned, Daemon: Running, Errors: None"
                     return $true
                 } else {
                     Write-Log "Critical validation failed: $($criticalFailed -join ', ')" "WARN" -Source "NETBIRD"
@@ -1217,14 +1742,27 @@ function Register-NetBirdEnhanced {
     param(
         [string]$SetupKey,
         [string]$ManagementUrl,
-        [int]$MaxRetries = 3,
+        [int]$MaxRetries = 5,  # Increased from 3 for OOBE/provisioning resilience
         [switch]$AutoRecover = $true
     )
-    
+
     Write-Log "Starting enhanced NetBird registration..."
-    
-    # Step 1: Ensure daemon is fully ready
-    if (-not (Wait-ForDaemonReady -MaxWaitSeconds 120)) {
+
+    # Step 0: Network stack readiness validation (critical for OOBE)
+    if (-not (Test-NetworkStackReady)) {
+        Write-Log "Network stack not ready - waiting 45 seconds for OOBE network initialization..." "WARN" -Source "SYSTEM"
+        Start-Sleep -Seconds 45
+        if (-not (Test-NetworkStackReady)) {
+            Write-Log "Network stack still not ready - registration will likely fail but continuing anyway" "WARN" -Source "SYSTEM"
+            # Continue anyway, registration might work on slow networks
+        }
+    }
+
+    # Step 1: Ensure daemon is fully ready (with extended timeout for fresh installs)
+    $daemonWaitTime = if ($script:JustInstalled -or $script:WasFreshInstall) { 180 } else { 120 }
+    Write-Log "Waiting up to $daemonWaitTime seconds for daemon readiness (Fresh install: $(if ($script:JustInstalled -or $script:WasFreshInstall) {'Yes'} else {'No'}))"
+
+    if (-not (Wait-ForDaemonReady -MaxWaitSeconds $daemonWaitTime)) {
         Write-Log "Daemon not ready for registration - attempting service restart" "WARN" -Source "NETBIRD"
         if ($AutoRecover) {
             if (-not (Restart-NetBirdService)) {
@@ -1239,33 +1777,52 @@ function Register-NetBirdEnhanced {
             return $false
         }
     }
-    
+
     # Step 2: Pre-registration validation
     if (-not (Test-RegistrationPrerequisites -SetupKey $SetupKey -ManagementUrl $ManagementUrl)) {
         Write-Log "Registration prerequisites not met" "ERROR" -Source "SCRIPT"
         return $false
     }
-    
-    # Step 3: Check if already connected
-    $isConnected = Check-NetBirdStatus
-    if ($isConnected) {
-        Write-Log "NetBird is already connected - skipping registration"
-        return $true
+
+    # Step 3: AGGRESSIVE state clear for fresh installs (prevents OOBE RPC timeout issues)
+    # This replicates the manual workaround: clear config → restart → register
+    if ($script:JustInstalled -or $script:WasFreshInstall) {
+        Write-Log "Fresh installation detected - performing AGGRESSIVE state clear to prevent RPC timeout issues"
+        Write-Log "  This prevents stale MSI-created config from causing DeadlineExceeded errors"
+
+        if (-not (Reset-NetBirdState -Full:$true)) {
+            Write-Log "Failed to clear fresh install state - registration may fail" "WARN" -Source "SYSTEM"
+        } else {
+            Write-Log "Fresh install state cleared - waiting for daemon to reinitialize..."
+            Start-Sleep -Seconds 15
+
+            if (-not (Wait-ForDaemonReady -MaxWaitSeconds 90)) {
+                Write-Log "Daemon not ready after fresh install state clear" "ERROR" -Source "NETBIRD"
+                return $false
+            }
+        }
+    } elseif ($FullClear) {
+        # User explicitly requested full clear via -FullClear switch
+        Write-Log "FullClear switch enabled - performing full state clear"
+        if (-not (Reset-NetBirdState -Full:$true)) {
+            Write-Log "Failed to reset client state - registration cannot proceed" "ERROR" -Source "SYSTEM"
+            return $false
+        }
+    } else {
+        # Existing installation - just partial reset (config.json only)
+        Write-Log "Existing installation - performing partial state reset (config.json only)"
+        if (-not (Reset-NetBirdState -Full:$false)) {
+            Write-Log "Failed to reset client state - registration cannot proceed" "ERROR" -Source "SYSTEM"
+            return $false
+        }
     }
-    
-    # Step 4: Reset state if needed
-    $resetFull = $FullClear
-    if (-not (Reset-NetBirdState -Full:$resetFull)) {
-        Write-Log "Failed to reset client state - registration cannot proceed" "ERROR" -Source "SYSTEM"
-        return $false
-    }
-    
-    # Step 5: Intelligent registration attempts with progressive recovery
+
+    # Step 4: Intelligent registration attempts with progressive recovery
     for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
         Write-Log "Registration attempt $attempt of $MaxRetries..."
-        
+
         $result = Invoke-NetBirdRegistration -SetupKey $SetupKey -ManagementUrl $ManagementUrl -Attempt $attempt
-        
+
         if ($result.Success) {
             # Verify registration actually worked
             if (Confirm-RegistrationSuccess) {
@@ -1277,7 +1834,7 @@ function Register-NetBirdEnhanced {
                 $result.ErrorType = "VerificationFailed"
             }
         }
-        
+
         if (-not $result.Success -and $attempt -lt $MaxRetries) {
             $recoveryAction = Get-RecoveryAction -ErrorType $result.ErrorType -Attempt $attempt
             if ($recoveryAction.Action -ne "None") {
@@ -1290,16 +1847,16 @@ function Register-NetBirdEnhanced {
             }
         }
     }
-    
+
     Write-Log "Registration failed after $MaxRetries attempts with recovery" "ERROR" -Source "NETBIRD"
     return $false
 }
 
 # Main execution
 Write-Log "=== NetBird Installation Script v$ScriptVersion Started ==="
-Write-Log "Script version: $ScriptVersion | Last updated: 2025-09-30"
+Write-Log "Script version: $ScriptVersion | Last updated: 2025-10-01"
 if ($FullClear) {
-    Write-Log "FullClear switch enabled - will perform full data directory clear if reset needed"
+    Write-Log "FullClear switch enabled - will force re-registration even if already connected"
 }
 if ($AddShortcut) {
     Write-Log "AddShortcut switch enabled - will retain desktop shortcut during installation"
@@ -1330,30 +1887,110 @@ if (-not $downloadUrl) {
 
 # Check for existing installation
 $installedVersion = Get-InstalledVersion
-$isFreshInstall = [string]::IsNullOrEmpty($installedVersion)
+$script:WasFreshInstall = [string]::IsNullOrEmpty($installedVersion)
+
 if ($installedVersion) {
     Write-Log "Currently installed version: $installedVersion"
-    if ($latestVersion -and -not (Compare-Versions $installedVersion $latestVersion)) {
-        Write-Log "NetBird is already up to date (installed: $installedVersion, latest: $latestVersion)"
-        Write-Log "Skipping installation"
-        $skipInstall = $true
-    }
-    else {
-        Write-Log "Newer version available - proceeding with upgrade"
-        $skipInstall = $false
-    }
 } else {
-    Write-Log "NetBird not currently installed"
-    $skipInstall = $false
+    Write-Log "NetBird not currently installed - this will be a fresh installation"
 }
 
-# Install or upgrade if needed
-if (-not $skipInstall) {
+# =============================================================================
+# SCENARIO LOGIC: Four distinct paths based on installation state and setup key
+# =============================================================================
+
+# SCENARIO 1: No NetBird installed, no setup key provided
+# Action: Install NetBird and finish successfully
+if (-not $installedVersion -and [string]::IsNullOrEmpty($SetupKey)) {
+    Write-Log "=== SCENARIO 1: Fresh installation without setup key ==="
+
     if (Install-NetBird -DownloadUrl $downloadUrl -AddShortcut:$AddShortcut) {
-        Write-Log "Installation/upgrade successful"
-        # After installation, update the executable path to the default location
+        Write-Log "Installation successful"
+        $script:JustInstalled = $true
         $script:NetBirdExe = $NetBirdExe
-        # Ensure the service is running after install
+
+        Write-Log "Ensuring NetBird service is running..."
+        if (Start-NetBirdService) {
+            Wait-ForServiceRunning | Out-Null
+        }
+
+        Write-Log "=== NetBird Installation Completed Successfully ==="
+        Write-Log "NetBird installed. No setup key provided - registration skipped."
+        Write-Log "Installation log saved to: $script:LogFile"
+        exit 0
+    } else {
+        Write-Log "Installation failed" "ERROR" -Source "SYSTEM"
+        exit 1
+    }
+}
+
+# SCENARIO 2: NetBird installed, no setup key provided
+# Action: Check status, report connection, upgrade if needed, check status again, finish
+if ($installedVersion -and [string]::IsNullOrEmpty($SetupKey)) {
+    Write-Log "=== SCENARIO 2: Upgrade existing installation without setup key ==="
+
+    # Check and report pre-upgrade status
+    Write-Log "--- Pre-Upgrade Status Check ---"
+    $preUpgradeConnected = Check-NetBirdStatus
+    if ($preUpgradeConnected) {
+        Write-Log "NetBird is currently CONNECTED"
+    } else {
+        Write-Log "NetBird is currently NOT CONNECTED"
+    }
+    Log-NetBirdStatusDetailed
+
+    # Check if upgrade is needed
+    $needsUpgrade = $false
+    if ($latestVersion -and (Compare-Versions $installedVersion $latestVersion)) {
+        Write-Log "Newer version available - proceeding with upgrade (current: $installedVersion, latest: $latestVersion)"
+        $needsUpgrade = $true
+    } else {
+        Write-Log "NetBird is already up to date (installed: $installedVersion, latest: $latestVersion)"
+    }
+
+    # Perform upgrade if needed
+    if ($needsUpgrade) {
+        if (Install-NetBird -DownloadUrl $downloadUrl -AddShortcut:$AddShortcut) {
+            Write-Log "Upgrade successful"
+            $script:JustInstalled = $true
+            $script:NetBirdExe = $NetBirdExe
+
+            Write-Log "Ensuring NetBird service is running after upgrade..."
+            if (Start-NetBirdService) {
+                Wait-ForServiceRunning | Out-Null
+            }
+        } else {
+            Write-Log "Upgrade failed" "ERROR" -Source "SYSTEM"
+            exit 1
+        }
+    }
+
+    # Check and report post-upgrade status
+    Write-Log "--- Post-Upgrade Status Check ---"
+    $postUpgradeConnected = Check-NetBirdStatus
+    if ($postUpgradeConnected) {
+        Write-Log "NetBird is CONNECTED after upgrade"
+    } else {
+        Write-Log "NetBird is NOT CONNECTED after upgrade"
+    }
+    Log-NetBirdStatusDetailed
+
+    Write-Log "=== NetBird Upgrade Completed Successfully ==="
+    Write-Log "No setup key provided - registration skipped. Existing connection preserved."
+    Write-Log "Installation log saved to: $script:LogFile"
+    exit 0
+}
+
+# SCENARIO 3: No NetBird installed, setup key provided
+# Action: Install, ensure readiness, register, verify connectivity
+if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
+    Write-Log "=== SCENARIO 3: Fresh installation with setup key ==="
+
+    if (Install-NetBird -DownloadUrl $downloadUrl -AddShortcut:$AddShortcut) {
+        Write-Log "Installation successful"
+        $script:JustInstalled = $true
+        $script:NetBirdExe = $NetBirdExe
+
         Write-Log "Ensuring NetBird service is running after installation..."
         if (Start-NetBirdService) {
             if (-not (Wait-ForServiceRunning)) {
@@ -1361,38 +1998,116 @@ if (-not $skipInstall) {
             }
         } else {
             Write-Log "Failed to start service after installation" "ERROR" -Source "SYSTEM"
-            # Continue anyway, as registration might still work if service starts later
+            exit 1
         }
     } else {
-        Write-Log "Installation/upgrade failed" "ERROR" -Source "SYSTEM"
+        Write-Log "Installation failed" "ERROR" -Source "SYSTEM"
         exit 1
     }
-}
 
-# Enhanced registration only if SetupKey is provided
-if (![string]::IsNullOrEmpty($SetupKey)) {
-    Write-Log "Starting enhanced NetBird registration process..."
-
+    # Proceed to registration
+    Write-Log "Starting NetBird registration process..."
     $registrationSuccess = Register-NetBirdEnhanced -SetupKey $SetupKey -ManagementUrl $ManagementUrl -AutoRecover
     if ($registrationSuccess) {
-        Write-Log "Enhanced registration completed successfully"
+        Write-Log "Registration completed successfully"
+        Log-NetBirdStatusDetailed
+        Write-Log "=== NetBird Installation and Registration Completed Successfully ==="
+        Write-Log "Installation log saved to: $script:LogFile"
+        exit 0
     } else {
-        Write-Log "Enhanced registration failed - diagnostics will be exported" "ERROR" -Source "SCRIPT"
+        Write-Log "Registration failed - diagnostics will be exported" "ERROR" -Source "SCRIPT"
         Export-RegistrationDiagnostics
         exit 1
     }
-} else {
-    Write-Log "No SetupKey provided - skipping registration"
 }
 
-# Final ensure service is running (for cases where no install happened or key not provided)
-Write-Log "Performing final check to ensure service is running..."
-if (Start-NetBirdService) {
-    Wait-ForServiceRunning
+# SCENARIO 4: NetBird installed, setup key provided
+# Action: Check connection, upgrade if needed, re-check connection, only register if not connected OR FullClear specified
+if ($installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
+    Write-Log "=== SCENARIO 4: Upgrade existing installation with setup key ==="
+
+    # Check pre-upgrade connection status
+    Write-Log "--- Pre-Upgrade Status Check ---"
+    $preUpgradeConnected = Check-NetBirdStatus
+    if ($preUpgradeConnected) {
+        Write-Log "NetBird is currently CONNECTED"
+    } else {
+        Write-Log "NetBird is currently NOT CONNECTED"
+    }
+    Log-NetBirdStatusDetailed
+
+    # Check if upgrade is needed
+    $needsUpgrade = $false
+    if ($latestVersion -and (Compare-Versions $installedVersion $latestVersion)) {
+        Write-Log "Newer version available - proceeding with upgrade (current: $installedVersion, latest: $latestVersion)"
+        $needsUpgrade = $true
+    } else {
+        Write-Log "NetBird is already up to date (installed: $installedVersion, latest: $latestVersion)"
+    }
+
+    # Perform upgrade if needed
+    if ($needsUpgrade) {
+        if (Install-NetBird -DownloadUrl $downloadUrl -AddShortcut:$AddShortcut) {
+            Write-Log "Upgrade successful"
+            $script:JustInstalled = $true
+            $script:NetBirdExe = $NetBirdExe
+
+            Write-Log "Ensuring NetBird service is running after upgrade..."
+            if (Start-NetBirdService) {
+                Wait-ForServiceRunning | Out-Null
+            }
+        } else {
+            Write-Log "Upgrade failed" "ERROR" -Source "SYSTEM"
+            exit 1
+        }
+    }
+
+    # Check post-upgrade connection status
+    Write-Log "--- Post-Upgrade Status Check ---"
+    $postUpgradeConnected = Check-NetBirdStatus
+    if ($postUpgradeConnected) {
+        Write-Log "NetBird is CONNECTED after upgrade"
+    } else {
+        Write-Log "NetBird is NOT CONNECTED after upgrade"
+    }
+
+    # Decision point: Register only if not connected OR FullClear is specified
+    if (-not $postUpgradeConnected) {
+        Write-Log "NetBird is not connected - proceeding with registration"
+
+        $registrationSuccess = Register-NetBirdEnhanced -SetupKey $SetupKey -ManagementUrl $ManagementUrl -AutoRecover
+        if ($registrationSuccess) {
+            Write-Log "Registration completed successfully"
+            Log-NetBirdStatusDetailed
+            Write-Log "=== NetBird Upgrade and Registration Completed Successfully ==="
+            Write-Log "Installation log saved to: $script:LogFile"
+            exit 0
+        } else {
+            Write-Log "Registration failed - diagnostics will be exported" "ERROR" -Source "SCRIPT"
+            Export-RegistrationDiagnostics
+            exit 1
+        }
+    } elseif ($FullClear) {
+        Write-Log "NetBird is connected but FullClear switch specified - forcing re-registration"
+
+        $registrationSuccess = Register-NetBirdEnhanced -SetupKey $SetupKey -ManagementUrl $ManagementUrl -AutoRecover
+        if ($registrationSuccess) {
+            Write-Log "Re-registration completed successfully"
+            Log-NetBirdStatusDetailed
+            Write-Log "=== NetBird Upgrade and Re-Registration Completed Successfully ==="
+            Write-Log "Installation log saved to: $script:LogFile"
+            exit 0
+        } else {
+            Write-Log "Re-registration failed - diagnostics will be exported" "ERROR" -Source "SCRIPT"
+            Export-RegistrationDiagnostics
+            exit 1
+        }
+    } else {
+        Write-Log "NetBird is already connected - skipping registration (use -FullClear to force re-registration)"
+        Log-NetBirdStatusDetailed
+        Write-Log "=== NetBird Upgrade Completed Successfully ==="
+        Write-Log "Existing connection preserved. Registration skipped."
+        Write-Log "Installation log saved to: $script:LogFile"
+        exit 0
+    }
 }
-
-# Always log detailed status at the end
-Log-NetBirdStatusDetailed
-
-Write-Log "=== NetBird Installation Script Completed Successfully ==="
-Write-Log "NetBird should now be installed/upgraded. If SetupKey was provided and service is running, it should be connected and running as a system service."
