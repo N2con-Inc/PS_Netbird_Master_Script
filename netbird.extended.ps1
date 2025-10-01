@@ -20,8 +20,8 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.0
-    Last Updated: 2025-10-01
+    Script Version: 1.16.1
+    Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
     Version History:
@@ -50,6 +50,7 @@
     1.14.0 - Robustness: retry logic, JSON status parsing, persistent logging, enhanced diagnostics
     1.15.0 - Comprehensive network prerequisites: 8-check validation system prevents registration failures
     1.16.0 - Major logic refactor: 4-scenario execution model for predictable behavior
+    1.16.1 - CRITICAL BUG FIX: Fixed syntax error (missing try block) in Confirm-RegistrationSuccess function
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -61,7 +62,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.0"
+$ScriptVersion = "1.16.1"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -1443,10 +1444,11 @@ function Confirm-RegistrationSuccess {
     $timeout = $startTime.AddSeconds($MaxWaitSeconds)
 
     while ((Get-Date) -lt $timeout) {
-        # Use retry wrapper for status command
-        $result = Invoke-NetBirdStatusCommand -Detailed -MaxAttempts 2 -RetryDelay 3
+        try {
+            # Use retry wrapper for status command
+            $result = Invoke-NetBirdStatusCommand -Detailed -MaxAttempts 2 -RetryDelay 3
 
-        if ($result.Success) {
+            if ($result.Success) {
             $statusOutput = $result.Output
             Write-Log "Status command successful, analyzing output..."
                 
@@ -1610,8 +1612,7 @@ function Confirm-RegistrationSuccess {
                 Write-Log "Status command failed with exit code $LASTEXITCODE" "WARN" -Source "NETBIRD"
                 Write-Log "Command output: $statusOutput"
             }
-        }
-        catch {
+        } catch {
             Write-Log "Status check failed: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
         }
         
