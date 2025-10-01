@@ -200,10 +200,11 @@ Complete rewrite of main execution flow for predictable behavior:
 ### When Modifying the Script
 
 **Version Management:**
-- Update `$ScriptVersion` variable (line 59)
-- Update version history comment block (lines 23-47)
+- Update `$ScriptVersion` variable (line 64)
+- Update version history comment block (lines 27-52) - **KEEP ENTRIES SUCCINCT (1-2 lines max)**
 - Update `.NOTES` section Last Updated date (line 24)
 - Follow semantic versioning rules strictly
+- **Version notes should be concise summaries, not detailed changelogs**
 
 **Error Handling:**
 - Always use `Write-Log` with appropriate `-Source` parameter
