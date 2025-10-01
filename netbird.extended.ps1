@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.4
+    Script Version: 1.16.5
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -54,6 +54,7 @@
     1.16.2 - Fixed false-positive network prerequisites failures (Get-NetAdapter/Get-DnsClientServerAddress cmdlet issues)
     1.16.3 - Fixed unnecessary retries when netbird status returns exit code 1 (not connected state)
     1.16.4 - CRITICAL: Fixed Test-NetConnection hanging indefinitely - replaced with timeout-safe TCP test (5s)
+    1.16.5 - Removed redundant TCP test from prerequisites - HTTPS test validates TLS/certs/connectivity properly
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -65,7 +66,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.4"
+$ScriptVersion = "1.16.5"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -1311,24 +1312,7 @@ function Test-RegistrationPrerequisites {
     $isNetBirdFormat = ($SetupKey -match '^[A-Za-z0-9_-]+$' -and $SetupKey.Length -ge 20)
     $prerequisites.ValidSetupKey = ($isUuidFormat -or $isBase64Format -or $isNetBirdFormat)
 
-    # Check 2: Management URL TCP accessibility
-    try {
-        $testUrl = if ($ManagementUrl -eq "https://app.netbird.io") { "api.netbird.io" } else { ([uri]$ManagementUrl).Host }
-        Write-Log "Testing TCP connection to management server: ${testUrl}:443 (5s timeout)"
-        $prerequisites.ManagementTCPReachable = Test-TcpConnection -ComputerName $testUrl -Port 443 -TimeoutMs 5000
-
-        if ($prerequisites.ManagementTCPReachable) {
-            Write-Log "✓ Management server TCP reachable at ${testUrl}:443"
-        } else {
-            Write-Log "✗ Management server TCP unreachable at ${testUrl}:443" "WARN" -Source "SYSTEM"
-        }
-    }
-    catch {
-        Write-Log "TCP connectivity test failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
-        $prerequisites.ManagementTCPReachable = $false
-    }
-
-    # Check 3: Management URL HTTPS accessibility (ensures no proxy/SSL interception issues)
+    # Check 2: Management URL HTTPS accessibility (validates TLS, certificates, and actual connectivity)
     try {
         # Try to access management server health endpoint or root
         $healthUrl = "$ManagementUrl"
@@ -1357,8 +1341,8 @@ function Test-RegistrationPrerequisites {
             $prerequisites.ManagementHTTPSReachable = $false
         }
     }
-    
-    # Check 4: No conflicting registration state
+
+    # Check 3: No conflicting registration state
     try {
         $configExists = Test-Path $ConfigFile
         if ($configExists) {
@@ -1371,12 +1355,12 @@ function Test-RegistrationPrerequisites {
     catch {
         $prerequisites.NoConflictingState = $true # If we can't read it, assume it's okay to overwrite
     }
-    
-    # Check 5: Sufficient disk space
+
+    # Check 4: Sufficient disk space
     $freeSpace = (Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'").FreeSpace
     $prerequisites.SufficientDiskSpace = ($freeSpace -gt 100MB)
 
-    # Check 6: Windows Firewall not blocking (common enterprise issue)
+    # Check 5: Windows Firewall not blocking (common enterprise issue)
     try {
         $firewallProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
         $activeProfiles = $firewallProfiles | Where-Object { $_.Enabled -eq $true }
@@ -1404,8 +1388,8 @@ function Test-RegistrationPrerequisites {
     }
     
     # All critical prerequisites must pass
-    # Note: ManagementHTTPSReachable is checked but not critical (TCP test is sufficient, HTTPS might be blocked by corp proxy)
-    $criticalPrereqs = @("ValidSetupKey", "ManagementTCPReachable", "NoConflictingState")
+    # HTTPS test is critical as it validates TLS, certificates, and actual connectivity
+    $criticalPrereqs = @("ValidSetupKey", "ManagementHTTPSReachable", "NoConflictingState")
     $criticalFailed = $criticalPrereqs | Where-Object { -not $prerequisites[$_] }
     
     if ($criticalFailed) {
