@@ -28,16 +28,17 @@
 .EXAMPLE
     .\netbird.oobe.ps1 -SetupKey "your-setup-key-here"
 .NOTES
-    Script Version: 1.18.2-OOBE
+    Script Version: 1.18.3-OOBE
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic)
-    Base Version: Mirrors netbird.extended.ps1 v1.18.2 functionality
+    Base Version: Mirrors netbird.extended.ps1 v1.18.3 functionality
 
     Version History:
     1.18.0-OOBE - Intune Event Log support, fail-fast network validation, auto config clear
     1.18.1-OOBE - Fixed MSI config conflict: clear default.json and client.conf, stop service before clearing
     1.18.2-OOBE - Simplified config clearing: full directory delete + 15s stabilization wait
+    1.18.3-OOBE - Use net stop/start commands, delete contents only (not directory)
 
     OOBE REQUIREMENTS:
     - Must be run as Administrator
@@ -55,7 +56,7 @@ param(
 )
 
 # Script Configuration - OOBE-safe paths
-$ScriptVersion = "1.18.2-OOBE"
+$ScriptVersion = "1.18.3-OOBE"
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
 $ServiceName = "NetBird"
@@ -600,37 +601,35 @@ if ($alreadyInstalled) {
     $script:JustInstalled = $true
 
     # Full clear of NetBird data directory on fresh install (mandatory in OOBE)
-    # Simple approach: stop service, delete everything, restart service
+    # Simple approach: net stop, delete contents, net start, wait for stabilization
     Write-Log "Fresh installation detected - performing full clear of NetBird data directory (mandatory in OOBE)"
 
-    # Stop service before clearing (MSI starts service automatically)
+    # Stop service using net stop (MSI starts service automatically)
     Write-Log "Stopping NetBird service for full clear..."
-    if (-not (Stop-NetBirdService)) {
+    try {
+        $stopResult = & net stop netbird 2>&1
+        Write-Log "Service stopped"
+    } catch {
         Write-Log "Could not stop service, attempting to clear anyway" "WARN" -Source "SYSTEM"
     }
 
-    # Delete entire data directory
+    # Delete all contents of data directory (not the directory itself)
     if (Test-Path $NetBirdDataPath) {
         try {
-            Remove-Item $NetBirdDataPath -Recurse -Force -ErrorAction Stop
-            Write-Log "Removed entire NetBird data directory: $NetBirdDataPath"
+            Remove-Item "$NetBirdDataPath\*" -Recurse -Force -ErrorAction Stop
+            Write-Log "Cleared all contents of NetBird data directory"
         } catch {
-            Write-Log "Could not remove data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+            Write-Log "Could not clear data directory contents: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
         }
-    }
-
-    # Recreate empty data directory
-    try {
-        New-Item -Path $NetBirdDataPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
-        Write-Log "Recreated empty data directory"
-    } catch {
-        Write-Log "Could not recreate data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
 }
 
-# Start NetBird service (or restart if we stopped it for full clear)
+# Start NetBird service using net start
 Write-Log "Starting NetBird service after full clear..."
-if (-not (Start-NetBirdService)) {
+try {
+    $startResult = & net start netbird 2>&1
+    Write-Log "Service started"
+} catch {
     Write-Log "Failed to start NetBird service" "ERROR" -Source "SYSTEM"
     exit 1
 }
