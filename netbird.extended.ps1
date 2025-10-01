@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.3
+    Script Version: 1.16.4
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -53,6 +53,7 @@
     1.16.1 - CRITICAL BUG FIX: Fixed syntax error (missing try block) in Confirm-RegistrationSuccess function
     1.16.2 - Fixed false-positive network prerequisites failures (Get-NetAdapter/Get-DnsClientServerAddress cmdlet issues)
     1.16.3 - Fixed unnecessary retries when netbird status returns exit code 1 (not connected state)
+    1.16.4 - CRITICAL: Fixed Test-NetConnection hanging indefinitely - replaced with timeout-safe TCP test (5s)
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -64,7 +65,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.3"
+$ScriptVersion = "1.16.4"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -106,6 +107,37 @@ function Write-Log {
         $logMessage | Out-File -FilePath $script:LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch {
         # Silently fail if log file write fails - don't want to interrupt script execution
+    }
+}
+
+function Test-TcpConnection {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ComputerName,
+        [Parameter(Mandatory=$true)]
+        [int]$Port,
+        [int]$TimeoutMs = 5000
+    )
+
+    try {
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $connect = $tcpClient.BeginConnect($ComputerName, $Port, $null, $null)
+        $wait = $connect.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
+
+        if ($wait) {
+            try {
+                $tcpClient.EndConnect($connect)
+                $tcpClient.Close()
+                return $true
+            } catch {
+                return $false
+            }
+        } else {
+            $tcpClient.Close()
+            return $false
+        }
+    } catch {
+        return $false
     }
 }
 
@@ -739,13 +771,12 @@ function Register-NetBird {
             } else {
                 ([uri]$ManagementUrl).Host
             }
-            Write-Log "Testing TCP connection to ${testUrl}:443..."
-            $connectionTest = Test-NetConnection -ComputerName $testUrl -Port 443 -InformationLevel Detailed
-            if ($connectionTest.TcpTestSucceeded) {
+            Write-Log "Testing TCP connection to ${testUrl}:443 (5s timeout)..."
+            $tcpConnected = Test-TcpConnection -ComputerName $testUrl -Port 443 -TimeoutMs 5000
+            if ($tcpConnected) {
                 Write-Log "Management server is reachable (TCP 443 succeeded)"
             } else {
                 Write-Log "Warning: Could not reach management server at ${testUrl}:443" "WARN" -Source "SYSTEM"
-                Write-Log "Connection details: Ping=$($connectionTest.PingSucceeded), Resolved IPs=$($connectionTest.ResolvedAddresses -join ', ')" "WARN" -Source "SYSTEM"
                 Write-Log "This may cause registration to fail"
             }
         }
@@ -1205,16 +1236,12 @@ function Test-NetworkPrerequisites {
             $signalReachable = $false
 
             foreach ($signalHost in $signalHosts) {
-                try {
-                    $signalTest = Test-NetConnection -ComputerName $signalHost -Port 443 -WarningAction SilentlyContinue -ErrorAction Stop
-                    if ($signalTest.TcpTestSucceeded) {
-                        $networkChecks.SignalServerReachable = $true
-                        $signalReachable = $true
-                        Write-Log "✓ Signal server reachable: ${signalHost}:443"
-                        break
-                    }
-                } catch {
-                    # Try next server
+                $tcpConnected = Test-TcpConnection -ComputerName $signalHost -Port 443 -TimeoutMs 5000
+                if ($tcpConnected) {
+                    $networkChecks.SignalServerReachable = $true
+                    $signalReachable = $true
+                    Write-Log "✓ Signal server reachable: ${signalHost}:443"
+                    break
                 }
             }
 
@@ -1287,9 +1314,8 @@ function Test-RegistrationPrerequisites {
     # Check 2: Management URL TCP accessibility
     try {
         $testUrl = if ($ManagementUrl -eq "https://app.netbird.io") { "api.netbird.io" } else { ([uri]$ManagementUrl).Host }
-        Write-Log "Testing TCP connection to management server: ${testUrl}:443"
-        $connectionTest = Test-NetConnection -ComputerName $testUrl -Port 443 -WarningAction SilentlyContinue
-        $prerequisites.ManagementTCPReachable = $connectionTest.TcpTestSucceeded
+        Write-Log "Testing TCP connection to management server: ${testUrl}:443 (5s timeout)"
+        $prerequisites.ManagementTCPReachable = Test-TcpConnection -ComputerName $testUrl -Port 443 -TimeoutMs 5000
 
         if ($prerequisites.ManagementTCPReachable) {
             Write-Log "✓ Management server TCP reachable at ${testUrl}:443"
