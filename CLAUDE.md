@@ -4,22 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a PowerShell-based NetBird VPN client installation and management tool for Windows. The single-file script (`netbird.extended.ps1`) handles installation, upgrades, registration, and recovery with enterprise-grade automation features.
+This is a PowerShell-based NetBird VPN client installation and management tool for Windows. The repository contains two single-file scripts optimized for different deployment scenarios.
+
+**Scripts:**
+
+### `netbird.extended.ps1` - Full-Featured Installation & Management
+- Production-ready for standard Windows installations
+- ~2050 lines with comprehensive inline documentation
+- 4-scenario execution logic for predictable behavior
+- Comprehensive network prerequisites validation (8 checks)
+- Persistent logging to timestamped files for Intune/RMM troubleshooting
+- JSON status parsing with automatic text fallback for reliability
+- Enhanced diagnostic checks for Relays, Nameservers, and Peer connectivity
+- Designed for enterprise deployment via Intune/RMM tools
+
+### `netbird.oobe.ps1` - OOBE-Optimized Installation
+- Specialized for Windows Out-of-Box Experience (OOBE) deployments
+- ~680 lines optimized for USB/first-boot deployment
+- Bypasses user profile dependencies ($env:TEMP, HKCU registry, desktop shortcuts)
+- Uses C:\Windows\Temp for all operations (OOBE-safe)
+- Simplified 3-check network validation
+- Direct MSI → register workflow (mirrors manual CLI approach)
+- Setup key required (mandatory for OOBE deployments)
 
 **Key Characteristics:**
 - Windows-only (PowerShell 5.1+ and PowerShell 7+ compatible)
-- Single file architecture (~2110 lines) with comprehensive inline documentation
-- **NEW v1.16.0:** 4-scenario execution logic for predictable behavior
-- **NEW v1.15.0:** Comprehensive network prerequisites validation (8 checks)
-- **NEW v1.14.0:** Persistent logging to timestamped files for Intune/RMM troubleshooting
-- **NEW v1.14.0:** JSON status parsing with automatic text fallback for reliability
-- **NEW v1.14.0:** Enhanced diagnostic checks for Relays, Nameservers, and Peer connectivity
-- Designed for enterprise deployment via Intune/RMM tools
+- Single file architecture for easy deployment
 - Requires Administrator privileges
+- **Both scripts must maintain version synchronization**
 
 ## Commands
 
 ### Testing and Running
+
+**Extended Script (Standard Deployments):**
 ```powershell
 # View full help and parameter documentation
 Get-Help ./netbird.extended.ps1 -Full
@@ -35,6 +53,21 @@ pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1 -SetupKey "key" -FullC
 
 # Example: Install with desktop shortcut retention
 pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1 -SetupKey "key" -AddShortcut
+```
+
+**OOBE Script (Windows Setup Phase):**
+```powershell
+# View help
+Get-Help ./netbird.oobe.ps1 -Full
+
+# USB deployment with local MSI (recommended)
+PowerShell.exe -ExecutionPolicy Bypass -File D:\netbird.oobe.ps1 -SetupKey "key" -MsiPath "D:\netbird.msi"
+
+# Download from GitHub (requires internet during OOBE)
+PowerShell.exe -ExecutionPolicy Bypass -File D:\netbird.oobe.ps1 -SetupKey "key"
+
+# Custom management server
+PowerShell.exe -ExecutionPolicy Bypass -File .\netbird.oobe.ps1 -SetupKey "key" -ManagementUrl "https://netbird.example.com"
 ```
 
 ### Version Management
@@ -197,12 +230,46 @@ Complete rewrite of main execution flow for predictable behavior:
 
 ## Important Implementation Notes
 
-### When Modifying the Script
+### Maintaining Both Scripts
+
+**CRITICAL: Version Synchronization**
+
+Both `netbird.extended.ps1` and `netbird.oobe.ps1` must maintain synchronized versions. When incrementing the version:
+
+1. Update `netbird.extended.ps1`:
+   - `$ScriptVersion` variable (line ~70)
+   - `.NOTES` Script Version (line ~23)
+   - Version history comment block (line ~28-40)
+
+2. Update `netbird.oobe.ps1`:
+   - `$ScriptVersion` variable (line ~53) - Use format `X.Y.Z-OOBE`
+   - `.NOTES` Script Version (line ~31) - Use format `X.Y.Z-OOBE`
+   - `.NOTES` Base Version line (line ~35) - Reference extended script version
+
+3. Update documentation:
+   - `README.md` - Latest Release section
+   - `CLAUDE.md` - This file (if adding new patterns)
+
+**When to Update OOBE Script:**
+
+Apply changes to OOBE script when modifying extended script in these areas:
+- ✅ **Core logic fixes** (null checks, array handling, error handling)
+- ✅ **Registration command building** (--management-url handling)
+- ✅ **Service management** (wait times, retry logic)
+- ✅ **Status command parsing** (exit code handling)
+- ✅ **Network validation logic** (connectivity checks)
+- ❌ **Version detection** (OOBE uses simplified path-only check)
+- ❌ **Registry operations** (OOBE skips all registry access)
+- ❌ **Desktop shortcut handling** (OOBE skips entirely)
+- ❌ **User profile operations** (OOBE uses C:\Windows\Temp)
+- ❌ **Complex diagnostics** (OOBE uses minimal validation)
+
+**When Modifying Scripts:**
 
 **Version Management:**
-- Update `$ScriptVersion` variable (line 64)
-- Update version history comment block (lines 27-52) - **KEEP ENTRIES SUCCINCT (1-2 lines max)**
-- Update `.NOTES` section Last Updated date (line 24)
+- Update BOTH scripts' `$ScriptVersion` variables
+- Update BOTH scripts' `.NOTES` sections
+- Update version history comment block - **KEEP ENTRIES SUCCINCT (1-2 lines max)**
 - Follow semantic versioning rules strictly
 - **Version notes should be concise summaries, not detailed changelogs**
 

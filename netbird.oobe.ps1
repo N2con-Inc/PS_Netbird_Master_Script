@@ -28,10 +28,11 @@
 .EXAMPLE
     .\netbird.oobe.ps1 -SetupKey "your-setup-key-here"
 .NOTES
-    Script Version: 1.0.0
+    Script Version: 1.17.0-OOBE
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic)
+    Base Version: Mirrors netbird.extended.ps1 v1.17.0 functionality
 
     OOBE REQUIREMENTS:
     - Must be run as Administrator
@@ -49,7 +50,7 @@ param(
 )
 
 # Script Configuration - OOBE-safe paths
-$ScriptVersion = "1.0.0-OOBE"
+$ScriptVersion = "1.17.0-OOBE"
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
 $ServiceName = "NetBird"

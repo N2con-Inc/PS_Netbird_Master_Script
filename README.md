@@ -1,6 +1,28 @@
 # PS NetBird Master Script
 
-NetBird installation and management tool for automated setup, version detection, and registration. This repository tracks the script and its releases using semantic versioning.
+NetBird installation and management tool for automated setup, version detection, and registration. This repository provides two scripts optimized for different deployment scenarios, tracked using semantic versioning.
+
+## Scripts
+
+### `netbird.extended.ps1` - Full-Featured Installation & Management
+Production-ready script for standard Windows installations, Intune/RMM deployments, and enterprise automation.
+
+### `netbird.oobe.ps1` - OOBE-Optimized Installation
+Specialized version for Windows Out-of-Box Experience (OOBE) deployments. Bypasses user profile dependencies and system limitations during Windows setup phase.
+
+**When to use OOBE script:**
+- Installing during Windows OOBE (language/region selection)
+- USB deployment at first boot
+- Pre-configuration during Windows provisioning
+- Running before user profiles are created
+
+**When to use Extended script:**
+- Standard Windows installations (after OOBE)
+- Intune/RMM deployments
+- Manual upgrades
+- Post-installation management
+
+See **[OOBE_USAGE.md](OOBE_USAGE.md)** for complete OOBE deployment guide.
 
 ## Features
 - Install and manage NetBird with intelligent version detection
@@ -62,10 +84,11 @@ Comprehensive documentation is available:
 
 ## Latest Release
 
-📥 **[Download v1.14.0](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/tag/v1.14.0)**  
-🔗 **[View Release Notes](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/tag/v1.14.0)**  
-📋 **Recommended for all enterprise NetBird deployments**  
-✅ **Compatible with Windows PowerShell 5.1+ and PowerShell 7+**  
-🗝️ **Supports all NetBird setup key formats (UUID, Base64, Prefixed)**  
-📊 **Enhanced with persistent logging and JSON status parsing**  
+📥 **[Download v1.17.0](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/latest)**
+🔗 **[View Release Notes](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/latest)**
+📋 **Recommended for all enterprise NetBird deployments**
+✅ **Compatible with Windows PowerShell 5.1+ and PowerShell 7+**
+🗝️ **Supports all NetBird setup key formats (UUID, Base64, Prefixed)**
+📊 **Enhanced with persistent logging and JSON status parsing**
 🔧 **Optimized for OOBE, Intune, and corporate network deployments**
+🆕 **Includes dedicated OOBE script for Windows setup phase deployments**
