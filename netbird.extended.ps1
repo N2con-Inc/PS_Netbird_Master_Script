@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.17.0
+    Script Version: 1.18.0
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -38,6 +38,7 @@
     1.16.5 - Removed redundant TCP test (HTTPS validates properly)
     1.16.6 - Skip --management-url when default; 120s daemon restart wait
     1.17.0 - Code cleanup: removed unused functions, added helpers, reduced ~265 lines
+    1.18.0 - Intune Event Log support, fail-fast network validation, auto config clear on fresh install
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -49,7 +50,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.17.0"
+$ScriptVersion = "1.18.0"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -65,6 +66,49 @@ $script:WasFreshInstall = $false
 
 # Log file path for persistent logging
 $script:LogFile = "$env:TEMP\NetBird-Installation-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+function Write-EventLogEntry {
+    <#
+    .SYNOPSIS
+        Writes to Windows Event Log for Intune/RMM visibility
+    .DESCRIPTION
+        Creates entries in Application log that Intune can collect and monitor.
+        Silently fails if Event Log operations are not available.
+    #>
+    param(
+        [string]$Message,
+        [ValidateSet("Information", "Warning", "Error")]
+        [string]$Level = "Information"
+    )
+
+    try {
+        $source = "NetBird-Deployment"
+
+        # Create event source if it doesn't exist (requires admin privileges)
+        if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
+            New-EventLog -LogName Application -Source $source -ErrorAction Stop
+        }
+
+        # Map level to event type
+        $entryType = switch ($Level) {
+            "Warning" { "Warning" }
+            "Error" { "Error" }
+            default { "Information" }
+        }
+
+        # Event IDs: 1000=Info, 2000=Warn, 3000=Error
+        $eventId = switch ($Level) {
+            "Warning" { 2000 }
+            "Error" { 3000 }
+            default { 1000 }
+        }
+
+        Write-EventLog -LogName Application -Source $source -EventId $eventId -EntryType $entryType -Message $Message -ErrorAction Stop
+    }
+    catch {
+        # Silently fail - don't break script for logging
+    }
+}
 
 function Write-Log {
     param(
@@ -86,11 +130,17 @@ function Write-Log {
     $logMessage = "[$timestamp] $logPrefix $Message"
     Write-Host $logMessage
 
-    # Also write to persistent log file for Intune/RMM troubleshooting
+    # Write to persistent log file for Intune/RMM troubleshooting
     try {
         $logMessage | Out-File -FilePath $script:LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch {
         # Silently fail if log file write fails - don't want to interrupt script execution
+    }
+
+    # Write to Windows Event Log for Intune monitoring (only warnings and errors)
+    if ($Level -eq "ERROR" -or $Level -eq "WARN") {
+        $eventLevel = if ($Level -eq "ERROR") { "Error" } else { "Warning" }
+        Write-EventLogEntry -Message $logMessage -Level $eventLevel
     }
 }
 
@@ -1770,12 +1820,16 @@ function Register-NetBirdEnhanced {
     Write-Log "Starting enhanced NetBird registration..."
 
     # Step 0: Network stack readiness validation (critical for OOBE)
+    # Fail-fast: If network prerequisites fail, don't waste time on registration
     if (-not (Test-NetworkPrerequisites)) {
-        Write-Log "Network stack not ready - waiting 45 seconds for OOBE network initialization..." "WARN" -Source "SYSTEM"
+        Write-Log "Network prerequisites not met - waiting 45 seconds for network initialization..." "WARN" -Source "SYSTEM"
         Start-Sleep -Seconds 45
         if (-not (Test-NetworkPrerequisites)) {
-            Write-Log "Network stack still not ready - registration will likely fail but continuing anyway" "WARN" -Source "SYSTEM"
-            # Continue anyway, registration might work on slow networks
+            Write-Log "Network prerequisites still not met after retry" "ERROR" -Source "SYSTEM"
+            Write-Log "Cannot proceed with registration - network connectivity required" "ERROR" -Source "SYSTEM"
+            Write-Log "Verify network adapter is active, DNS is configured, and internet is accessible" "ERROR" -Source "SYSTEM"
+            Write-Log "Manual registration command: netbird up --setup-key 'your-key'" "ERROR" -Source "SCRIPT"
+            return $false
         }
     }
 
@@ -1977,6 +2031,27 @@ if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
         Write-Log "Installation successful"
         $script:JustInstalled = $true
         $script:NetBirdExe = $NetBirdExe
+
+        # Clear any MSI-created config on fresh install (prevents conflicts)
+        Write-Log "Fresh installation detected - clearing any MSI-created config files"
+        if (Test-Path $ConfigFile) {
+            try {
+                Remove-Item $ConfigFile -Force -ErrorAction Stop
+                Write-Log "Removed pre-existing config: $ConfigFile"
+            } catch {
+                Write-Log "Could not remove config file: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+            }
+        }
+
+        # Clear other data directory files (preserve logs)
+        if (Test-Path $NetBirdDataPath) {
+            try {
+                Get-ChildItem $NetBirdDataPath -File | Where-Object { $_.Name -notmatch '\.log$' } | Remove-Item -Force -ErrorAction SilentlyContinue
+                Write-Log "Cleared NetBird data directory (preserved log files)"
+            } catch {
+                Write-Log "Could not clear data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+            }
+        }
 
         Write-Log "Ensuring NetBird service is running after installation..."
         if (Start-NetBirdService) {

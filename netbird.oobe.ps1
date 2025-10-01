@@ -28,11 +28,11 @@
 .EXAMPLE
     .\netbird.oobe.ps1 -SetupKey "your-setup-key-here"
 .NOTES
-    Script Version: 1.17.0-OOBE
+    Script Version: 1.18.0-OOBE
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic)
-    Base Version: Mirrors netbird.extended.ps1 v1.17.0 functionality
+    Base Version: Mirrors netbird.extended.ps1 v1.18.0 functionality
 
     OOBE REQUIREMENTS:
     - Must be run as Administrator
@@ -50,7 +50,7 @@ param(
 )
 
 # Script Configuration - OOBE-safe paths
-$ScriptVersion = "1.17.0-OOBE"
+$ScriptVersion = "1.18.0-OOBE"
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
 $ServiceName = "NetBird"
@@ -66,6 +66,49 @@ $script:LogFile = "$OOBETempDir\NetBird-OOBE-$(Get-Date -Format 'yyyyMMdd-HHmmss
 
 # Track installation state
 $script:JustInstalled = $false
+
+function Write-EventLogEntry {
+    <#
+    .SYNOPSIS
+        Writes to Windows Event Log for Intune/RMM visibility
+    .DESCRIPTION
+        Creates entries in Application log that Intune can collect and monitor.
+        Silently fails if Event Log operations are not available.
+    #>
+    param(
+        [string]$Message,
+        [ValidateSet("Information", "Warning", "Error")]
+        [string]$Level = "Information"
+    )
+
+    try {
+        $source = "NetBird-OOBE"
+
+        # Create event source if it doesn't exist (requires admin privileges)
+        if (-not [System.Diagnostics.EventLog]::SourceExists($source)) {
+            New-EventLog -LogName Application -Source $source -ErrorAction Stop
+        }
+
+        # Map level to event type
+        $entryType = switch ($Level) {
+            "Warning" { "Warning" }
+            "Error" { "Error" }
+            default { "Information" }
+        }
+
+        # Event IDs: 1000=Info, 2000=Warn, 3000=Error
+        $eventId = switch ($Level) {
+            "Warning" { 2000 }
+            "Error" { 3000 }
+            default { 1000 }
+        }
+
+        Write-EventLog -LogName Application -Source $source -EventId $eventId -EntryType $entryType -Message $Message -ErrorAction Stop
+    }
+    catch {
+        # Silently fail - don't break script for logging
+    }
+}
 
 function Write-Log {
     param(
@@ -91,6 +134,12 @@ function Write-Log {
         $logMessage | Out-File -FilePath $script:LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch {
         # Silently fail if log write fails
+    }
+
+    # Write to Windows Event Log for Intune monitoring (only warnings and errors)
+    if ($Level -eq "ERROR" -or $Level -eq "WARN") {
+        $eventLevel = if ($Level -eq "ERROR") { "Error" } else { "Warning" }
+        Write-EventLogEntry -Message $logMessage -Level $eventLevel
     }
 }
 
@@ -330,22 +379,23 @@ function Wait-ForDaemonReady {
 function Test-OOBENetworkReady {
     <#
     .SYNOPSIS
-        Simplified network check for OOBE environment
+        Bulletproof network check for OOBE environment
     .DESCRIPTION
-        Performs minimal network validation suitable for OOBE:
-        - Internet connectivity (ping well-known DNS)
-        - DNS resolution
-        - Management server reachability
+        Uses only guaranteed-available cmdlets for OOBE compatibility:
+        - Internet connectivity via ping (Test-Connection - always available)
+        - Management server HTTPS reachability (Invoke-WebRequest - validates DNS implicitly)
+
+        Removed: Resolve-DnsName (may not be available in minimal OOBE)
+        If HTTPS to management works, DNS is inherently working.
     #>
-    Write-Log "Performing OOBE network readiness check..."
+    Write-Log "Performing OOBE network readiness check (bulletproof mode)..."
 
     $checks = @{
         InternetConnectivity = $false
-        DNSResolution = $false
         ManagementReachable = $false
     }
 
-    # Check 1: Internet connectivity
+    # Check 1: Internet connectivity via ping
     try {
         $pingResult = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction Stop
         if ($pingResult) {
@@ -357,39 +407,30 @@ function Test-OOBENetworkReady {
         Write-Log "✗ Internet connectivity check failed" "WARN"
     }
 
-    # Check 2: DNS resolution
-    try {
-        $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
-        if ($dnsTest) {
-            Write-Log "✓ DNS resolution working (api.netbird.io)"
-            $checks.DNSResolution = $true
-        }
-    }
-    catch {
-        Write-Log "✗ DNS resolution failed" "WARN"
-    }
-
-    # Check 3: Management server HTTPS reachability
+    # Check 2: Management server HTTPS reachability
+    # This validates DNS + TLS + connectivity in one test
     try {
         $testUrl = "$ManagementUrl"
         $webRequest = Invoke-WebRequest -Uri $testUrl -Method Head -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
         if ($webRequest.StatusCode -ge 200 -and $webRequest.StatusCode -lt 500) {
-            Write-Log "✓ Management server reachable via HTTPS"
+            Write-Log "✓ Management server reachable via HTTPS (DNS + connectivity verified)"
             $checks.ManagementReachable = $true
         }
     }
     catch {
-        Write-Log "✗ Management server HTTPS check failed" "WARN"
+        Write-Log "✗ Management server HTTPS check failed: $($_.Exception.Message)" "WARN"
     }
 
-    # Evaluation
-    $criticalChecksPassed = $checks.InternetConnectivity -and $checks.DNSResolution
-
-    if ($criticalChecksPassed) {
-        Write-Log "Network prerequisites met (OOBE mode)"
+    # Evaluation - both checks must pass
+    if ($checks.InternetConnectivity -and $checks.ManagementReachable) {
+        Write-Log "Network prerequisites met (OOBE bulletproof mode)"
         return $true
     } else {
-        Write-Log "Network prerequisites NOT met - may need to wait for OOBE network initialization" "WARN"
+        Write-Log "Network prerequisites NOT met" "WARN"
+        $failedChecks = @()
+        if (-not $checks.InternetConnectivity) { $failedChecks += "Internet connectivity" }
+        if (-not $checks.ManagementReachable) { $failedChecks += "Management server reachability" }
+        Write-Log "Failed checks: $($failedChecks -join ', ')" "WARN"
         return $false
     }
 }
@@ -552,6 +593,27 @@ if ($alreadyInstalled) {
     }
 
     $script:JustInstalled = $true
+
+    # Clear any MSI-created config on fresh install (mandatory in OOBE)
+    Write-Log "Fresh installation detected - clearing any MSI-created config files (mandatory in OOBE)"
+    if (Test-Path "$NetBirdDataPath\config.json") {
+        try {
+            Remove-Item "$NetBirdDataPath\config.json" -Force -ErrorAction Stop
+            Write-Log "Removed pre-existing config: $NetBirdDataPath\config.json"
+        } catch {
+            Write-Log "Could not remove config file: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        }
+    }
+
+    # Clear other data directory files (preserve logs)
+    if (Test-Path $NetBirdDataPath) {
+        try {
+            Get-ChildItem $NetBirdDataPath -File | Where-Object { $_.Name -notmatch '\.log$' } | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-Log "Cleared NetBird data directory (preserved log files)"
+        } catch {
+            Write-Log "Could not clear data directory: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        }
+    }
 }
 
 # Start NetBird service
@@ -566,14 +628,19 @@ if (-not (Wait-ForServiceRunning -MaxWaitSeconds 30)) {
     Write-Log "Service did not start properly, but continuing..." "WARN"
 }
 
-# Network readiness check
+# Network readiness check - FAIL FAST if network not available
 Write-Log "Checking network readiness for registration..."
 if (-not (Test-OOBENetworkReady)) {
-    Write-Log "Network not fully ready - waiting 30 seconds for OOBE network initialization..." "WARN"
+    Write-Log "Network prerequisites not met - waiting 30 seconds for OOBE network initialization..." "WARN" -Source "SYSTEM"
     Start-Sleep -Seconds 30
 
     if (-not (Test-OOBENetworkReady)) {
-        Write-Log "Network still not ready - continuing anyway (may fail)" "WARN"
+        Write-Log "Network prerequisites still not met after retry" "ERROR" -Source "SYSTEM"
+        Write-Log "Cannot proceed with registration - network connectivity required" "ERROR" -Source "SYSTEM"
+        Write-Log "Installation completed but registration skipped due to network failure" "ERROR"
+        Write-Log "Manual registration command: netbird up --setup-key 'your-key'" "ERROR" -Source "SCRIPT"
+        Write-Log "Log file: $script:LogFile"
+        exit 1
     }
 }
 
