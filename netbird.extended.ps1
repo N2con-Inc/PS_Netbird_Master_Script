@@ -236,8 +236,18 @@ function Invoke-NetBirdStatusCommand {
             # - 1: NetBird is not connected/registered (but status output is valid)
             # Only exit codes 2+ indicate actual errors (daemon not responding, etc.)
             if ($exitCode -eq 0 -or $exitCode -eq 1) {
-                # Check if we got actual output
-                if ($output -and $output.ToString().Trim().Length -gt 0) {
+                # Check if we got actual output (handle both arrays and strings)
+                $outputString = if ($output) {
+                    if ($output -is [array]) {
+                        ($output | Out-String).Trim()
+                    } else {
+                        $output.ToString().Trim()
+                    }
+                } else {
+                    ""
+                }
+
+                if ($outputString.Length -gt 0) {
                     return @{
                         Success = $true
                         Output = $output
@@ -1043,8 +1053,13 @@ function Test-NetworkPrerequisites {
 
         if ($dnsServers -and $dnsServers.Count -gt 0) {
             $networkChecks.DNSServersConfigured = $true
-            $primaryDNS = $dnsServers[0].ServerAddresses[0]
-            Write-Log "✓ DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')"
+            # Safely access DNS server array
+            if ($dnsServers[0].ServerAddresses -and $dnsServers[0].ServerAddresses.Count -gt 0) {
+                $primaryDNS = $dnsServers[0].ServerAddresses[0]
+                Write-Log "✓ DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')"
+            } else {
+                Write-Log "✓ DNS servers configured (cmdlet returned data but no addresses listed)"
+            }
         } else {
             $warnings += "No DNS servers found via Get-DnsClientServerAddress"
             Write-Log "⚠ No DNS servers found via Get-DnsClientServerAddress (cmdlet may not be available)" "WARN" -Source "SYSTEM"
