@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.10.2
+    Script Version: 1.11.1
     Last Updated: 2025-10-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -43,6 +43,8 @@
     1.10.0 - Major registration enhancement: intelligent daemon readiness detection (5-level validation), smart auto-recovery system, registration verification, and diagnostic export. Eliminates need for manual FullClear operations in enterprise deployments.
     1.10.1 - Fixed PowerShell 5.1 compatibility issue: replaced null-conditional operator (?.) with explicit null check for broader Windows PowerShell support.
     1.10.2 - Fixed setup key validation to support UUID format (e.g., 77530893-E8C4-44FC-AABF-7A0511D9558E) in addition to Base64 and NetBird prefixed formats. Resolves false positive validation failures for valid UUID-based setup keys.
+    1.11.0 - Enhanced error classification system: errors now categorized by source (NETBIRD/SCRIPT/SYSTEM) for improved troubleshooting. Format: [SOURCE-ERROR] or [SOURCE-WARN] for error/warning messages, enabling faster diagnosis and better enterprise monitoring integration.
+    1.11.1 - CRITICAL FIX: Enhanced registration validation with stricter success criteria. Now requires ALL critical checks (Management Connected, IP Assigned, Daemon Running, No Errors) to pass before claiming success. Prevents false positive "success" reports when management server connection fails.
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -54,7 +56,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.10.2"
+$ScriptVersion = "1.11.1"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -65,9 +67,23 @@ $ConfigFile = "$NetBirdDataPath\config.json"
 $DesktopShortcut = "C:\Users\Public\Desktop\NetBird.lnk"
 
 function Write-Log {
-    param([string]$Message, [string]$Level = "INFO")
+    param(
+        [string]$Message, 
+        [string]$Level = "INFO",
+        [ValidateSet("SCRIPT", "NETBIRD", "SYSTEM")]
+        [string]$Source = "SCRIPT"
+    )
+    
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Host "[$timestamp] [$Level] $Message"
+    
+    # Format output based on level and source
+    $logPrefix = switch ($Level) {
+        "ERROR" { "[$Source-ERROR]" }
+        "WARN"  { "[$Source-WARN]" }
+        default { "[$Level]" }
+    }
+    
+    Write-Host "[$timestamp] $logPrefix $Message"
 }
 
 function Get-LatestVersionAndDownloadUrl {
@@ -88,7 +104,7 @@ function Get-LatestVersionAndDownloadUrl {
             }
         }
         else {
-            Write-Log "No MSI installer found in release assets" "ERROR"
+            Write-Log "No MSI installer found in release assets" "ERROR" -Source "SYSTEM"
             # Debug: Show all available assets
             Write-Log "Available assets:"
             foreach ($asset in $response.assets) {
@@ -101,7 +117,7 @@ function Get-LatestVersionAndDownloadUrl {
         }
     }
     catch {
-        Write-Log "Failed to get latest version and download URL: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to get latest version and download URL: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
         return @{
             Version = $null
             DownloadUrl = $null
@@ -139,7 +155,7 @@ function Get-NetBirdVersionFromExecutable {
                 }
             }
             catch {
-                Write-Log "Command '$cmd' failed: $($_.Exception.Message)" "WARN"
+                Write-Log "Command '$cmd' failed: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
             }
         }
         # Try to get version from file properties as fallback
@@ -155,11 +171,11 @@ function Get-NetBirdVersionFromExecutable {
             }
         }
         catch {
-            Write-Log "Could not get file version info" "WARN"
+            Write-Log "Could not get file version info" "WARN" -Source "SYSTEM"
         }
     }
     catch {
-        Write-Log "Failed to get version from ${ExePath}: $($_.Exception.Message)" "WARN"
+        Write-Log "Failed to get version from ${ExePath}: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
     }
     return $null
 }
@@ -222,7 +238,7 @@ function Get-InstalledVersion {
         }
     }
     catch {
-        Write-Log "Registry check failed: $($_.Exception.Message)" "ERROR"
+        Write-Log "Registry check failed: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
     }
     # Method 3: Search common installation directories
     Write-Log "Method 3: Searching common installation directories..."
@@ -263,7 +279,7 @@ function Get-InstalledVersion {
         }
     }
     catch {
-        Write-Log "PATH check failed: $($_.Exception.Message)" "WARN"
+        Write-Log "PATH check failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
     # Method 5: Check Windows Service for clues
     Write-Log "Method 5: Checking Windows Service..."
@@ -281,7 +297,7 @@ function Get-InstalledVersion {
                 }
             }
             catch {
-                Write-Log "WMI query failed, trying CIM..." "WARN"
+                Write-Log "WMI query failed, trying CIM..." "WARN" -Source "SYSTEM"
                 try {
                     $cimService = Get-CimInstance -ClassName Win32_Service | Where-Object { $_.Name -eq $ServiceName }
                     if ($cimService) {
@@ -290,7 +306,7 @@ function Get-InstalledVersion {
                     }
                 }
                 catch {
-                    Write-Log "CIM query also failed" "WARN"
+                    Write-Log "CIM query also failed" "WARN" -Source "SYSTEM"
                 }
             }
             if ($servicePath) {
@@ -321,7 +337,7 @@ function Get-InstalledVersion {
         }
     }
     catch {
-        Write-Log "Service check failed: $($_.Exception.Message)" "ERROR"
+        Write-Log "Service check failed: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
     }
     # Method 6: Brute force search in Program Files
     Write-Log "Method 6: Performing brute force search..."
@@ -345,7 +361,7 @@ function Get-InstalledVersion {
         }
     }
     catch {
-        Write-Log "Brute force search failed: $($_.Exception.Message)" "WARN"
+        Write-Log "Brute force search failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
     # Final check: If we found a registry version but no executable, it's a broken installation
     if ($script:RegistryVersion) {
@@ -367,7 +383,7 @@ function Compare-Versions {
         return $v2 -gt $v1
     }
     catch {
-        Write-Log "Version comparison failed: $($_.Exception.Message)" "WARN"
+        Write-Log "Version comparison failed: $($_.Exception.Message)" "WARN" -Source "SCRIPT"
         return $true # Assume we should proceed if comparison fails
     }
 }
@@ -381,7 +397,7 @@ function Stop-NetBirdService {
             return $true
         }
         catch {
-            Write-Log "Failed to stop NetBird service: $($_.Exception.Message)" "ERROR"
+            Write-Log "Failed to stop NetBird service: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
             return $false
         }
     }
@@ -393,7 +409,7 @@ function Reset-NetBirdState {
     $resetType = if ($Full) { "full" } else { "partial" }
     Write-Log "Resetting NetBird client state ($resetType) for clean registration..."
     if (-not (Stop-NetBirdService)) {
-        Write-Log "Failed to stop service during reset" "ERROR"
+        Write-Log "Failed to stop service during reset" "ERROR" -Source "SYSTEM"
         return $false
     }
     if ($Full) {
@@ -403,7 +419,7 @@ function Reset-NetBirdState {
                 Write-Log "Full clear: Removed all files in $NetBirdDataPath"
             }
             catch {
-                Write-Log "Failed to full clear ${NetBirdDataPath}: $($_.Exception.Message)" "ERROR"
+                Write-Log "Failed to full clear ${NetBirdDataPath}: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
                 return $false
             }
         } else {
@@ -416,7 +432,7 @@ function Reset-NetBirdState {
                 Write-Log "Removed config.json for login state reset"
             }
             catch {
-                Write-Log "Failed to remove config.json: $($_.Exception.Message)" "ERROR"
+                Write-Log "Failed to remove config.json: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
                 return $false
             }
         } else {
@@ -424,7 +440,7 @@ function Reset-NetBirdState {
         }
     }
     if (-not (Start-NetBirdService)) {
-        Write-Log "Failed to start service during reset" "ERROR"
+        Write-Log "Failed to start service during reset" "ERROR" -Source "SYSTEM"
         return $false
     }
     return $true
@@ -436,7 +452,7 @@ function Install-NetBird {
         [switch]$AddShortcut
     )
     if ([string]::IsNullOrEmpty($DownloadUrl)) {
-        Write-Log "No download URL provided" "ERROR"
+        Write-Log "No download URL provided" "ERROR" -Source "SCRIPT"
         return $false
     }
     Write-Log "Downloading NetBird installer from: $DownloadUrl"
@@ -446,7 +462,7 @@ function Install-NetBird {
         Write-Log "Download completed"
         # Stop service if running
         if (-not (Stop-NetBirdService)) {
-            Write-Log "Warning: Could not stop NetBird service before installation" "WARN"
+            Write-Log "Warning: Could not stop NetBird service before installation" "WARN" -Source "SYSTEM"
         }
         # Install MSI silently
         Write-Log "Installing NetBird..."
@@ -468,7 +484,7 @@ function Install-NetBird {
                         Write-Log "Successfully removed desktop shortcut: $DesktopShortcut"
                     }
                     catch {
-                        Write-Log "Failed to remove desktop shortcut ${DesktopShortcut}: $($_.Exception.Message)" "WARN"
+                        Write-Log "Failed to remove desktop shortcut ${DesktopShortcut}: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
                     }
                 } else {
                     Write-Log "Desktop shortcut not found at $DesktopShortcut - no removal needed"
@@ -479,12 +495,12 @@ function Install-NetBird {
             return $true
         }
         else {
-            Write-Log "NetBird installation failed with exit code: $($process.ExitCode)" "ERROR"
+            Write-Log "NetBird installation failed with exit code: $($process.ExitCode)" "ERROR" -Source "SYSTEM"
             return $false
         }
     }
     catch {
-        Write-Log "Installation failed: $($_.Exception.Message)" "ERROR"
+        Write-Log "Installation failed: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
         return $false
     }
     finally {
@@ -531,7 +547,7 @@ function Check-NetBirdStatus {
         return $false
     }
     catch {
-        Write-Log "Failed to check NetBird status: $($_.Exception.Message)" "WARN"
+        Write-Log "Failed to check NetBird status: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
         return $false
     }
 }
@@ -555,7 +571,7 @@ function Log-NetBirdStatusDetailed {
         Write-Log $detailOutput
     }
     catch {
-        Write-Log "Failed to get detailed NetBird status: $($_.Exception.Message)" "WARN"
+        Write-Log "Failed to get detailed NetBird status: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
     }
 }
 
@@ -567,7 +583,7 @@ function Register-NetBird {
         $NetBirdExe
     }
     if (-not (Test-Path $executablePath)) {
-        Write-Log "NetBird executable not found at $executablePath" "ERROR"
+        Write-Log "NetBird executable not found at $executablePath" "ERROR" -Source "SCRIPT"
         return $false
     }
     try {
@@ -587,13 +603,13 @@ function Register-NetBird {
             if ($connectionTest.TcpTestSucceeded) {
                 Write-Log "Management server is reachable (TCP 443 succeeded)"
             } else {
-                Write-Log "Warning: Could not reach management server at ${testUrl}:443" "WARN"
-                Write-Log "Connection details: Ping=$($connectionTest.PingSucceeded), Resolved IPs=$($connectionTest.ResolvedAddresses -join ', ')" "WARN"
+                Write-Log "Warning: Could not reach management server at ${testUrl}:443" "WARN" -Source "SYSTEM"
+                Write-Log "Connection details: Ping=$($connectionTest.PingSucceeded), Resolved IPs=$($connectionTest.ResolvedAddresses -join ', ')" "WARN" -Source "SYSTEM"
                 Write-Log "This may cause registration to fail"
             }
         }
         catch {
-            Write-Log "Network connectivity test failed: $($_.Exception.Message)" "WARN"
+            Write-Log "Network connectivity test failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
             Write-Log "Proceeding with registration attempt despite network check failure"
         }
         # Register with the setup key, with retries
@@ -626,27 +642,27 @@ function Register-NetBird {
                 $success = $true
             }
             else {
-                Write-Log "Registration attempt $retryCount failed with exit code: $($process.ExitCode)" "ERROR"
+                Write-Log "Registration attempt $retryCount failed with exit code: $($process.ExitCode)" "ERROR" -Source "NETBIRD"
                 if ($stderr -match "DeadlineExceeded" -or $stderr -match "context deadline exceeded") {
-                    Write-Log "Detected DeadlineExceeded error - possible causes:" "ERROR"
-                    Write-Log " - Daemon not fully initialized" "ERROR"
-                    Write-Log " - Firewall blocking gRPC traffic (port 443)" "ERROR"
-                    Write-Log " - Management server unreachable" "ERROR"
-                    Write-Log " - DNS resolution issues" "ERROR"
-                    Write-Log " - Proxy/corporate network restrictions" "ERROR"
+                    Write-Log "Detected DeadlineExceeded error - possible causes:" "ERROR" -Source "NETBIRD"
+                    Write-Log " - Daemon not fully initialized" "ERROR" -Source "NETBIRD"
+                    Write-Log " - Firewall blocking gRPC traffic (port 443)" "ERROR" -Source "SYSTEM"
+                    Write-Log " - Management server unreachable" "ERROR" -Source "SYSTEM"
+                    Write-Log " - DNS resolution issues" "ERROR" -Source "SYSTEM"
+                    Write-Log " - Proxy/corporate network restrictions" "ERROR" -Source "SYSTEM"
                     if ($retryCount -lt $maxRetries) {
                         Write-Log "Waiting 30 seconds before retry..."
                         Start-Sleep -Seconds 30
                     }
                 }
                 elseif ($stderr -match "invalid setup key" -or $stderr -match "setup key") {
-                    Write-Log "Registration failed due to invalid setup key" "ERROR"
-                    Write-Log " - Check if the setup key is correct and not expired" "ERROR"
-                    Write-Log " - Verify the management URL is correct" "ERROR"
+                    Write-Log "Registration failed due to invalid setup key" "ERROR" -Source "NETBIRD"
+                    Write-Log " - Check if the setup key is correct and not expired" "ERROR" -Source "NETBIRD"
+                    Write-Log " - Verify the management URL is correct" "ERROR" -Source "NETBIRD"
                     break # No point retrying for invalid setup key
                 }
                 else {
-                    Write-Log "Unexpected registration error - check C:\ProgramData\Netbird\client.log for details" "ERROR"
+                    Write-Log "Unexpected registration error - check C:\ProgramData\Netbird\client.log for details" "ERROR" -Source "NETBIRD"
                     break # Unknown error, no retry
                 }
             }
@@ -654,12 +670,12 @@ function Register-NetBird {
         if ($success) {
             return $true
         } else {
-            Write-Log "Registration failed after $maxRetries attempts" "ERROR"
+            Write-Log "Registration failed after $maxRetries attempts" "ERROR" -Source "NETBIRD"
             return $false
         }
     }
     catch {
-        Write-Log "Registration failed: $($_.Exception.Message)" "ERROR"
+        Write-Log "Registration failed: $($_.Exception.Message)" "ERROR" -Source "NETBIRD"
         return $false
     }
 }
@@ -673,12 +689,12 @@ function Start-NetBirdService {
             return $true
         }
         else {
-            Write-Log "NetBird service not found" "WARN"
+            Write-Log "NetBird service not found" "WARN" -Source "SYSTEM"
             return $false
         }
     }
     catch {
-        Write-Log "Failed to start NetBird service: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to start NetBird service: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
         return $false
     }
 }
@@ -698,7 +714,7 @@ function Wait-ForServiceRunning {
         Start-Sleep -Seconds $retryInterval
         $retryCount++
     }
-    Write-Log "NetBird service did not start within $MaxWaitSeconds seconds" "ERROR"
+    Write-Log "NetBird service did not start within $MaxWaitSeconds seconds" "ERROR" -Source "SYSTEM"
     return $false
 }
 
@@ -714,7 +730,7 @@ function Restart-NetBirdService {
         return $false
     }
     catch {
-        Write-Log "Failed to restart NetBird service: $($_.Exception.Message)" "ERROR"
+        Write-Log "Failed to restart NetBird service: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
         return $false
     }
 }
@@ -804,7 +820,7 @@ function Wait-ForDaemonReady {
     }
     
     $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
-    Write-Log "Timeout waiting for daemon readiness after $elapsedSeconds seconds" "ERROR"
+    Write-Log "Timeout waiting for daemon readiness after $elapsedSeconds seconds" "ERROR" -Source "NETBIRD"
     
     # Log final status for troubleshooting
     Write-Log "Final readiness status:"
@@ -891,7 +907,7 @@ function Test-RegistrationPrerequisites {
     $criticalFailed = $criticalPrereqs | Where-Object { -not $prerequisites[$_] }
     
     if ($criticalFailed) {
-        Write-Log "Critical prerequisites failed: $($criticalFailed -join ', ')" "ERROR"
+        Write-Log "Critical prerequisites failed: $($criticalFailed -join ', ')" "ERROR" -Source "SCRIPT"
         return $false
     }
     
@@ -971,7 +987,7 @@ function Invoke-RecoveryAction {
 }
 
 function Confirm-RegistrationSuccess {
-    param([int]$MaxWaitSeconds = 60)
+    param([int]$MaxWaitSeconds = 120)  # Increased timeout for better validation
     
     Write-Log "Verifying registration was successful..."
     $startTime = Get-Date
@@ -983,43 +999,110 @@ function Confirm-RegistrationSuccess {
             $statusOutput = & $script:NetBirdExe "status" "--detail" 2>&1
             
             if ($LASTEXITCODE -eq 0) {
-                # Check for positive connection indicators
-                $connectedPatterns = @(
-                    "Status: Connected",
-                    "Management: Connected", 
-                    "Signal: Connected",
-                    "Daemon status: Up"
-                )
+                Write-Log "Status command successful, analyzing output..."
                 
-                $connectionCount = 0
-                foreach ($pattern in $connectedPatterns) {
-                    if ($statusOutput -match $pattern) {
-                        $connectionCount++
-                        Write-Log "✓ Found: $pattern"
+                # Enhanced validation with stricter criteria
+                $validationChecks = @{
+                    ManagementConnected = $false
+                    SignalConnected = $false
+                    HasNetBirdIP = $false
+                    DaemonUp = $false
+                    HasActiveInterface = $false
+                    NoErrorMessages = $false
+                }
+                
+                # Check for management connection
+                if ($statusOutput -match "Management:\s+Connected" -or $statusOutput -match "Management: Connected") {
+                    $validationChecks.ManagementConnected = $true
+                    Write-Log "✓ Management server connected"
+                } elseif ($statusOutput -match "Management:\s+(Disconnected|Failed|Error)") {
+                    Write-Log "✗ Management server connection failed" -Source "NETBIRD"
+                }
+                
+                # Check for signal connection
+                if ($statusOutput -match "Signal:\s+Connected" -or $statusOutput -match "Signal: Connected") {
+                    $validationChecks.SignalConnected = $true
+                    Write-Log "✓ Signal server connected"
+                } elseif ($statusOutput -match "Signal:\s+(Disconnected|Failed|Error)") {
+                    Write-Log "✗ Signal server connection failed" -Source "NETBIRD"
+                }
+                
+                # Check for NetBird IP assignment
+                if ($statusOutput -match "NetBird IP:\s+\d+\.\d+\.\d+\.\d+" -or $statusOutput -match "FQDN:\s+\w+") {
+                    $validationChecks.HasNetBirdIP = $true
+                    Write-Log "✓ NetBird IP assigned"
+                }
+                
+                # Check daemon status
+                if ($statusOutput -match "Daemon version:\s+[0-9]" -or $statusOutput -match "OS:\s+\w+") {
+                    $validationChecks.DaemonUp = $true
+                    Write-Log "✓ Daemon is responding"
+                }
+                
+                # Check for active interface
+                if ($statusOutput -match "Interface type:\s+\w+" -or $statusOutput -match "Connected" -and $statusOutput -notmatch "0 Connected") {
+                    $validationChecks.HasActiveInterface = $true
+                    Write-Log "✓ Network interface active"
+                }
+                
+                # Check for absence of critical error messages
+                if ($statusOutput -notmatch "connection refused|timeout|failed to connect|authentication failed|invalid|error connecting") {
+                    $validationChecks.NoErrorMessages = $true
+                    Write-Log "✓ No critical error messages detected"
+                } else {
+                    Write-Log "✗ Critical error messages found in status output" "WARN" -Source "NETBIRD"
+                }
+                
+                # Count successful validations
+                $passedChecks = ($validationChecks.Values | Where-Object {$_ -eq $true}).Count
+                $totalChecks = $validationChecks.Count
+                
+                Write-Log "Registration validation: $passedChecks/$totalChecks checks passed"
+                
+                # Log failed checks for debugging
+                $failedChecks = $validationChecks.GetEnumerator() | Where-Object { -not $_.Value }
+                if ($failedChecks) {
+                    Write-Log "Failed validation checks:"
+                    foreach ($check in $failedChecks) {
+                        Write-Log "  ✗ $($check.Key)" "WARN" -Source "NETBIRD"
                     }
                 }
                 
-                # Also verify we have a valid peer configuration
-                $hasPeers = $statusOutput -match "NetBird IP:|Peers count:|Interface:"
+                # Require ALL critical checks to pass for successful validation
+                $criticalChecks = @("ManagementConnected", "HasNetBirdIP", "DaemonUp", "NoErrorMessages")
+                $criticalFailed = $criticalChecks | Where-Object { -not $validationChecks[$_] }
                 
-                if ($connectionCount -ge 2 -and $hasPeers) {
-                    Write-Log "Registration verified: $connectionCount connection indicators found with peer config"
+                if ($criticalFailed.Count -eq 0) {
+                    $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
+                    Write-Log "✅ Registration verification successful after $elapsedSeconds seconds"
+                    Write-Log "   Management: Connected, IP: Assigned, Daemon: Running, Errors: None"
                     return $true
+                } else {
+                    Write-Log "Critical validation failed: $($criticalFailed -join ', ')" "WARN" -Source "NETBIRD"
+                    Write-Log "Waiting for connection to stabilize..."
                 }
-                
-                Write-Log "Partial connection detected ($connectionCount indicators), waiting..."
             } else {
-                Write-Log "Status command failed with exit code $LASTEXITCODE, waiting..."
+                Write-Log "Status command failed with exit code $LASTEXITCODE" "WARN" -Source "NETBIRD"
+                Write-Log "Command output: $statusOutput"
             }
         }
         catch {
-            Write-Log "Status check failed: $($_.Exception.Message), waiting..."
+            Write-Log "Status check failed: $($_.Exception.Message)" "WARN" -Source "NETBIRD"
         }
         
         Start-Sleep -Seconds 5
     }
     
-    Write-Log "Registration verification timeout - connection may be unstable" "WARN"
+    # Final attempt to get status for diagnostics
+    Write-Log "Registration verification failed - performing final status check..." "ERROR" -Source "NETBIRD"
+    try {
+        $finalStatus = & $script:NetBirdExe "status" "--detail" 2>&1
+        Write-Log "Final status output for diagnosis:"
+        Write-Log "$finalStatus"
+    } catch {
+        Write-Log "Could not get final status: $($_.Exception.Message)" "ERROR" -Source "NETBIRD"
+    }
+    
     return $false
 }
 
@@ -1067,7 +1150,7 @@ function Export-RegistrationDiagnostics {
         Write-Log "Registration diagnostics exported to: $diagPath"
     }
     catch {
-        Write-Log "Failed to export diagnostics: $($_.Exception.Message)" "WARN"
+        Write-Log "Failed to export diagnostics: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
 }
 
@@ -1125,7 +1208,7 @@ function Invoke-NetBirdRegistration {
         return @{Success = $false; ErrorType = $errorType; ErrorMessage = $stderr}
     }
     catch {
-        Write-Log "Registration attempt failed with exception: $($_.Exception.Message)" "ERROR"
+        Write-Log "Registration attempt failed with exception: $($_.Exception.Message)" "ERROR" -Source "NETBIRD"
         return @{Success = $false; ErrorType = "Exception"; ErrorMessage = $_.Exception.Message}
     }
 }
@@ -1142,14 +1225,14 @@ function Register-NetBirdEnhanced {
     
     # Step 1: Ensure daemon is fully ready
     if (-not (Wait-ForDaemonReady -MaxWaitSeconds 120)) {
-        Write-Log "Daemon not ready for registration - attempting service restart" "WARN"
+        Write-Log "Daemon not ready for registration - attempting service restart" "WARN" -Source "NETBIRD"
         if ($AutoRecover) {
             if (-not (Restart-NetBirdService)) {
-                Write-Log "Failed to restart service - registration cannot proceed" "ERROR"
+                Write-Log "Failed to restart service - registration cannot proceed" "ERROR" -Source "SYSTEM"
                 return $false
             }
             if (-not (Wait-ForDaemonReady -MaxWaitSeconds 60)) {
-                Write-Log "Daemon still not ready after service restart" "ERROR"
+                Write-Log "Daemon still not ready after service restart" "ERROR" -Source "NETBIRD"
                 return $false
             }
         } else {
@@ -1159,7 +1242,7 @@ function Register-NetBirdEnhanced {
     
     # Step 2: Pre-registration validation
     if (-not (Test-RegistrationPrerequisites -SetupKey $SetupKey -ManagementUrl $ManagementUrl)) {
-        Write-Log "Registration prerequisites not met" "ERROR"
+        Write-Log "Registration prerequisites not met" "ERROR" -Source "SCRIPT"
         return $false
     }
     
@@ -1173,7 +1256,7 @@ function Register-NetBirdEnhanced {
     # Step 4: Reset state if needed
     $resetFull = $FullClear
     if (-not (Reset-NetBirdState -Full:$resetFull)) {
-        Write-Log "Failed to reset client state - registration cannot proceed" "ERROR"
+        Write-Log "Failed to reset client state - registration cannot proceed" "ERROR" -Source "SYSTEM"
         return $false
     }
     
@@ -1189,7 +1272,7 @@ function Register-NetBirdEnhanced {
                 Write-Log "Registration completed and verified successfully"
                 return $true
             } else {
-                Write-Log "Registration appeared successful but verification failed - will retry" "WARN"
+                Write-Log "Registration appeared successful but verification failed - will retry" "WARN" -Source "NETBIRD"
                 $result.Success = $false
                 $result.ErrorType = "VerificationFailed"
             }
@@ -1200,7 +1283,7 @@ function Register-NetBirdEnhanced {
             if ($recoveryAction.Action -ne "None") {
                 Write-Log "Applying recovery action: $($recoveryAction.Description)"
                 if (-not (Invoke-RecoveryAction -Action $recoveryAction -SetupKey $SetupKey -ManagementUrl $ManagementUrl)) {
-                    Write-Log "Recovery action failed - aborting registration" "ERROR"
+                    Write-Log "Recovery action failed - aborting registration" "ERROR" -Source "SCRIPT"
                     return $false
                 }
                 Start-Sleep -Seconds $recoveryAction.WaitSeconds
@@ -1208,7 +1291,7 @@ function Register-NetBirdEnhanced {
         }
     }
     
-    Write-Log "Registration failed after $MaxRetries attempts with recovery" "ERROR"
+    Write-Log "Registration failed after $MaxRetries attempts with recovery" "ERROR" -Source "NETBIRD"
     return $false
 }
 
@@ -1226,7 +1309,7 @@ if ($AddShortcut) {
 
 # Check if running as administrator
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Log "This script must be run as Administrator" "ERROR"
+    Write-Log "This script must be run as Administrator" "ERROR" -Source "SCRIPT"
     exit 1
 }
 
@@ -1237,11 +1320,11 @@ $downloadUrl = $releaseInfo.DownloadUrl
 if ($latestVersion) {
     Write-Log "Latest available version: $latestVersion"
 } else {
-    Write-Log "Could not determine latest version - aborting" "ERROR"
+    Write-Log "Could not determine latest version - aborting" "ERROR" -Source "SCRIPT"
     exit 1
 }
 if (-not $downloadUrl) {
-    Write-Log "Could not determine download URL - aborting" "ERROR"
+    Write-Log "Could not determine download URL - aborting" "ERROR" -Source "SCRIPT"
     exit 1
 }
 
@@ -1274,14 +1357,14 @@ if (-not $skipInstall) {
         Write-Log "Ensuring NetBird service is running after installation..."
         if (Start-NetBirdService) {
             if (-not (Wait-ForServiceRunning)) {
-                Write-Log "Warning: Service did not fully start in time, but proceeding..." "WARN"
+                Write-Log "Warning: Service did not fully start in time, but proceeding..." "WARN" -Source "SYSTEM"
             }
         } else {
-            Write-Log "Failed to start service after installation" "ERROR"
+            Write-Log "Failed to start service after installation" "ERROR" -Source "SYSTEM"
             # Continue anyway, as registration might still work if service starts later
         }
     } else {
-        Write-Log "Installation/upgrade failed" "ERROR"
+        Write-Log "Installation/upgrade failed" "ERROR" -Source "SYSTEM"
         exit 1
     }
 }
@@ -1294,7 +1377,7 @@ if (![string]::IsNullOrEmpty($SetupKey)) {
     if ($registrationSuccess) {
         Write-Log "Enhanced registration completed successfully"
     } else {
-        Write-Log "Enhanced registration failed - diagnostics will be exported" "ERROR"
+        Write-Log "Enhanced registration failed - diagnostics will be exported" "ERROR" -Source "SCRIPT"
         Export-RegistrationDiagnostics
         exit 1
     }
