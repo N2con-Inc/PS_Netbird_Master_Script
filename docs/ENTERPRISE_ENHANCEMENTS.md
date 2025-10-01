@@ -1,9 +1,58 @@
 # NetBird PowerShell Script - Enterprise Enhancement Recommendations
 
-**Current Version**: 1.9.0  
-**Target Audience**: Enterprise IT (Intune/RMM deployment)  
-**Primary Use Cases**: Automated provisioning, remote management, bulk upgrades  
+**Current Version**: 1.18.0
+**Target Audience**: Enterprise IT (Intune/RMM deployment)
+**Primary Use Cases**: Automated provisioning, remote management, bulk upgrades
 **Recommended Next Version**: 2.0.0
+
+## ✅ **Implemented in v1.18.0**
+
+### **Windows Event Log Integration** - **COMPLETED**
+**Status**: Implemented in v1.18.0
+**Impact**: Enterprise monitoring and Intune visibility
+**Implementation**:
+- Added `Write-EventLogEntry` function (~43 lines)
+- Automatic Event Log entries for all warnings and errors
+- Event source: "NetBird-Deployment" (extended) / "NetBird-OOBE" (OOBE)
+- Event IDs: 1000=Info, 2000=Warn, 3000=Error
+- Silent failure handling (doesn't break script if Event Log unavailable)
+- Perfect for Intune device monitoring and alerting
+
+**Benefits**:
+- Centralized error tracking via Intune device logs
+- Automatic alerting on deployment failures
+- Historical deployment status visibility
+- No additional infrastructure required (uses Windows Event Log)
+
+### **Fail-Fast Network Validation** - **COMPLETED**
+**Status**: Implemented in v1.18.0
+**Impact**: Faster failure detection and clearer error messages
+**Implementation**:
+- Network prerequisites validation exits immediately on failure
+- No wasted time on registration attempts with broken network
+- Clear error message with manual recovery command
+- Applies to both extended and OOBE scripts
+
+**Benefits**:
+- Saves 2-3 minutes on failed deployments
+- Clearer failure reasons for troubleshooting
+- Reduces unnecessary service restarts
+- Better Intune deployment success rates
+
+### **Automatic Config Clear on Fresh Install** - **COMPLETED**
+**Status**: Implemented in v1.18.0
+**Impact**: Eliminates MSI-created config conflicts
+**Implementation**:
+- Automatically clears config.json on fresh installs
+- Clears data directory files (preserves logs)
+- Mandatory in OOBE script
+- Automatic with setup key in extended script
+
+**Benefits**:
+- Prevents RPC timeout errors during registration
+- Eliminates need for manual FullClear on fresh installs
+- More reliable OOBE deployments
+- Cleaner initial registration state
 
 ## 🎯 **Refined Focus Areas**
 
@@ -49,13 +98,19 @@ enum NetBirdExitCode {
 }
 ```
 
-### **A3. Enhanced Logging for RMM** - **HIGH**
-**Issue**: Need centralized logging for enterprise monitoring  
-**Solution**: Structured logging with machine identifiers
+### **A3. Enhanced Logging for RMM** - **PARTIALLY IMPLEMENTED**
+**Status**: v1.18.0 added Windows Event Log integration, v1.14.0 added persistent file logging
+**Implemented**:
+- ✅ Windows Event Log entries for Intune monitoring (v1.18.0)
+- ✅ Persistent timestamped log files (v1.14.0)
+- ✅ Error classification with source attribution (v1.11.0)
+
+**Still TODO**: Structured enterprise logging format
+**Solution**: Enhanced logging with machine identifiers
 
 ```powershell
 # Log format optimized for enterprise monitoring
-Write-EnterpriseLog -Level "INFO" -Component "Installation" -Message "NetBird v1.9.0 installed" -ComputerName $env:COMPUTERNAME -User $env:USERNAME
+Write-EnterpriseLog -Level "INFO" -Component "Installation" -Message "NetBird v1.18.0 installed" -ComputerName $env:COMPUTERNAME -User $env:USERNAME
 ```
 
 ### **A4. Setup Key Security** - **HIGH**

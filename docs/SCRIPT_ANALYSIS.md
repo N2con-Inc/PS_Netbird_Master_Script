@@ -1,8 +1,8 @@
 # NetBird PowerShell Script Analysis
 
-**Script Version**: 1.9.0  
-**Analysis Date**: 2025-09-30  
-**Script File**: `netbird.extended.ps1`
+**Script Version**: 1.18.0
+**Analysis Date**: 2025-10-01
+**Script Files**: `netbird.extended.ps1`, `netbird.oobe.ps1`
 
 ## Table of Contents
 - [Executive Summary](#executive-summary)
@@ -15,21 +15,37 @@
 
 ## Executive Summary
 
-The NetBird PowerShell installation script is a comprehensive Windows automation tool designed to handle NetBird VPN client installation, upgrades, and configuration. The script demonstrates robust error handling, extensive logging, and sophisticated detection mechanisms.
+The NetBird PowerShell installation scripts are comprehensive Windows automation tools designed to handle NetBird VPN client installation, upgrades, and configuration. Two specialized scripts serve different deployment scenarios:
+
+- **netbird.extended.ps1**: Full-featured script for standard Windows installations, Intune/RMM deployments, and enterprise automation
+- **netbird.oobe.ps1**: Specialized script for Windows Out-of-Box Experience (OOBE) deployments, bypassing user profile dependencies
 
 ### Key Strengths
+- **Dual-Script Architecture**: Optimized scripts for different deployment scenarios (v1.17.0+)
+- **Enterprise Monitoring**: Windows Event Log integration for Intune/RMM visibility (v1.18.0)
+- **Fail-Fast Validation**: Immediate exit on network failures, saves deployment time (v1.18.0)
+- **Auto Config Management**: Automatic config clearing on fresh installs (v1.18.0)
 - **Comprehensive Detection**: 6 different methods to locate existing installations
-- **Robust Error Handling**: Extensive try-catch blocks and validation
+- **Robust Error Handling**: Extensive try-catch blocks and validation with error classification (v1.11.0+)
 - **Smart Version Management**: Automatic version comparison and upgrade logic
-- **Detailed Logging**: Comprehensive logging with timestamps and severity levels
+- **Persistent Logging**: Timestamped log files for troubleshooting (v1.14.0+)
+- **JSON Status Parsing**: Automatic fallback to text parsing for reliability (v1.14.0+)
 - **Service Integration**: Full Windows service lifecycle management
-- **Network Validation**: Pre-registration connectivity testing
+- **Network Validation**: 8-check comprehensive network prerequisites validation (v1.15.0+)
+- **4-Scenario Execution**: Predictable behavior for all deployment scenarios (v1.16.0+)
 
-### Areas for Enhancement
-- **Cross-Platform Support**: Currently Windows-only, could be extended
-- **Configuration Management**: Limited configuration file handling
-- **Performance Optimization**: Some redundant operations and waits
-- **Modern PowerShell Features**: Could leverage newer PowerShell capabilities
+### Recent Enhancements (v1.17.0 - v1.18.0)
+- **Code Cleanup**: Removed 133 lines of duplicate code and unused functions (v1.17.0)
+- **Bug Fixes**: Fixed null array indexing errors in status checking (v1.17.0)
+- **OOBE Script**: Created specialized script for Windows setup phase deployments (v1.17.0)
+- **Event Log Integration**: Windows Event Log support for enterprise monitoring (v1.18.0)
+- **Fail-Fast Network**: Exits immediately if network prerequisites fail (v1.18.0)
+- **Auto Config Clear**: Prevents MSI-created config conflicts on fresh installs (v1.18.0)
+
+### Deployment Optimization
+- **Extended Script**: ~2106 lines, full enterprise features
+- **OOBE Script**: ~744 lines, optimized for Windows setup phase
+- Synchronized versioning (Extended: X.Y.Z, OOBE: X.Y.Z-OOBE)
 
 ## Script Architecture
 
@@ -86,9 +102,14 @@ netbird.extended.ps1
 ### 1. Utility Functions
 
 #### `Write-Log`
-**Purpose**: Centralized logging with timestamps  
-**Parameters**: `$Message`, `$Level` (default: "INFO")  
-**Enhancements**: Could add file logging, log rotation, structured logging
+**Purpose**: Centralized logging with timestamps
+**Parameters**: `$Message`, `$Level` (default: "INFO"), `$Source` (SCRIPT/NETBIRD/SYSTEM)
+**Features** (v1.18.0):
+- ✅ Persistent file logging with timestamped log files (v1.14.0)
+- ✅ Windows Event Log integration for Intune monitoring (v1.18.0)
+- ✅ Error classification with source attribution (v1.11.0)
+- Event IDs: 1000=Info, 2000=Warn, 3000=Error
+- Automatic Event Log entries for warnings and errors
 
 #### `Compare-Versions`
 **Purpose**: Semantic version comparison  

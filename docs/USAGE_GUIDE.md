@@ -1,8 +1,8 @@
 # NetBird PowerShell Script Usage Guide
 
-**Script Version**: 1.16.0
-**Guide Date**: 2025-10-01  
-**Script File**: `netbird.extended.ps1`
+**Script Version**: 1.18.0
+**Guide Date**: 2025-10-01
+**Script Files**: `netbird.extended.ps1`, `netbird.oobe.ps1`
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -39,10 +39,10 @@
 
 ```powershell
 # Download the script (example methods)
-curl -o netbird.extended.ps1 https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.16.0/netbird.extended.ps1
+curl -o netbird.extended.ps1 https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.18.0/netbird.extended.ps1
 
 # Or using PowerShell
-Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.16.0/netbird.extended.ps1" -OutFile "netbird.extended.ps1"
+Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/download/v1.18.0/netbird.extended.ps1" -OutFile "netbird.extended.ps1"
 
 # Execute with administrator privileges
 .\netbird.extended.ps1 -SetupKey "your-setup-key-here"
@@ -53,12 +53,14 @@ Invoke-WebRequest -Uri "https://github.com/N2con-Inc/PS_Netbird_Master_Script/re
 2. 🔍 Fetches latest NetBird version from GitHub
 3. 📥 Downloads NetBird MSI installer
 4. ⚙️ Installs NetBird silently
-5. 🔧 Starts NetBird service
-6. 🌐 Validates network prerequisites (8 comprehensive checks)
-7. 🔄 Resets client state for clean registration
-8. 🔗 Registers with provided setup key
-9. ✅ Verifies connection status with enhanced validation
-10. 📊 Creates persistent installation log file
+5. 🧹 **NEW v1.18.0**: Automatically clears MSI-created config files
+6. 🔧 Starts NetBird service
+7. 🌐 Validates network prerequisites (8 comprehensive checks) - **Fail-fast v1.18.0**
+8. 🔄 Resets client state for clean registration
+9. 🔗 Registers with provided setup key
+10. ✅ Verifies connection status with enhanced validation
+11. 📊 Creates persistent installation log file
+12. 📝 **NEW v1.18.0**: Writes to Windows Event Log for Intune monitoring
 
 ### 2. Upgrade Existing Installation
 **Use Case**: Update NetBird to the latest version
@@ -290,8 +292,8 @@ Get-Content "C:\ProgramData\Netbird\client.log" -Tail 50
 - Review JSON status parsing errors in log files
 
 #### Issue 7: "Relays/Nameservers unavailable" warnings (v1.14.0+)
-**Cause**: Network infrastructure components not accessible (normal in some environments)  
-**Impact**: 
+**Cause**: Network infrastructure components not accessible (normal in some environments)
+**Impact**:
 - **No Relays**: P2P-only mode, may impact connectivity through NAT/firewalls
 - **No Nameservers**: NetBird DNS resolution disabled, uses system DNS
 - **No Peers**: Normal for fresh setup or isolated networks
@@ -299,6 +301,39 @@ Get-Content "C:\ProgramData\Netbird\client.log" -Tail 50
 - These are diagnostic warnings, not errors
 - Contact NetBird administrator if functionality is required
 - Check corporate firewall policies
+
+#### Issue 8: "Network prerequisites not met" (v1.18.0+)
+**Cause**: Network validation fails (fail-fast behavior introduced in v1.18.0)
+**Impact**: Script exits immediately without attempting registration
+**Symptoms**:
+```
+[SYSTEM-ERROR] Network prerequisites still not met after retry
+[SYSTEM-ERROR] Cannot proceed with registration - network connectivity required
+```
+**Solutions**:
+- Check active network adapter: `Get-NetAdapter | Where-Object Status -eq 'Up'`
+- Verify DNS configuration: `Get-DnsClientServerAddress`
+- Test internet connectivity: `Test-Connection 8.8.8.8`
+- Test management server: `Test-NetConnection api.netbird.io -Port 443`
+- Check Windows Event Log for details: `Get-EventLog -LogName Application -Source "NetBird-Deployment" -Newest 10`
+- Manual registration after fixing network: `netbird up --setup-key 'your-key'`
+
+#### Issue 9: Finding Event Log entries for troubleshooting (v1.18.0+)
+**Cause**: Need to check Windows Event Log for deployment monitoring
+**Solutions**:
+```powershell
+# View NetBird deployment events
+Get-EventLog -LogName Application -Source "NetBird-Deployment" -Newest 20
+
+# Filter for errors only
+Get-EventLog -LogName Application -Source "NetBird-Deployment" -EntryType Error -Newest 10
+
+# View OOBE deployment events (if using netbird.oobe.ps1)
+Get-EventLog -LogName Application -Source "NetBird-OOBE" -Newest 20
+
+# Export events for analysis
+Get-EventLog -LogName Application -Source "NetBird-Deployment" | Export-Csv "netbird-events.csv"
+```
 
 ### Diagnostic Commands
 
@@ -336,6 +371,21 @@ Get-Content $latestLog.FullName
 # Enhanced connectivity testing
 Test-NetConnection api.netbird.io -Port 443 -InformationLevel Detailed
 Invoke-WebRequest -Uri "https://api.netbird.io" -Method Head -TimeoutSec 10
+```
+
+#### Enterprise Monitoring (v1.18.0+)
+```powershell
+# View Windows Event Log entries for Intune monitoring
+Get-EventLog -LogName Application -Source "NetBird-Deployment" -Newest 20 | Format-Table -AutoSize
+
+# Filter by event type
+Get-EventLog -LogName Application -Source "NetBird-Deployment" -EntryType Error | Format-List
+
+# Check for specific error patterns
+Get-EventLog -LogName Application -Source "NetBird-Deployment" | Where-Object {$_.Message -like "*Network prerequisites*"}
+
+# Monitor in real-time
+Get-EventLog -LogName Application -Source "NetBird-Deployment" -Newest 1 | Format-List | Out-String; while($true) { Start-Sleep 5; Get-EventLog -LogName Application -Source "NetBird-Deployment" -After (Get-Date).AddSeconds(-5) | Format-List }
 ```
 
 ## Best Practices
