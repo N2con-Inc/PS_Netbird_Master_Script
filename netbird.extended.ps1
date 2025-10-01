@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.16.1
+    Script Version: 1.16.2
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -51,6 +51,7 @@
     1.15.0 - Comprehensive network prerequisites: 8-check validation system prevents registration failures
     1.16.0 - Major logic refactor: 4-scenario execution model for predictable behavior
     1.16.1 - CRITICAL BUG FIX: Fixed syntax error (missing try block) in Confirm-RegistrationSuccess function
+    1.16.2 - Fixed false-positive network prerequisites failures (Get-NetAdapter/Get-DnsClientServerAddress cmdlet issues)
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -62,7 +63,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.16.1"
+$ScriptVersion = "1.16.2"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -1002,20 +1003,22 @@ function Test-NetworkPrerequisites {
 
     # Check 1: Active network adapter
     try {
-        $activeAdapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
-        if ($activeAdapters.Count -gt 0) {
+        $activeAdapters = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq "Up" }
+        if ($activeAdapters -and $activeAdapters.Count -gt 0) {
             $networkChecks.ActiveAdapter = $true
             Write-Log "✓ Active network adapter(s): $($activeAdapters.Count) found"
             foreach ($adapter in $activeAdapters) {
                 Write-Log "  - $($adapter.Name) ($($adapter.InterfaceDescription))"
             }
         } else {
-            $blockingIssues += "No active network adapters"
-            Write-Log "✗ No active network adapters found" "ERROR" -Source "SYSTEM"
+            $warnings += "No active network adapters detected via Get-NetAdapter"
+            Write-Log "⚠ No active network adapters found via Get-NetAdapter (cmdlet may not be available)" "WARN" -Source "SYSTEM"
         }
     } catch {
-        $blockingIssues += "Cannot enumerate network adapters"
-        Write-Log "✗ Failed to enumerate network adapters: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+        # Get-NetAdapter might not be available on all systems/configurations
+        $warnings += "Cannot enumerate network adapters (cmdlet not available)"
+        Write-Log "⚠ Failed to enumerate network adapters: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        Write-Log "  Note: This check is non-critical if internet connectivity succeeds" "WARN" -Source "SYSTEM"
     }
 
     # Check 2: Default gateway configured
@@ -1045,34 +1048,43 @@ function Test-NetworkPrerequisites {
 
     # Check 3: DNS servers configured
     try {
-        $dnsServers = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        $dnsServers = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction Stop |
             Where-Object { $_.ServerAddresses.Count -gt 0 -and $_.InterfaceAlias -notmatch "Loopback" }
 
-        if ($dnsServers.Count -gt 0) {
+        if ($dnsServers -and $dnsServers.Count -gt 0) {
             $networkChecks.DNSServersConfigured = $true
             $primaryDNS = $dnsServers[0].ServerAddresses[0]
             Write-Log "✓ DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')"
         } else {
-            $blockingIssues += "No DNS servers configured"
-            Write-Log "✗ No DNS servers configured" "ERROR" -Source "SYSTEM"
+            $warnings += "No DNS servers found via Get-DnsClientServerAddress"
+            Write-Log "⚠ No DNS servers found via Get-DnsClientServerAddress (cmdlet may not be available)" "WARN" -Source "SYSTEM"
         }
     } catch {
-        $warnings += "Could not verify DNS configuration"
+        # Get-DnsClientServerAddress might not be available on all systems
+        $warnings += "Could not verify DNS configuration (cmdlet not available)"
         Write-Log "⚠ Could not verify DNS servers: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        Write-Log "  Note: This check is non-critical if DNS resolution succeeds" "WARN" -Source "SYSTEM"
     }
 
     # Check 4: DNS resolution working
-    if ($networkChecks.DNSServersConfigured) {
-        try {
-            $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
-            $networkChecks.DNSResolution = $true
-            $resolvedIP = ($dnsTest | Where-Object { $_.Type -eq "A" } | Select-Object -First 1).IPAddress
-            Write-Log "✓ DNS resolution functional (api.netbird.io → $resolvedIP)"
-        } catch {
-            $blockingIssues += "DNS resolution failing"
-            Write-Log "✗ DNS resolution failing for api.netbird.io" "ERROR" -Source "SYSTEM"
-            Write-Log "  Error: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+    # Always test DNS resolution regardless of whether we could enumerate DNS servers
+    # (DNS might work even if Get-DnsClientServerAddress fails)
+    try {
+        $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
+        $networkChecks.DNSResolution = $true
+        $resolvedIP = ($dnsTest | Where-Object { $_.Type -eq "A" } | Select-Object -First 1).IPAddress
+        Write-Log "✓ DNS resolution functional (api.netbird.io → $resolvedIP)"
+
+        # If DNS works but we couldn't enumerate DNS servers, mark DNSServersConfigured as true
+        # (they must be configured if resolution works)
+        if (-not $networkChecks.DNSServersConfigured) {
+            $networkChecks.DNSServersConfigured = $true
+            Write-Log "  DNS servers must be configured (resolution successful)"
         }
+    } catch {
+        $blockingIssues += "DNS resolution failing"
+        Write-Log "✗ DNS resolution failing for api.netbird.io" "ERROR" -Source "SYSTEM"
+        Write-Log "  Error: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
     }
 
     # Check 5: Internet connectivity (with ICMP fallback to HTTP)
@@ -1081,6 +1093,12 @@ function Test-NetworkPrerequisites {
         if ($pingTest) {
             $networkChecks.InternetConnectivity = $true
             Write-Log "✓ Internet connectivity confirmed (ICMP to 8.8.8.8)"
+
+            # If internet works but we couldn't detect adapters, infer they must be active
+            if (-not $networkChecks.ActiveAdapter) {
+                $networkChecks.ActiveAdapter = $true
+                Write-Log "  Network adapter must be active (internet connectivity successful)"
+            }
         } else {
             # Fallback: Try HTTP request instead of ICMP
             try {
@@ -1088,6 +1106,12 @@ function Test-NetworkPrerequisites {
                 if ($httpTest.StatusCode -eq 204 -or $httpTest.StatusCode -eq 200) {
                     $networkChecks.InternetConnectivity = $true
                     Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP blocked)"
+
+                    # Infer adapter must be active
+                    if (-not $networkChecks.ActiveAdapter) {
+                        $networkChecks.ActiveAdapter = $true
+                        Write-Log "  Network adapter must be active (internet connectivity successful)"
+                    }
                 }
             } catch {
                 $blockingIssues += "No internet connectivity"
@@ -1100,6 +1124,12 @@ function Test-NetworkPrerequisites {
             $httpTest = Invoke-WebRequest -Uri "http://www.gstatic.com/generate_204" -Method Head -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
             $networkChecks.InternetConnectivity = $true
             Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP not available)"
+
+            # Infer adapter must be active
+            if (-not $networkChecks.ActiveAdapter) {
+                $networkChecks.ActiveAdapter = $true
+                Write-Log "  Network adapter must be active (internet connectivity successful)"
+            }
         } catch {
             $blockingIssues += "No internet connectivity"
             Write-Log "✗ No internet connectivity detected" "ERROR" -Source "SYSTEM"
