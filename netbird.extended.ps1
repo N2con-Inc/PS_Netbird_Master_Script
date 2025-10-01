@@ -20,7 +20,7 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.18.0
+    Script Version: 1.18.1
     Last Updated: 2025-01-10
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
@@ -39,6 +39,7 @@
     1.16.6 - Skip --management-url when default; 120s daemon restart wait
     1.17.0 - Code cleanup: removed unused functions, added helpers, reduced ~265 lines
     1.18.0 - Intune Event Log support, fail-fast network validation, auto config clear on fresh install
+    1.18.1 - Fixed MSI config conflict: clear default.json and client.conf in addition to config.json
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -50,7 +51,7 @@ param(
 )
 
 # Script Configuration
-$ScriptVersion = "1.18.0"
+$ScriptVersion = "1.18.1"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -2033,13 +2034,26 @@ if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
         $script:NetBirdExe = $NetBirdExe
 
         # Clear any MSI-created config on fresh install (prevents conflicts)
+        # MSI may create: config.json, default.json, and other config files
         Write-Log "Fresh installation detected - clearing any MSI-created config files"
-        if (Test-Path $ConfigFile) {
-            try {
-                Remove-Item $ConfigFile -Force -ErrorAction Stop
-                Write-Log "Removed pre-existing config: $ConfigFile"
-            } catch {
-                Write-Log "Could not remove config file: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+
+        # Stop service before clearing config (MSI starts service automatically)
+        Write-Log "Stopping NetBird service to clear config files..."
+        if (-not (Stop-NetBirdService)) {
+            Write-Log "Could not stop service, attempting to clear config anyway" "WARN" -Source "SYSTEM"
+        }
+
+        # Clear specific config files that cause registration conflicts
+        $configFiles = @("config.json", "default.json", "client.conf")
+        foreach ($configFile in $configFiles) {
+            $configPath = Join-Path $NetBirdDataPath $configFile
+            if (Test-Path $configPath) {
+                try {
+                    Remove-Item $configPath -Force -ErrorAction Stop
+                    Write-Log "Removed pre-existing config: $configPath"
+                } catch {
+                    Write-Log "Could not remove config file $configPath : $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+                }
             }
         }
 
@@ -2053,7 +2067,7 @@ if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
             }
         }
 
-        Write-Log "Ensuring NetBird service is running after installation..."
+        Write-Log "Restarting NetBird service after config clear..."
         if (Start-NetBirdService) {
             if (-not (Wait-ForServiceRunning)) {
                 Write-Log "Warning: Service did not fully start in time, but proceeding..." "WARN" -Source "SYSTEM"
