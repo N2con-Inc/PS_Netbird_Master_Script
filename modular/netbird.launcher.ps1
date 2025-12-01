@@ -56,9 +56,10 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.1.0 (Experimental)
+Version: 1.2.0 (Experimental)
 
 Changes:
+- v1.2.0: Auto-download manifest from GitHub when running remotely (fixes bootstrap.ps1 execution)
 - v1.1.0: Added -TargetVersion parameter for version compliance enforcement
 #>
 
@@ -105,7 +106,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.1.0"
+$script:LauncherVersion = "1.2.0"
 
 # Module cache directory
 $script:ModuleCacheDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -250,20 +251,33 @@ function Get-WizardInputs {
 function Get-ModuleManifest {
     Write-LauncherLog "Loading module manifest..."
     
+    # Try local path first (when running from repo)
     $manifestPath = Join-Path (Split-Path $PSScriptRoot) "modular/config/module-manifest.json"
     
-    if (-not (Test-Path $manifestPath)) {
-        Write-LauncherLog "Module manifest not found: $manifestPath" "ERROR"
-        throw "Module manifest not found. Ensure you're running from the correct directory."
+    if (Test-Path $manifestPath) {
+        Write-LauncherLog "Using local manifest: $manifestPath"
+        try {
+            $manifestContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            Write-LauncherLog "Manifest loaded: v$($manifestContent.version)"
+            return $manifestContent
+        } catch {
+            Write-LauncherLog "Failed to parse local manifest: $_" "ERROR"
+            throw "Invalid module manifest JSON"
+        }
     }
     
+    # If not found locally, download from GitHub (remote execution scenario)
+    Write-LauncherLog "Local manifest not found, downloading from GitHub..."
+    $manifestUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/config/module-manifest.json"
+    
     try {
-        $manifestContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
-        Write-LauncherLog "Manifest loaded: v$($manifestContent.version)"
+        $manifestContent = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -ErrorAction Stop).Content | ConvertFrom-Json
+        Write-LauncherLog "Remote manifest loaded: v$($manifestContent.version)"
         return $manifestContent
     } catch {
-        Write-LauncherLog "Failed to parse manifest: $_" "ERROR"
-        throw "Invalid module manifest JSON"
+        Write-LauncherLog "Failed to download manifest from GitHub: $_" "ERROR"
+        Write-LauncherLog "RECOMMENDATION: Use monolithic scripts (netbird.extended.ps1, netbird.oobe.ps1, netbird.zerotier-migration.ps1)" "ERROR"
+        throw "Cannot load module manifest. Use monolithic deployment scripts instead."
     }
 }
 
