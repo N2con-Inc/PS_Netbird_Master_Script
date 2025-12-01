@@ -61,7 +61,7 @@ Write-Host ""
 
 # Get all PowerShell files
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | Where-Object { $_.Name -ne "Sign-Scripts.ps1" }
+$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | Where-Object { $_.Name -ne "Sign-Scripts.ps1" -and $_.Name -ne "Sign-Scripts-NEW.ps1" }
 
 Write-Host "Found $($files.Count) PowerShell files to sign" -ForegroundColor Cyan
 Write-Host ""
@@ -77,14 +77,15 @@ foreach ($file in $files) {
         $result = Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $cert -TimestampServer $TimestampServer -ErrorAction Stop
         
         if ($result.Status -eq "Valid") {
-            Write-Host " ✓" -ForegroundColor Green
+            Write-Host " [OK]" -ForegroundColor Green
             $signed++
         } else {
-            Write-Host " ✗ ($($result.Status))" -ForegroundColor Red
+            Write-Host " [FAILED: $($result.Status)]" -ForegroundColor Red
             $failed++
         }
-    } catch {
-        Write-Host " ✗ Error: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    catch {
+        Write-Host " [ERROR: $($_.Exception.Message)]" -ForegroundColor Red
         $failed++
     }
 }
@@ -101,7 +102,7 @@ Write-Host ""
 # Verify signatures
 Write-Host "Verifying signatures..." -ForegroundColor Yellow
 $verified = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | 
-    Where-Object { $_.Name -ne "Sign-Scripts.ps1" } |
+    Where-Object { $_.Name -ne "Sign-Scripts.ps1" -and $_.Name -ne "Sign-Scripts-NEW.ps1" } |
     Get-AuthenticodeSignature
 
 $validCount = ($verified | Where-Object { $_.Status -eq "Valid" }).Count
@@ -119,7 +120,7 @@ if ($invalidCount -gt 0) {
 
 if ($signed -eq $files.Count -and $invalidCount -eq 0) {
     Write-Host ""
-    Write-Host "✓ All scripts signed successfully!" -ForegroundColor Green
+    Write-Host "[SUCCESS] All scripts signed successfully!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next steps:"
     Write-Host "1. Commit signed scripts: git add modular/ && git commit -m 'chore: Sign modular scripts'"
@@ -127,6 +128,6 @@ if ($signed -eq $files.Count -and $invalidCount -eq 0) {
     Write-Host "3. Scripts will now work on machines with AllSigned policy"
 } else {
     Write-Host ""
-    Write-Host "⚠ Some scripts failed to sign. Review errors above." -ForegroundColor Yellow
+    Write-Host "[WARNING] Some scripts failed to sign. Review errors above." -ForegroundColor Yellow
     exit 1
 }
