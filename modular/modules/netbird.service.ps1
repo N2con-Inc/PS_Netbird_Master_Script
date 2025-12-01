@@ -71,27 +71,6 @@ function Stop-NetBirdService {
     return $true
 }
 
-function Restart-NetBirdService {
-    <#
-    .SYNOPSIS
-        Restarts the NetBird service with validation
-    #>
-    Write-Log "Restarting NetBird service for recovery..."
-    try {
-        if (Stop-NetBirdService) {
-            Start-Sleep -Seconds 3
-            if (Start-NetBirdService) {
-                return (Wait-ForServiceRunning -MaxWaitSeconds 30)
-            }
-        }
-        return $false
-    }
-    catch {
-        Write-Log "Failed to restart NetBird service: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
-        return $false
-    }
-}
-
 function Wait-ForServiceRunning {
     <#
     .SYNOPSIS
@@ -116,6 +95,27 @@ function Wait-ForServiceRunning {
     
     Write-Log "NetBird service did not start within $MaxWaitSeconds seconds" "ERROR" -Source "SYSTEM"
     return $false
+}
+
+function Restart-NetBirdService {
+    <#
+    .SYNOPSIS
+        Restarts the NetBird service with validation
+    #>
+    Write-Log "Restarting NetBird service for recovery..."
+    try {
+        if (Stop-NetBirdService) {
+            Start-Sleep -Seconds 3
+            if (Start-NetBirdService) {
+                return (Wait-ForServiceRunning -MaxWaitSeconds 30)
+            }
+        }
+        return $false
+    }
+    catch {
+        Write-Log "Failed to restart NetBird service: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+        return $false
+    }
 }
 
 function Wait-ForDaemonReady {

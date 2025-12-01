@@ -386,64 +386,6 @@ function Import-NetBirdModule {
 }
 
 #endregion
-
-#region Main Execution
-
-Write-LauncherLog "========================================" 
-Write-LauncherLog "NetBird Modular Launcher v$script:LauncherVersion"
-Write-LauncherLog "========================================"
-
-# Check if interactive mode needed
-if (-not $Mode -or $Interactive) {
-    $menuSuccess = Show-InteractiveMenu
-    if (-not $menuSuccess) {
-        exit 1
-    }
-}
-
-# Load manifest
-try {
-    $manifest = Get-ModuleManifest
-} catch {
-    Write-LauncherLog "Failed to load manifest: $_" "ERROR"
-    exit 1
-}
-
-# Get required modules for workflow
-try {
-    $requiredModules = Get-RequiredModules -Manifest $manifest -WorkflowMode $Mode
-} catch {
-    Write-LauncherLog "Failed to determine required modules: $_" "ERROR"
-    exit 1
-}
-
-# Import all required modules
-Write-LauncherLog "Loading modules..."
-foreach ($moduleName in $requiredModules) {
-    try {
-        Import-NetBirdModule -ModuleName $moduleName -Manifest $manifest
-    } catch {
-        Write-LauncherLog "Failed to import module $moduleName`: $_" "ERROR"
-        exit 1
-    }
-}
-
-Write-LauncherLog "All modules loaded successfully"
-Write-LauncherLog "========================================" 
-Write-LauncherLog "Beginning deployment workflow: $Mode"
-Write-LauncherLog "========================================"
-
-# Execute workflow
-try {
-    $exitCode = Invoke-NetBirdDeployment -Mode $Mode
-    exit $exitCode
-} catch {
-    Write-LauncherLog "Deployment failed: $_" "ERROR"
-    exit 1
-}
-
-#endregion
-
 #region Deployment Workflows
 
 function Invoke-NetBirdDeployment {
@@ -783,7 +725,62 @@ function Invoke-DiagnosticsWorkflow {
 }
 
 #endregion
+#region Main Execution
 
+Write-LauncherLog "========================================" 
+Write-LauncherLog "NetBird Modular Launcher v$script:LauncherVersion"
+Write-LauncherLog "========================================"
+
+# Check if interactive mode needed
+if (-not $Mode -or $Interactive) {
+    $menuSuccess = Show-InteractiveMenu
+    if (-not $menuSuccess) {
+        exit 1
+    }
+}
+
+# Load manifest
+try {
+    $manifest = Get-ModuleManifest
+} catch {
+    Write-LauncherLog "Failed to load manifest: $_" "ERROR"
+    exit 1
+}
+
+# Get required modules for workflow
+try {
+    $requiredModules = Get-RequiredModules -Manifest $manifest -WorkflowMode $Mode
+} catch {
+    Write-LauncherLog "Failed to determine required modules: $_" "ERROR"
+    exit 1
+}
+
+# Import all required modules
+Write-LauncherLog "Loading modules..."
+foreach ($moduleName in $requiredModules) {
+    try {
+        Import-NetBirdModule -ModuleName $moduleName -Manifest $manifest
+    } catch {
+        Write-LauncherLog "Failed to import module $moduleName`: $_" "ERROR"
+        exit 1
+    }
+}
+
+Write-LauncherLog "All modules loaded successfully"
+Write-LauncherLog "========================================" 
+Write-LauncherLog "Beginning deployment workflow: $Mode"
+Write-LauncherLog "========================================"
+
+# Execute workflow
+try {
+    $exitCode = Invoke-NetBirdDeployment -Mode $Mode
+    exit $exitCode
+} catch {
+    Write-LauncherLog "Deployment failed: $_" "ERROR"
+    exit 1
+}
+
+#endregion
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
