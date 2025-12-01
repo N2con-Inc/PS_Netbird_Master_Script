@@ -56,9 +56,10 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.0 (Experimental)
+Version: 1.2.1 (Experimental)
 
 Changes:
+- v1.2.1: Fix module function scope - functions now properly available in workflows
 - v1.2.0: Auto-download manifest from GitHub when running remotely (fixes bootstrap.ps1 execution)
 - v1.1.0: Added -TargetVersion parameter for version compliance enforcement
 #>
@@ -106,7 +107,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.0"
+$script:LauncherVersion = "1.2.1"
 
 # Module cache directory
 $script:ModuleCacheDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -324,7 +325,7 @@ function Import-NetBirdModule {
     if ((Test-Path $cachedModulePath) -and -not $UseLocalModules) {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
         try {
-            . $cachedModulePath
+            $ExecutionContext.InvokeCommand.InvokeScript($false, ([scriptblock]::Create((Get-Content $cachedModulePath -Raw))), $null, $null)
             return
         } catch {
             Write-LauncherLog "Cached module failed to load, re-downloading..." "WARN"
@@ -342,7 +343,7 @@ function Import-NetBirdModule {
             throw "Module file not found: $moduleFile"
         }
         
-        . $localModulePath
+        $ExecutionContext.InvokeCommand.InvokeScript($false, ([scriptblock]::Create((Get-Content $localModulePath -Raw))), $null, $null)
     } else {
         # Download with retry logic
         $moduleUrl = "$ModuleSource/$moduleFile"
@@ -361,8 +362,8 @@ function Import-NetBirdModule {
                 # Download
                 Invoke-WebRequest -Uri $moduleUrl -OutFile $cachedModulePath -UseBasicParsing -ErrorAction Stop
                 
-                # Load
-                . $cachedModulePath
+                # Load into script scope
+                $ExecutionContext.InvokeCommand.InvokeScript($false, ([scriptblock]::Create((Get-Content $cachedModulePath -Raw))), $null, $null)
                 
                 Write-LauncherLog "Module downloaded and loaded: $ModuleName v$moduleVersion"
                 $downloadSuccess = $true
