@@ -16,6 +16,9 @@ Modular architecture for NetBird VPN client deployment on Windows. This system b
 ```
 /modular/
 ├── netbird.launcher.ps1          (720 lines) - Main orchestrator
+├── bootstrap.ps1                 (102 lines) - Remote bootstrap wrapper
+├── Validate-Scripts.ps1          (93 lines)  - Syntax validation utility
+├── Sign-Scripts.ps1              (133 lines) - Code signing utility
 ├── modules/
 │   ├── netbird.core.ps1          (409 lines) - Logging, paths, MSI operations
 │   ├── netbird.version.ps1       (225 lines) - Version detection & comparison
@@ -730,6 +733,53 @@ Get-Content "$env:TEMP\NetBird-Modular-ZeroTier-*.log"
 **Resolution**: Fix NetBird registration issue before retrying migration
 
 ## Testing Guide
+
+### Syntax Validation
+
+**Before testing functionality**, validate all scripts for syntax errors:
+
+```powershell
+cd C:\path\to\PS_Netbird_Master_Script\modular
+.\Validate-Scripts.ps1
+```
+
+**Output**:
+```
+========================================
+PowerShell Script Syntax Validator
+========================================
+
+Found 10 PowerShell files to validate
+
+Validating: .\bootstrap.ps1 [OK]
+Validating: .\netbird.launcher.ps1 [OK]
+Validating: .\modules\netbird.core.ps1 [OK]
+...
+
+======================================
+Validation Summary:
+  Total files: 10
+  Passed: 10
+  Failed: 0
+======================================
+
+[SUCCESS] All scripts validated successfully!
+```
+
+**What it checks**:
+- PowerShell 5.1 syntax compatibility
+- Function definition order
+- Try-catch block structure
+- Brace matching and statement blocks
+- Parameter definitions
+
+**When to use**:
+- After pulling latest changes from GitHub
+- Before deploying to production systems
+- During development to catch syntax errors early
+- When troubleshooting unexpected parser errors
+
+---
 
 ### Phase 1: Launcher Testing
 
