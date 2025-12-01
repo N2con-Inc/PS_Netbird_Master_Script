@@ -68,150 +68,269 @@ The launcher supports 4 deployment workflows:
 
 ### Prerequisites
 
-- Windows PowerShell 5.1+ or PowerShell 7+
-- Administrator privileges
-- Internet connectivity (or `-UseLocalModules` for offline)
+- **Windows PowerShell 5.1+** or PowerShell 7+ (already installed on Windows)
+- **Administrator privileges** (Run PowerShell as Administrator)
+- **Internet connectivity** (downloads scripts and modules from GitHub)
+- **Execution policy bypass** (see examples below)
 
-### Remote Execution (One-Liners)
+### ⚠️ Important: Execution Policy
 
-Deploy NetBird directly from GitHub without downloading files first.
+Since scripts are downloaded from GitHub and are unsigned, you must bypass execution policy:
 
-**Method 1: Bootstrap Script** (Recommended)
 ```powershell
-# Fresh install with setup key
-$env:NB_SETUPKEY="your-setup-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+# Start PowerShell as Administrator, then:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
-# Version compliance enforcement
-$env:NB_VERSION="0.66.4"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-
-# OOBE deployment
-$env:NB_MODE="OOBE"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-
-# ZeroTier migration
-$env:NB_MODE="ZeroTier"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-
-# Interactive wizard
-$env:NB_INTERACTIVE="1"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+# If blocked by Group Policy (AllSigned), see "Code Signing" section below
 ```
 
-**Method 2: Direct Launcher Download** (More Control)
+---
+
+## Common Deployment Scenarios
+
+### 1. Interactive Wizard (Guided Setup)
+
+**Best for**: Manual installations where you want to be prompted for options.
+
 ```powershell
-# Download and execute with parameters
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile "$env:TEMP\nb.ps1"; & "$env:TEMP\nb.ps1" -Mode Standard -SetupKey "your-key" -TargetVersion "0.66.4"
-
-# Upgrade existing installation (no key needed)
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile "$env:TEMP\nb.ps1"; & "$env:TEMP\nb.ps1" -Mode Standard
-
-# Diagnostics only
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile "$env:TEMP\nb.ps1"; & "$env:TEMP\nb.ps1" -Mode Diagnostics
+# Start admin PowerShell, set bypass, then:
+$env:NB_INTERACTIVE="1"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**Bootstrap Environment Variables**:
-- `NB_MODE`: Deployment mode (`Standard`, `OOBE`, `ZeroTier`, `Diagnostics`)
-- `NB_SETUPKEY`: NetBird setup key
-- `NB_MGMTURL`: Management server URL (default: `https://api.netbird.io`)
-- `NB_VERSION`: Target version for compliance (e.g., `0.66.4`)
-- `NB_FULLCLEAR`: Full configuration reset (`1` or `0`)
-- `NB_FORCEREINSTALL`: Force reinstall (`1` or `0`)
-- `NB_INTERACTIVE`: Interactive mode (`1` or `0`)
+You'll see a menu:
+```
+[1] Standard Installation/Upgrade
+[2] OOBE Deployment
+[3] ZeroTier Migration
+[4] Diagnostics Only
+[5] View Module Status
+[6] Exit
+```
 
-### Basic Invocation
+---
 
-**Interactive Wizard** (recommended for manual deployments):
+### 2. Fresh Install with Setup Key
+
+**Best for**: New machines that need NetBird installed and registered.
+
 ```powershell
-PowerShell.exe -ExecutionPolicy Bypass -File .\modular\netbird.launcher.ps1 -Interactive
+# Replace "your-setup-key" with actual key from NetBird management portal
+$env:NB_SETUPKEY="your-setup-key"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**Standard Fresh Install**:
+**With custom management server**:
 ```powershell
-.\modular\netbird.launcher.ps1 -Mode Standard -SetupKey "your-setup-key"
+$env:NB_SETUPKEY="your-key"
+$env:NB_MGMTURL="https://api.yourdomain.com"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**Standard Upgrade** (existing installation):
+---
+
+### 3. ZeroTier to NetBird Migration
+
+**Best for**: Migrating from ZeroTier with automatic rollback if NetBird fails.
+
 ```powershell
-.\modular\netbird.launcher.ps1 -Mode Standard
+$env:NB_MODE="ZeroTier"
+$env:NB_SETUPKEY="your-setup-key"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**Version Compliance Enforcement** (upgrade to specific version):
+**To remove ZeroTier after successful migration**:
 ```powershell
-# Enforce NetBird version 0.66.4 (useful for version compliance policies)
-.\modular\netbird.launcher.ps1 -Mode Standard -TargetVersion "0.66.4" -SetupKey "your-key"
-
-# Check if installed version matches compliance target
-# If installed = 0.58.2 and target = 0.66.4, will upgrade
-# If installed = 0.66.4 and target = 0.66.4, will skip (already compliant)
+$env:NB_MODE="ZeroTier"
+$env:NB_SETUPKEY="your-key"
+$env:NB_FULLCLEAR="1"  # This triggers ZeroTier uninstall
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**OOBE Deployment** (USB installation):
+---
+
+### 4. Fix Broken Installation & Re-register
+
+**Best for**: NetBird is installed but disconnected or misconfigured.
+
 ```powershell
-PowerShell.exe -ExecutionPolicy Bypass -File D:\modular\netbird.launcher.ps1 `
-    -Mode OOBE `
-    -SetupKey "your-setup-key" `
-    -MsiPath "D:\netbird.msi" `
-    -UseLocalModules
+$env:NB_SETUPKEY="your-setup-key"
+$env:NB_FULLCLEAR="1"  # Force full configuration reset
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**ZeroTier Migration**:
+This will:
+- Clear all NetBird configuration
+- Upgrade to latest version if available
+- Re-register with the setup key
+- Verify connection
+
+---
+
+### 5. Upgrade to Latest Version (No Re-registration)
+
+**Best for**: Machines already running NetBird that just need version updates.
+
 ```powershell
-.\modular\netbird.launcher.ps1 -Mode ZeroTier -SetupKey "your-setup-key"
+# No setup key needed - preserves existing registration
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-**Diagnostics Only**:
+This will:
+- Check installed version vs latest GitHub release
+- Upgrade if newer version available
+- Preserve existing registration
+- Skip if already up-to-date
+
+---
+
+### 6. Upgrade to Specific Version (Version Compliance)
+
+**Best for**: Enforcing specific NetBird versions across your fleet.
+
 ```powershell
-.\modular\netbird.launcher.ps1 -Mode Diagnostics
+# Pin to version 0.66.4
+$env:NB_VERSION="0.66.4"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-### Parameter Reference
-
-#### Launcher Parameters
-
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `-Mode` | String | Workflow selection: `Standard`, `OOBE`, `ZeroTier`, `Diagnostics` | None (triggers interactive) |
-| `-Interactive` | Switch | Force interactive wizard mode | False |
-| `-SetupKey` | String | NetBird setup key (UUID, Base64, or nb_setup_ format) | None |
-| `-ManagementUrl` | String | Custom management server URL | None |
-| `-TargetVersion` | String | Target NetBird version for compliance (e.g., "0.66.4") | None (uses latest) |
-| `-FullClear` | Switch | Force full configuration reset | False |
-| `-ForceReinstall` | Switch | Force reinstall even if up-to-date | False |
-| `-SkipServiceStart` | Switch | Skip service start after installation | False |
-| `-MsiPath` | String | Path to local MSI file (OOBE mode) | None |
-| `-UseLocalModules` | Switch | Load modules from disk instead of downloading | False |
-
-#### Setup Key Formats
-
-All three formats are supported:
+**With re-registration** (if needed):
 ```powershell
-# UUID format
--SetupKey "77530893-E8C4-44FC-AABF-7A0511D9558E"
-
-# Base64 format
--SetupKey "YWJjZGVmZ2hpamts="
-
-# NetBird prefixed format
--SetupKey "nb_setup_abc123def456"
+$env:NB_VERSION="0.66.4"
+$env:NB_SETUPKEY="your-key"  # Only re-registers if disconnected
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
-### Interactive Wizard
+---
 
-When launched with `-Interactive` or without parameters, presents a menu:
+### 7. Intune Autopilot OOBE Deployment
 
+**Best for**: Deploying NetBird during Windows Autopilot device provisioning.
+
+#### A. Create Intune Win32 App
+
+**1. Create Install.ps1**:
+```powershell
+<#
+.SYNOPSIS
+Intune Win32 App - NetBird OOBE Deployment
+#>
+
+[CmdletBinding()]
+param()
+
+# Set environment variables from Intune configuration
+[System.Environment]::SetEnvironmentVariable("NB_MODE", "OOBE", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_SETUPKEY", $env:NETBIRD_SETUPKEY, "Process")
+[System.Environment]::SetEnvironmentVariable("NB_MGMTURL", $env:NETBIRD_MGMTURL, "Process")
+[System.Environment]::SetEnvironmentVariable("NB_VERSION", $env:NETBIRD_VERSION, "Process")
+
+# Logging
+$LogPath = "C:\Windows\Temp\NetBird-Intune-Install.log"
+Start-Transcript -Path $LogPath -Append
+
+try {
+    Write-Host "NetBird Intune OOBE Deployment Starting..."
+    
+    # Download and execute bootstrap
+    $BootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1"
+    Write-Host "Downloading bootstrap from: $BootstrapUrl"
+    
+    $BootstrapScript = Invoke-RestMethod -Uri $BootstrapUrl -UseBasicParsing -ErrorAction Stop
+    Write-Host "Executing bootstrap..."
+    
+    Invoke-Expression $BootstrapScript
+    
+    $ExitCode = $LASTEXITCODE
+    Write-Host "Bootstrap exit code: $ExitCode"
+    
+    Stop-Transcript
+    exit $ExitCode
+}
+catch {
+    Write-Host "Fatal error: $($_.Exception.Message)" -ForegroundColor Red
+    Stop-Transcript
+    exit 1
+}
 ```
-═══════════════════════════════════════════════════════
-    NetBird Modular Deployment System
-═══════════════════════════════════════════════════════
 
-Select deployment workflow:
+**2. Create Detection.ps1**:
+```powershell
+$RegistryPath = "HKLM:\SOFTWARE\WireGuard"
+$RegistryValue = "NetBird"
 
-  [1] Standard Installation/Upgrade
-  [2] OOBE Deployment
-  [3] ZeroTier Migration
-  [4] Diagnostics Only
-  [5] View Module Status
-  [6] Exit
-
-Enter selection (1-6):
+if (Test-Path $RegistryPath) {
+    $Value = Get-ItemProperty -Path $RegistryPath -Name $RegistryValue -ErrorAction SilentlyContinue
+    if ($Value) {
+        Write-Host "NetBird detected"
+        exit 0
+    }
+}
+exit 1
 ```
+
+**3. Package with IntuneWinAppUtil**:
+```powershell
+# Download tool from: https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool
+.\IntuneWinAppUtil.exe -c "C:\Path\To\Files" -s "Install.ps1" -o "C:\Output" -q
+```
+
+#### B. Configure in Intune
+
+**App Information**:
+- Name: `NetBird VPN - OOBE Deployment`
+- Publisher: `Your Organization`
+- Category: `Networking`
+
+**Program**:
+- Install command: `PowerShell.exe -ExecutionPolicy Bypass -File .\Install.ps1`
+- Uninstall command: `msiexec /x {NetBird-GUID} /qn`
+- Install behavior: `System`
+
+**Requirements**:
+- OS: Windows 10 1809+ (64-bit)
+- Disk space: 100 MB
+
+**Detection**: Use custom script (Detection.ps1)
+
+**Assignments**: Required for `All Autopilot Devices` group
+
+#### C. Set Environment Variables (Proactive Remediation)
+
+**Detection Script**:
+```powershell
+if ($env:NETBIRD_SETUPKEY) { exit 0 } else { exit 1 }
+```
+
+**Remediation Script**:
+```powershell
+[System.Environment]::SetEnvironmentVariable("NETBIRD_SETUPKEY", "your-setup-key-here", "Machine")
+[System.Environment]::SetEnvironmentVariable("NETBIRD_MGMTURL", "https://api.netbird.io", "Machine")
+[System.Environment]::SetEnvironmentVariable("NETBIRD_VERSION", "0.66.4", "Machine")  # Optional
+exit 0
+```
+
+**Full Intune guide**: See `INTUNE_GUIDE.md` for advanced configurations.
+
+---
+
+## Environment Variables Reference
+
+All bootstrap commands use environment variables for configuration:
+
+| Variable | Description | Example |
+|----------|-------------|---------|  
+| `NB_MODE` | Deployment mode | `Standard`, `OOBE`, `ZeroTier`, `Diagnostics` |
+| `NB_SETUPKEY` | NetBird setup key | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
+| `NB_MGMTURL` | Management server URL | `https://api.netbird.io` |
+| `NB_VERSION` | Target version (compliance) | `0.66.4` |
+| `NB_FULLCLEAR` | Full config reset | `1` (enabled) or `0` (disabled) |
+| `NB_FORCEREINSTALL` | Force reinstall | `1` (enabled) or `0` (disabled) |
+| `NB_INTERACTIVE` | Interactive wizard | `1` (enabled) or `0` (disabled) |
+
+**Setup Key Formats**: UUID, Base64, or `nb_setup_` prefix are all supported.
+
+---
 
 ### Version Compliance
 
