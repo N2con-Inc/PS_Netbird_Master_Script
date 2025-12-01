@@ -28,7 +28,7 @@
 .EXAMPLE
     .\netbird.oobe.ps1 -SetupKey "your-setup-key-here"
 .NOTES
-    Script Version: 1.18.6-OOBE
+    Script Version: 1.18.7-OOBE
     Last Updated: 2025-12-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic)
@@ -58,6 +58,7 @@
     1.18.4-OOBE - Mirrors extended script v1.18.4 (no OOBE-specific changes needed)
     1.18.5-OOBE - Mirrors extended script v1.18.5 (no OOBE-specific changes needed)
     1.18.6-OOBE - GitHub API retry logic, parameter validation examples
+    1.18.7-OOBE - Network retry with exponential backoff (120s max wait)
 
     OOBE REQUIREMENTS:
     - Must be run as Administrator
@@ -75,7 +76,7 @@ param(
 )
 
 # Script Configuration - OOBE-safe paths
-$ScriptVersion = "1.18.6-OOBE"
+$ScriptVersion = "1.18.7-OOBE"
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
 $ServiceName = "NetBird"
@@ -430,6 +431,52 @@ function Wait-ForDaemonReady {
     return $false
 }
 
+function Wait-ForNetworkReady {
+    <#
+    .SYNOPSIS
+        Waits for network initialization with intelligent retry
+    .DESCRIPTION
+        OOBE-optimized network waiting with exponential backoff.
+        Uses only OOBE-safe commands (Test-Connection, basic checks).
+        Max wait: 120 seconds with progressive backoff intervals.
+    #>
+    param([int]$MaxWaitSeconds = 120)
+    
+    Write-Log "Waiting for network initialization (OOBE mode)..."
+    Write-Log "OOBE network stack may take 60-120s to fully initialize during Windows setup"
+    
+    $startTime = Get-Date
+    $timeout = $startTime.AddSeconds($MaxWaitSeconds)
+    $attempt = 1
+    
+    while ((Get-Date) -lt $timeout) {
+        Write-Log "Network readiness check attempt $attempt..."
+        
+        # Check if network is ready using Test-OOBENetworkReady
+        if (Test-OOBENetworkReady) {
+            $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
+            Write-Log "Network ready after ${elapsed}s (attempt $attempt)"
+            return $true
+        }
+        
+        # Exponential backoff: 5s, 10s, 15s, 15s, 15s...
+        $waitTime = [math]::Min(15, $attempt * 5)
+        $remainingTime = [int](($timeout - (Get-Date)).TotalSeconds)
+        
+        if ($remainingTime -gt 0) {
+            Write-Log "Network not ready, waiting ${waitTime}s before retry (attempt $attempt, ${remainingTime}s remaining)..."
+            Start-Sleep -Seconds $waitTime
+            $attempt++
+        }
+        else {
+            break
+        }
+    }
+    
+    Write-Log "Network did not become ready within ${MaxWaitSeconds}s" "ERROR" -Source "SYSTEM"
+    return $false
+}
+
 function Test-OOBENetworkReady {
     <#
     .SYNOPSIS
@@ -693,20 +740,15 @@ if (-not (Wait-ForServiceRunning -MaxWaitSeconds 30)) {
     Write-Log "Service did not start properly, but continuing..." "WARN"
 }
 
-# Network readiness check - FAIL FAST if network not available
+# Network readiness check with intelligent retry (Enhancement #7)
 Write-Log "Checking network readiness for registration..."
-if (-not (Test-OOBENetworkReady)) {
-    Write-Log "Network prerequisites not met - waiting 30 seconds for OOBE network initialization..." "WARN" -Source "SYSTEM"
-    Start-Sleep -Seconds 30
-
-    if (-not (Test-OOBENetworkReady)) {
-        Write-Log "Network prerequisites still not met after retry" "ERROR" -Source "SYSTEM"
-        Write-Log "Cannot proceed with registration - network connectivity required" "ERROR" -Source "SYSTEM"
-        Write-Log "Installation completed but registration skipped due to network failure" "ERROR"
-        Write-Log "Manual registration command: netbird up --setup-key 'your-key'" "ERROR" -Source "SCRIPT"
-        Write-Log "Log file: $script:LogFile"
-        exit 1
-    }
+if (-not (Wait-ForNetworkReady -MaxWaitSeconds 120)) {
+    Write-Log "Network prerequisites still not met after 120s retry" "ERROR" -Source "SYSTEM"
+    Write-Log "Cannot proceed with registration - network connectivity required" "ERROR" -Source "SYSTEM"
+    Write-Log "Installation completed but registration skipped due to network failure" "ERROR"
+    Write-Log "Manual registration command: netbird up --setup-key 'your-key'" "ERROR" -Source "SCRIPT"
+    Write-Log "Log file: $script:LogFile"
+    exit 1
 }
 
 # Wait for daemon readiness
