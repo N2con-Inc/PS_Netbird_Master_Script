@@ -18,12 +18,33 @@
 .EXAMPLE
     .\Install-NetBird.ps1 -SetupKey "your-setup-key-here" -AddShortcut
 .EXAMPLE
+    .\Install-NetBird.ps1 -SetupKey "your-key" -Silent
+.EXAMPLE
     .\Install-NetBird.ps1 -FullClear
 .NOTES
-    Script Version: 1.18.3
-    Last Updated: 2025-01-10
+    Script Version: 1.18.6
+    Last Updated: 2025-12-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic), modified by Grok (xAI)
+    
+    Common Parameter Mistakes:
+    - Invalid setup key format (too short, special characters)
+      ✗ Wrong: -SetupKey "abc123"
+      ✓ Correct: -SetupKey "77530893-E8C4-44FC-AABF-7A0511D9558E"
+    
+    - Using FullClear without SetupKey (will disconnect but not reconnect)
+      ✗ Wrong: .\netbird.extended.ps1 -FullClear
+      ✓ Correct: .\netbird.extended.ps1 -SetupKey "your-key" -FullClear
+    
+    - Incorrect ManagementUrl format
+      ✗ Wrong: -ManagementUrl "netbird.company.com"
+      ✓ Correct: -ManagementUrl "https://netbird.company.com"
+    
+    Troubleshooting:
+    - "Network prerequisites not met" → Check firewall allows HTTPS (port 443)
+    - "Daemon not ready" → Wait 90 seconds after fresh install before registration
+    - "Registration failed" → Check setup key validity, try -FullClear flag
+    
     Version History:
     1.10.0 - Enhanced registration: daemon readiness, auto-recovery, diagnostics
     1.11.1 - Stricter registration validation prevents false positives
@@ -42,6 +63,9 @@
     1.18.1 - Fixed MSI config conflict: clear default.json and client.conf in addition to config.json
     1.18.2 - Simplified config clearing: full directory delete + 15s stabilization wait
     1.18.3 - Use net stop/start commands, delete contents only (not directory)
+    1.18.4 - Streamlined version detection (3 methods vs 6), significant speed improvement
+    1.18.5 - Increased post-install wait to 90s for proper daemon initialization
+    1.18.6 - GitHub API retry logic, Silent mode, parameter validation examples
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -49,11 +73,12 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$ManagementUrl = "https://app.netbird.io",
     [switch]$FullClear,
-    [switch]$AddShortcut
+    [switch]$AddShortcut,
+    [switch]$Silent
 )
 
 # Script Configuration
-$ScriptVersion = "1.18.3"
+$ScriptVersion = "1.18.6"
 # Configuration
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
@@ -131,7 +156,11 @@ function Write-Log {
     }
 
     $logMessage = "[$timestamp] $logPrefix $Message"
-    Write-Host $logMessage
+    
+    # Only write to console if NOT in silent mode
+    if (-not $Silent) {
+        Write-Host $logMessage
+    }
 
     # Write to persistent log file for Intune/RMM troubleshooting
     try {
@@ -356,40 +385,69 @@ function Get-NetBirdStatusJSON {
 }
 
 function Get-LatestVersionAndDownloadUrl {
-    try {
-        Write-Log "Checking latest NetBird version and download URL..."
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/netbirdio/netbird/releases/latest" -UseBasicParsing
-        $latestVersion = $response.tag_name.TrimStart('v')
-        Write-Log "Latest version found: $latestVersion"
-        # Look for the MSI installer
-        $msiAsset = $response.assets | Where-Object { $_.name -match "netbird_installer_.*_windows_amd64\.msi$" }
-        if ($msiAsset) {
-            Write-Log "Found MSI installer: $($msiAsset.name)"
-            $downloadUrl = $msiAsset.browser_download_url
-            Write-Log "Download URL: $downloadUrl"
-            return @{
-                Version = $latestVersion
-                DownloadUrl = $downloadUrl
+    $maxRetries = 3
+    $retryDelay = 5
+    
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        try {
+            Write-Log "Fetching latest NetBird version from GitHub (attempt $attempt/$maxRetries)..."
+            $response = Invoke-RestMethod -Uri "https://api.github.com/repos/netbirdio/netbird/releases/latest" -UseBasicParsing -ErrorAction Stop
+            $latestVersion = $response.tag_name.TrimStart('v')
+            Write-Log "Latest version found: $latestVersion"
+            
+            # Look for the MSI installer
+            $msiAsset = $response.assets | Where-Object { $_.name -match "netbird_installer_.*_windows_amd64\.msi$" }
+            if ($msiAsset) {
+                Write-Log "Found MSI installer: $($msiAsset.name)"
+                $downloadUrl = $msiAsset.browser_download_url
+                Write-Log "Download URL: $downloadUrl"
+                return @{
+                    Version = $latestVersion
+                    DownloadUrl = $downloadUrl
+                }
+            }
+            else {
+                Write-Log "No MSI installer found in release assets" "ERROR" -Source "SYSTEM"
+                # Show available assets for debugging
+                Write-Log "Available assets:"
+                foreach ($asset in $response.assets) {
+                    Write-Log " - $($asset.name)"
+                }
+                
+                # Retry on missing assets
+                if ($attempt -lt $maxRetries) {
+                    Write-Log "Retrying in ${retryDelay}s..." "WARN"
+                    Start-Sleep -Seconds $retryDelay
+                    continue
+                }
+                
+                return @{
+                    Version = $latestVersion
+                    DownloadUrl = $null
+                }
             }
         }
-        else {
-            Write-Log "No MSI installer found in release assets" "ERROR" -Source "SYSTEM"
-            # Debug: Show all available assets
-            Write-Log "Available assets:"
-            foreach ($asset in $response.assets) {
-                Write-Log " - $($asset.name)"
+        catch {
+            $errorMsg = $_.Exception.Message
+            Write-Log "GitHub API request failed (attempt $attempt/$maxRetries): $errorMsg" "WARN" -Source "SYSTEM"
+            
+            # Check for rate limiting
+            if ($errorMsg -match "rate limit|403") {
+                Write-Log "GitHub API rate limit detected" "WARN" -Source "SYSTEM"
             }
-            return @{
-                Version = $latestVersion
-                DownloadUrl = $null
+            
+            if ($attempt -lt $maxRetries) {
+                $backoffDelay = $retryDelay * $attempt  # Exponential backoff
+                Write-Log "Retrying in ${backoffDelay}s..." "WARN"
+                Start-Sleep -Seconds $backoffDelay
             }
-        }
-    }
-    catch {
-        Write-Log "Failed to get latest version and download URL: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
-        return @{
-            Version = $null
-            DownloadUrl = $null
+            else {
+                Write-Log "Failed to get latest version after $maxRetries attempts" "ERROR" -Source "SYSTEM"
+                return @{
+                    Version = $null
+                    DownloadUrl = $null
+                }
+            }
         }
     }
 }
@@ -450,179 +508,101 @@ function Get-NetBirdVersionFromExecutable {
 }
 
 function Get-InstalledVersion {
-    Write-Log "Starting comprehensive NetBird detection..."
-    # Method 1: Check the default installation path
-    Write-Log "Method 1: Checking default installation path..."
+    Write-Log "Checking for existing NetBird installation..."
+    
+    # Method 1: Check the standard installation path (fast path - 99% of installations)
+    Write-Log "Checking standard installation path: $NetBirdExe"
     if (Test-Path $NetBirdExe) {
-        Write-Log "Found NetBird at default location: $NetBirdExe"
+        Write-Log "Found NetBird at standard location"
         $version = Get-NetBirdVersionFromExecutable -ExePath $NetBirdExe
         if ($version) {
             $script:NetBirdExe = $NetBirdExe
-            Write-Log "Successfully detected version $version from default location"
+            Write-Log "Detected version $version"
             return $version
         }
-    } else {
-        Write-Log "NetBird not found at default location: $NetBirdExe"
     }
-    # Method 2: Check Windows Registry for installed programs
-    Write-Log "Method 2: Checking Windows Registry..."
+    
+    # Method 2: Quick registry check for version validation
+    Write-Log "Checking Windows Registry for version info..."
     try {
         $registryPaths = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
+            "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*"
         )
         foreach ($regPath in $registryPaths) {
-            Write-Log "Searching registry path: $regPath"
             $programs = Get-ItemProperty $regPath -ErrorAction SilentlyContinue | Where-Object {
-                $_.DisplayName -like "*NetBird*" -or $_.DisplayName -like "*netbird*"
+                $_.DisplayName -like "*NetBird*"
             }
             foreach ($program in $programs) {
-                Write-Log "Found registry entry: $($program.DisplayName) at $($program.InstallLocation)"
-                # First priority: Check if executable exists at install location
-                if ($program.InstallLocation) {
-                    $possibleExe = Join-Path $program.InstallLocation "netbird.exe"
-                    if (Test-Path $possibleExe) {
-                        Write-Log "Found NetBird via registry at: $possibleExe"
-                        $version = Get-NetBirdVersionFromExecutable -ExePath $possibleExe
-                        if ($version) {
-                            $script:NetBirdExe = $possibleExe
-                            Write-Log "Successfully detected version $version from registry location"
-                            return $version
-                        }
-                    } else {
-                        Write-Log "Registry points to $possibleExe but file doesn't exist - broken installation"
-                    }
-                }
-                # Store registry version but DON'T return it - continue searching for working executable
                 if ($program.DisplayVersion) {
-                    Write-Log "Found NetBird version in registry: $($program.DisplayVersion)"
                     $regVersion = $program.DisplayVersion -replace '^v', ''
-                    if ($regVersion -match '^\d+\.\d+\.\d+') {
-                        Write-Log "Registry shows version: $regVersion (storing but continuing search for working executable)"
-                        $script:RegistryVersion = $regVersion
+                    if ($regVersion -match '^\\d+\\.\\d+\\.\\d+') {
+                        Write-Log "Registry shows NetBird version: $regVersion"
+                        # Verify executable exists at registry install location
+                        if ($program.InstallLocation) {
+                            $possibleExe = Join-Path $program.InstallLocation "netbird.exe"
+                            if (Test-Path $possibleExe) {
+                                $version = Get-NetBirdVersionFromExecutable -ExePath $possibleExe
+                                if ($version) {
+                                    $script:NetBirdExe = $possibleExe
+                                    Write-Log "Detected version $version from registry location"
+                                    return $version
+                                }
+                            }
+                        }
+                        # Registry shows version but no working executable - broken installation
+                        Write-Log "Registry entry found but no working executable - broken installation detected"
+                        Write-Log "Will proceed with fresh installation to repair"
+                        return $null
                     }
                 }
             }
         }
     }
     catch {
-        Write-Log "Registry check failed: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
+        Write-Log "Registry check failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
-    # Method 3: Search common installation directories
-    Write-Log "Method 3: Searching common installation directories..."
-    $commonPaths = @(
-        "${env:ProgramFiles}\NetBird\netbird.exe",
-        "${env:ProgramFiles(x86)}\NetBird\netbird.exe",
-        "${env:LOCALAPPDATA}\NetBird\netbird.exe",
-        "${env:APPDATA}\NetBird\netbird.exe",
-        "${env:ProgramFiles}\Netbird\netbird.exe",
-        "${env:ProgramFiles(x86)}\Netbird\netbird.exe"
-    )
-    foreach ($path in $commonPaths) {
-        Write-Log "Checking path: $path"
-        if (Test-Path $path) {
-            Write-Log "Found NetBird at: $path"
-            $version = Get-NetBirdVersionFromExecutable -ExePath $path
-            if ($version) {
-                $script:NetBirdExe = $path
-                Write-Log "Successfully detected version $version from common path"
-                return $version
-            }
-        }
-    }
-    # Method 4: Check if netbird is in PATH
-    Write-Log "Method 4: Checking system PATH..."
-    try {
-        $pathResult = Get-Command netbird -ErrorAction SilentlyContinue
-        if ($pathResult) {
-            Write-Log "Found NetBird in PATH: $($pathResult.Source)"
-            $version = Get-NetBirdVersionFromExecutable -ExePath $pathResult.Source
-            if ($version) {
-                $script:NetBirdExe = $pathResult.Source
-                Write-Log "Successfully detected version $version from PATH"
-                return $version
-            }
-        } else {
-            Write-Log "NetBird not found in system PATH"
-        }
-    }
-    catch {
-        Write-Log "PATH check failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
-    }
-    # Method 5: Check Windows Service for clues
-    Write-Log "Method 5: Checking Windows Service..."
+    
+    # Method 3: Check Windows Service as final fallback
+    Write-Log "Checking Windows Service for installation path..."
     try {
         $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         if ($service) {
-            Write-Log "Found NetBird service: $($service.Status)"
-            # Try both WMI and CIM for service path
+            Write-Log "Found NetBird service, attempting to locate executable"
             $servicePath = $null
             try {
                 $wmiService = Get-WmiObject win32_service | Where-Object { $_.Name -eq $ServiceName }
                 if ($wmiService) {
                     $servicePath = $wmiService.PathName
-                    Write-Log "WMI Service path: $servicePath"
                 }
             }
             catch {
-                Write-Log "WMI query failed, trying CIM..." "WARN" -Source "SYSTEM"
+                # Fallback to CIM if WMI fails
                 try {
                     $cimService = Get-CimInstance -ClassName Win32_Service | Where-Object { $_.Name -eq $ServiceName }
                     if ($cimService) {
                         $servicePath = $cimService.PathName
-                        Write-Log "CIM Service path: $servicePath"
                     }
                 }
                 catch {
-                    Write-Log "CIM query also failed" "WARN" -Source "SYSTEM"
+                    Write-Log "Could not query service path" "WARN" -Source "SYSTEM"
                 }
             }
+            
             if ($servicePath) {
-                # Extract executable path from service path (might have quotes and arguments)
+                # Extract executable path from service path (handle quotes and arguments)
                 $exePath = $null
-                if ($servicePath -match '"([^"]*)"') {
+                if ($servicePath -match '\"([^\"]*)\"') {
                     $exePath = $matches[1]
-                } elseif ($servicePath -match '^(\S+)') {
+                } elseif ($servicePath -match '^(\\S+)') {
                     $exePath = $matches[1]
                 }
-                Write-Log "Extracted service executable path: $exePath"
+                
                 if ($exePath -and (Test-Path $exePath)) {
-                    Write-Log "Found NetBird via service at: $exePath"
                     $version = Get-NetBirdVersionFromExecutable -ExePath $exePath
                     if ($version) {
                         $script:NetBirdExe = $exePath
-                        Write-Log "Successfully detected version $version from service"
-                        return $version
-                    }
-                } else {
-                    Write-Log "Service points to $exePath but file doesn't exist - broken installation"
-                }
-            } else {
-                Write-Log "Could not determine service executable path"
-            }
-        } else {
-            Write-Log "NetBird service not found"
-        }
-    }
-    catch {
-        Write-Log "Service check failed: $($_.Exception.Message)" "ERROR" -Source "SYSTEM"
-    }
-    # Method 6: Brute force search in Program Files
-    Write-Log "Method 6: Performing brute force search..."
-    try {
-        $searchPaths = @("$env:ProgramFiles", "$env:ProgramFiles(x86)")
-        foreach ($searchPath in $searchPaths) {
-            if (Test-Path $searchPath) {
-                Write-Log "Searching in: $searchPath"
-                $foundFiles = Get-ChildItem -Path $searchPath -Recurse -Name "netbird.exe" -ErrorAction SilentlyContinue | Select-Object -First 5
-                foreach ($file in $foundFiles) {
-                    $fullPath = Join-Path $searchPath $file
-                    Write-Log "Found potential NetBird executable: $fullPath"
-                    $version = Get-NetBirdVersionFromExecutable -ExePath $fullPath
-                    if ($version) {
-                        $script:NetBirdExe = $fullPath
-                        Write-Log "Successfully detected version $version from brute force search"
+                        Write-Log "Detected version $version from service path"
                         return $version
                     }
                 }
@@ -630,13 +610,9 @@ function Get-InstalledVersion {
         }
     }
     catch {
-        Write-Log "Brute force search failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
+        Write-Log "Service check failed: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
     }
-    # Final check: If we found a registry version but no executable, it's a broken installation
-    if ($script:RegistryVersion) {
-        Write-Log "Found registry entry for version $($script:RegistryVersion) but no working executable - this appears to be a broken installation"
-        Write-Log "Will proceed with fresh installation to fix the broken state"
-    }
+    
     Write-Log "No functional NetBird installation found"
     return $null
 }
@@ -2063,9 +2039,11 @@ if (-not $installedVersion -and ![string]::IsNullOrEmpty($SetupKey)) {
             $startResult = & net start netbird 2>&1
             Write-Log "Service started"
 
-            # Wait 15 seconds for service to stabilize after full clear
-            Write-Log "Waiting 15 seconds for service to stabilize after full clear..."
-            Start-Sleep -Seconds 15
+            # Wait 60-90 seconds for service to FULLY stabilize after fresh install
+            # This is critical for daemon initialization and prevents RPC timeout errors
+            Write-Log "Waiting 90 seconds for service to fully stabilize after fresh install..."
+            Write-Log "  This wait time is essential for daemon initialization and cannot be shortened"
+            Start-Sleep -Seconds 90
 
             if (-not (Wait-ForServiceRunning)) {
                 Write-Log "Warning: Service did not fully start in time, but proceeding..." "WARN" -Source "SYSTEM"

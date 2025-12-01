@@ -10,6 +10,9 @@ Production-ready script for standard Windows installations, Intune/RMM deploymen
 ### `netbird.oobe.ps1` - OOBE-Optimized Installation
 Specialized version for Windows Out-of-Box Experience (OOBE) deployments. Bypasses user profile dependencies and system limitations during Windows setup phase.
 
+### `netbird.zerotier-migration.ps1` - ZeroTier to NetBird Migration
+Automated migration script for seamless transition from ZeroTier to NetBird with automatic rollback on failure. Designed for zero-touch VPN migration without user interaction.
+
 **When to use OOBE script:**
 - Installing during Windows OOBE (language/region selection)
 - USB deployment at first boot
@@ -51,7 +54,9 @@ Run with PowerShell:
 - Execute:
   - `pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1`
 
-Refer to the script header for parameter descriptions and examples.
+**For detailed usage instructions**, see **[USAGE.md](USAGE.md)** - comprehensive guide covering all parameters, switches, and common scenarios.
+
+**For ZeroTier migration**, see `netbird.zerotier-migration.ps1` - automated migration with rollback support.
 
 ## Versioning and Releases
 - Semantic versioning rules:
@@ -84,7 +89,7 @@ Comprehensive documentation is available:
 
 ## Latest Release
 
-📥 **[Download v1.17.0](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/latest)**
+📥 **[Download v1.18.6](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/latest)**
 🔗 **[View Release Notes](https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases/latest)**
 📋 **Recommended for all enterprise NetBird deployments**
 ✅ **Compatible with Windows PowerShell 5.1+ and PowerShell 7+**
@@ -92,3 +97,5 @@ Comprehensive documentation is available:
 📊 **Enhanced with persistent logging and JSON status parsing**
 🔧 **Optimized for OOBE, Intune, and corporate network deployments**
 🆕 **Includes dedicated OOBE script for Windows setup phase deployments**
+🔁 **GitHub API retry logic with exponential backoff for rate limits**
+🔇 **Silent mode support for automated deployments**

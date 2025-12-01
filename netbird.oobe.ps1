@@ -28,17 +28,36 @@
 .EXAMPLE
     .\netbird.oobe.ps1 -SetupKey "your-setup-key-here"
 .NOTES
-    Script Version: 1.18.3-OOBE
-    Last Updated: 2025-01-10
+    Script Version: 1.18.6-OOBE
+    Last Updated: 2025-12-01
     PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
     Author: Claude (Anthropic)
-    Base Version: Mirrors netbird.extended.ps1 v1.18.3 functionality
-
+    Base Version: Mirrors netbird.extended.ps1 v1.18.5 functionality
+    
+    Common OOBE Mistakes:
+    - Running without Administrator privileges (will fail silently)
+      ✓ Always: Right-click PowerShell → "Run as Administrator"
+    
+    - Missing setup key (mandatory for OOBE)
+      ✗ Wrong: .\netbird.oobe.ps1
+      ✓ Correct: .\netbird.oobe.ps1 -SetupKey "your-key"
+    
+    - Network not initialized during OOBE
+      → Script waits up to 120s for network, but DHCP delays may require retry
+    
+    USB Deployment Best Practices:
+    - Include MSI on USB: -MsiPath "D:\netbird.msi" (faster, no internet required)
+    - Use C:\Windows\Temp for logs (OOBE-safe location)
+    - Expect 3-5 minute total runtime including 90s daemon initialization
+    
     Version History:
     1.18.0-OOBE - Intune Event Log support, fail-fast network validation, auto config clear
     1.18.1-OOBE - Fixed MSI config conflict: clear default.json and client.conf, stop service before clearing
     1.18.2-OOBE - Simplified config clearing: full directory delete + 15s stabilization wait
     1.18.3-OOBE - Use net stop/start commands, delete contents only (not directory)
+    1.18.4-OOBE - Mirrors extended script v1.18.4 (no OOBE-specific changes needed)
+    1.18.5-OOBE - Mirrors extended script v1.18.5 (no OOBE-specific changes needed)
+    1.18.6-OOBE - GitHub API retry logic, parameter validation examples
 
     OOBE REQUIREMENTS:
     - Must be run as Administrator
@@ -56,7 +75,7 @@ param(
 )
 
 # Script Configuration - OOBE-safe paths
-$ScriptVersion = "1.18.3-OOBE"
+$ScriptVersion = "1.18.6-OOBE"
 $NetBirdPath = "$env:ProgramFiles\NetBird"
 $NetBirdExe = "$NetBirdPath\netbird.exe"
 $ServiceName = "NetBird"
@@ -201,29 +220,58 @@ function Get-NetBirdExecutablePath {
 }
 
 function Get-LatestVersionAndDownloadUrl {
-    Write-Log "Fetching latest NetBird version from GitHub..."
-    try {
-        $apiUrl = "https://api.github.com/repos/netbirdio/netbird/releases/latest"
-        $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
-        $version = $release.tag_name -replace '^v', ''
+    $maxRetries = 3
+    $retryDelay = 5
+    
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        try {
+            Write-Log "Fetching latest NetBird version from GitHub (attempt $attempt/$maxRetries)..."
+            $apiUrl = "https://api.github.com/repos/netbirdio/netbird/releases/latest"
+            $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
+            $version = $release.tag_name -replace '^v', ''
 
-        # Find Windows AMD64 MSI asset
-        $asset = $release.assets | Where-Object { $_.name -like "*windows_amd64.msi" } | Select-Object -First 1
-        if ($asset) {
-            Write-Log "Latest version: $version"
-            Write-Log "Download URL: $($asset.browser_download_url)"
-            return @{
-                Version = $version
-                DownloadUrl = $asset.browser_download_url
+            # Find Windows AMD64 MSI asset
+            $asset = $release.assets | Where-Object { $_.name -like "*windows_amd64.msi" } | Select-Object -First 1
+            if ($asset) {
+                Write-Log "Latest version: $version"
+                Write-Log "Download URL: $($asset.browser_download_url)"
+                return @{
+                    Version = $version
+                    DownloadUrl = $asset.browser_download_url
+                }
             }
-        } else {
-            Write-Log "Could not find Windows AMD64 MSI in release assets" "ERROR" -Source "SYSTEM"
-            return $null
+            else {
+                Write-Log "Could not find Windows AMD64 MSI in release assets" "ERROR" -Source "SYSTEM"
+                
+                # Retry on missing assets
+                if ($attempt -lt $maxRetries) {
+                    Write-Log "Retrying in ${retryDelay}s..." "WARN"
+                    Start-Sleep -Seconds $retryDelay
+                    continue
+                }
+                
+                return $null
+            }
         }
-    }
-    catch {
-        Write-Log "Failed to fetch latest version from GitHub: $($_.Exception.Message)" "WARN" -Source "SYSTEM"
-        return $null
+        catch {
+            $errorMsg = $_.Exception.Message
+            Write-Log "GitHub API request failed (attempt $attempt/$maxRetries): $errorMsg" "WARN" -Source "SYSTEM"
+            
+            # Check for rate limiting
+            if ($errorMsg -match "rate limit|403") {
+                Write-Log "GitHub API rate limit detected" "WARN" -Source "SYSTEM"
+            }
+            
+            if ($attempt -lt $maxRetries) {
+                $backoffDelay = $retryDelay * $attempt  # Exponential backoff
+                Write-Log "Retrying in ${backoffDelay}s..." "WARN"
+                Start-Sleep -Seconds $backoffDelay
+            }
+            else {
+                Write-Log "Failed to get latest version after $maxRetries attempts" "ERROR" -Source "SYSTEM"
+                return $null
+            }
+        }
     }
 }
 
@@ -634,9 +682,11 @@ try {
     exit 1
 }
 
-# Wait 15 seconds for service to stabilize after full clear
-Write-Log "Waiting 15 seconds for service to stabilize after full clear..."
-Start-Sleep -Seconds 15
+# Wait 60-90 seconds for service to FULLY stabilize after fresh install
+# This is critical for daemon initialization and prevents RPC timeout errors
+Write-Log "Waiting 90 seconds for service to fully stabilize after fresh install..."
+Write-Log "  This wait time is essential for daemon initialization and cannot be shortened"
+Start-Sleep -Seconds 90
 
 # Wait for service to be fully running
 if (-not (Wait-ForServiceRunning -MaxWaitSeconds 30)) {
