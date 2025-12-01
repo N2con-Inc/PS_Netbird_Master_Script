@@ -83,8 +83,7 @@ foreach ($file in $files) {
             Write-Host " ✗ ($($result.Status))" -ForegroundColor Red
             $failed++
         }
-    }
-    catch {
+    } catch {
         Write-Host " ✗ Error: $($_.Exception.Message)" -ForegroundColor Red
         $failed++
     }
