@@ -1,4 +1,4 @@
-# netbird.registration.ps1
+﻿# netbird.registration.ps1
 # Module for NetBird registration with enhanced recovery and validation
 # Version: 1.0.0
 # Dependencies: netbird.core.ps1, netbird.service.ps1
@@ -15,6 +15,9 @@ if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
 # ============================================================================
 
 function Test-NetworkPrerequisites {
+    [CmdletBinding()]
+    param()
+    
     Write-Log "=== Comprehensive Network Prerequisites Validation ===" -ModuleName $script:ModuleName
 
     $networkChecks = @{
@@ -41,17 +44,17 @@ function Test-NetworkPrerequisites {
         $activeAdapters = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq "Up" }
         if ($activeAdapters -and $activeAdapters.Count -gt 0) {
             $networkChecks.ActiveAdapter = $true
-            Write-Log "✓ Active network adapter(s): $($activeAdapters.Count) found" -ModuleName $script:ModuleName
+            Write-Log "[OK] Active network adapter(s): $($activeAdapters.Count) found" -ModuleName $script:ModuleName
             foreach ($adapter in $activeAdapters) {
                 Write-Log "  - $($adapter.Name) ($($adapter.InterfaceDescription))" -ModuleName $script:ModuleName
             }
         } else {
             $warnings += "No active network adapters detected via Get-NetAdapter"
-            Write-Log "⚠ No active network adapters found via Get-NetAdapter (cmdlet may not be available)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[WARN] No active network adapters found via Get-NetAdapter (cmdlet may not be available)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
     } catch {
         $warnings += "Cannot enumerate network adapters (cmdlet not available)"
-        Write-Log "⚠ Failed to enumerate network adapters: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[WARN] Failed to enumerate network adapters: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         Write-Log "  Note: This check is non-critical if internet connectivity succeeds" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
     }
 
@@ -65,18 +68,18 @@ function Test-NetworkPrerequisites {
                     $gateway = if ($ipConfig.IPv4DefaultGateway) { $ipConfig.IPv4DefaultGateway.NextHop } else { $ipConfig.IPv6DefaultGateway.NextHop }
                     $networkChecks.DefaultGateway = $true
                     $hasGateway = $true
-                    Write-Log "✓ Default gateway: $gateway on $($adapter.Name)" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Default gateway: $gateway on $($adapter.Name)" -ModuleName $script:ModuleName
                     break
                 }
             }
 
             if (-not $hasGateway) {
                 $blockingIssues += "No default gateway configured"
-                Write-Log "✗ No default gateway - cannot route to internet" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+                Write-Log "[FAIL] No default gateway - cannot route to internet" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
             }
         } catch {
             $warnings += "Could not verify default gateway"
-            Write-Log "⚠ Could not verify default gateway: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[WARN] Could not verify default gateway: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
     }
 
@@ -89,17 +92,17 @@ function Test-NetworkPrerequisites {
             $networkChecks.DNSServersConfigured = $true
             if ($dnsServers[0].ServerAddresses -and $dnsServers[0].ServerAddresses.Count -gt 0) {
                 $primaryDNS = $dnsServers[0].ServerAddresses[0]
-                Write-Log "✓ DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')" -ModuleName $script:ModuleName
+                Write-Log "[OK] DNS servers configured: $($dnsServers[0].ServerAddresses -join ', ')" -ModuleName $script:ModuleName
             } else {
-                Write-Log "✓ DNS servers configured (cmdlet returned data but no addresses listed)" -ModuleName $script:ModuleName
+                Write-Log "[OK] DNS servers configured (cmdlet returned data but no addresses listed)" -ModuleName $script:ModuleName
             }
         } else {
             $warnings += "No DNS servers found via Get-DnsClientServerAddress"
-            Write-Log "⚠ No DNS servers found via Get-DnsClientServerAddress (cmdlet may not be available)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[WARN] No DNS servers found via Get-DnsClientServerAddress (cmdlet may not be available)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
     } catch {
         $warnings += "Could not verify DNS configuration (cmdlet not available)"
-        Write-Log "⚠ Could not verify DNS servers: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[WARN] Could not verify DNS servers: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         Write-Log "  Note: This check is non-critical if DNS resolution succeeds" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
     }
 
@@ -108,7 +111,7 @@ function Test-NetworkPrerequisites {
         $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
         $networkChecks.DNSResolution = $true
         $resolvedIP = ($dnsTest | Where-Object { $_.Type -eq "A" } | Select-Object -First 1).IPAddress
-        Write-Log "✓ DNS resolution functional (api.netbird.io → $resolvedIP)" -ModuleName $script:ModuleName
+        Write-Log "[OK] DNS resolution functional (api.netbird.io → $resolvedIP)" -ModuleName $script:ModuleName
 
         if (-not $networkChecks.DNSServersConfigured) {
             $networkChecks.DNSServersConfigured = $true
@@ -116,7 +119,7 @@ function Test-NetworkPrerequisites {
         }
     } catch {
         $blockingIssues += "DNS resolution failing"
-        Write-Log "✗ DNS resolution failing for api.netbird.io" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[FAIL] DNS resolution failing for api.netbird.io" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
         Write-Log "  Error: $($_.Exception.Message)" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
     }
 
@@ -125,7 +128,7 @@ function Test-NetworkPrerequisites {
         $pingTest = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction Stop
         if ($pingTest) {
             $networkChecks.InternetConnectivity = $true
-            Write-Log "✓ Internet connectivity confirmed (ICMP to 8.8.8.8)" -ModuleName $script:ModuleName
+            Write-Log "[OK] Internet connectivity confirmed (ICMP to 8.8.8.8)" -ModuleName $script:ModuleName
 
             if (-not $networkChecks.ActiveAdapter) {
                 $networkChecks.ActiveAdapter = $true
@@ -136,7 +139,7 @@ function Test-NetworkPrerequisites {
                 $httpTest = Invoke-WebRequest -Uri "http://www.gstatic.com/generate_204" -Method Head -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
                 if ($httpTest.StatusCode -eq 204 -or $httpTest.StatusCode -eq 200) {
                     $networkChecks.InternetConnectivity = $true
-                    Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP blocked)" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Internet connectivity confirmed via HTTP (ICMP blocked)" -ModuleName $script:ModuleName
 
                     if (-not $networkChecks.ActiveAdapter) {
                         $networkChecks.ActiveAdapter = $true
@@ -145,14 +148,14 @@ function Test-NetworkPrerequisites {
                 }
             } catch {
                 $blockingIssues += "No internet connectivity"
-                Write-Log "✗ Internet connectivity test failed (both ICMP and HTTP)" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+                Write-Log "[FAIL] Internet connectivity test failed (both ICMP and HTTP)" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
             }
         }
     } catch {
         try {
             $httpTest = Invoke-WebRequest -Uri "http://www.gstatic.com/generate_204" -Method Head -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
             $networkChecks.InternetConnectivity = $true
-            Write-Log "✓ Internet connectivity confirmed via HTTP (ICMP not available)" -ModuleName $script:ModuleName
+            Write-Log "[OK] Internet connectivity confirmed via HTTP (ICMP not available)" -ModuleName $script:ModuleName
 
             if (-not $networkChecks.ActiveAdapter) {
                 $networkChecks.ActiveAdapter = $true
@@ -160,7 +163,7 @@ function Test-NetworkPrerequisites {
             }
         } catch {
             $blockingIssues += "No internet connectivity"
-            Write-Log "✗ No internet connectivity detected" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[FAIL] No internet connectivity detected" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
     }
 
@@ -171,7 +174,7 @@ function Test-NetworkPrerequisites {
         $w32timeStatus = w32tm /query /status 2>&1
         if ($LASTEXITCODE -eq 0 -and $w32timeStatus -match "Source:") {
             $networkChecks.TimeSynchronized = $true
-            Write-Log "✓ System time synchronized via Windows Time" -ModuleName $script:ModuleName
+            Write-Log "[OK] System time synchronized via Windows Time" -ModuleName $script:ModuleName
         } else {
             try {
                 $webTime = (Invoke-WebRequest -Uri "http://worldtimeapi.org/api/timezone/Etc/UTC" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop |
@@ -181,19 +184,19 @@ function Test-NetworkPrerequisites {
 
                 if ($timeDiff -lt 300) {
                     $networkChecks.TimeSynchronized = $true
-                    Write-Log "✓ System time appears synchronized (diff: ${timeDiff}s)" -ModuleName $script:ModuleName
+                    Write-Log "[OK] System time appears synchronized (diff: ${timeDiff}s)" -ModuleName $script:ModuleName
                 } else {
                     $warnings += "System time may be incorrect (diff: ${timeDiff}s)"
-                    Write-Log "⚠ System time may be incorrect (${timeDiff}s difference) - SSL/TLS may fail" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+                    Write-Log "[WARN] System time may be incorrect (${timeDiff}s difference) - SSL/TLS may fail" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
                 }
             } catch {
                 $warnings += "Could not verify time synchronization"
-                Write-Log "⚠ Could not verify time synchronization" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+                Write-Log "[WARN] Could not verify time synchronization" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
             }
         }
     } catch {
         $warnings += "Could not check time synchronization"
-        Write-Log "⚠ Could not check Windows Time service" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[WARN] Could not check Windows Time service" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
     }
 
     # Check 7: Corporate proxy detection
@@ -202,7 +205,7 @@ function Test-NetworkPrerequisites {
         if ($proxySettings.ProxyEnable -eq 1) {
             $proxyServer = $proxySettings.ProxyServer
             $warnings += "System proxy detected: $proxyServer"
-            Write-Log "⚠ System proxy detected: $proxyServer" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[WARN] System proxy detected: $proxyServer" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
             Write-Log "  NetBird requires direct access for gRPC (port 443) and relay servers" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
 
             if ($proxySettings.ProxyOverride) {
@@ -210,7 +213,7 @@ function Test-NetworkPrerequisites {
             }
         } else {
             $networkChecks.NoProxyDetected = $true
-            Write-Log "✓ No system proxy detected" -ModuleName $script:ModuleName
+            Write-Log "[OK] No system proxy detected" -ModuleName $script:ModuleName
         }
     } catch {
         Write-Log "  Could not check proxy settings" -ModuleName $script:ModuleName
@@ -227,14 +230,14 @@ function Test-NetworkPrerequisites {
                 if ($tcpConnected) {
                     $networkChecks.SignalServerReachable = $true
                     $signalReachable = $true
-                    Write-Log "✓ Signal server reachable: ${signalHost}:443" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Signal server reachable: ${signalHost}:443" -ModuleName $script:ModuleName
                     break
                 }
             }
 
             if (-not $signalReachable) {
                 $warnings += "Signal servers unreachable"
-                Write-Log "⚠ Could not reach NetBird signal servers - registration may fail" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+                Write-Log "[WARN] Could not reach NetBird signal servers - registration may fail" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
             }
         } catch {
             Write-Log "  Could not test signal server connectivity" -ModuleName $script:ModuleName
@@ -262,7 +265,7 @@ function Test-NetworkPrerequisites {
     }
 
     if ($warnings.Count -gt 0) {
-        Write-Log "⚠ WARNINGS (non-blocking):" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[WARN] WARNINGS (non-blocking):" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         foreach ($warning in $warnings) {
             Write-Log "   - $warning" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
@@ -282,22 +285,25 @@ function Test-NetworkPrerequisites {
 # ============================================================================
 
 function Test-RegistrationPrerequisites {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigFile
     )
 
     Write-Log "Validating registration prerequisites..." -ModuleName $script:ModuleName
     $prerequisites = @{}
 
-    # Check 1: Setup key format (UUID, Base64, NetBird prefixed)
-    $isUuidFormat = $SetupKey -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
-    $isBase64Format = ($SetupKey -match '^[A-Za-z0-9+/]+=*$' -and $SetupKey.Length -ge 20)
-    $isNetBirdFormat = ($SetupKey -match '^[A-Za-z0-9_-]+$' -and $SetupKey.Length -ge 20)
-    $prerequisites.ValidSetupKey = ($isUuidFormat -or $isBase64Format -or $isNetBirdFormat)
-
-    # Check 2: Management URL HTTPS accessibility
+    # Check 1: Management URL HTTPS accessibility
     try {
         $healthUrl = "$ManagementUrl"
         Write-Log "Testing HTTPS connectivity to: $healthUrl" -ModuleName $script:ModuleName
@@ -306,7 +312,7 @@ function Test-RegistrationPrerequisites {
         $prerequisites.ManagementHTTPSReachable = ($webRequest.StatusCode -ge 200 -and $webRequest.StatusCode -lt 500)
 
         if ($prerequisites.ManagementHTTPSReachable) {
-            Write-Log "✓ Management server HTTPS reachable (Status: $($webRequest.StatusCode))" -ModuleName $script:ModuleName
+            Write-Log "[OK] Management server HTTPS reachable (Status: $($webRequest.StatusCode))" -ModuleName $script:ModuleName
         }
     }
     catch {
@@ -314,18 +320,18 @@ function Test-RegistrationPrerequisites {
             $statusCode = [int]$_.Exception.Response.StatusCode
             if ($statusCode -lt 500) {
                 $prerequisites.ManagementHTTPSReachable = $true
-                Write-Log "✓ Management server HTTPS reachable (Status: $statusCode)" -ModuleName $script:ModuleName
+                Write-Log "[OK] Management server HTTPS reachable (Status: $statusCode)" -ModuleName $script:ModuleName
             } else {
-                Write-Log "⚠ Management server returned error status: $statusCode" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+                Write-Log "[WARN] Management server returned error status: $statusCode" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
                 $prerequisites.ManagementHTTPSReachable = $false
             }
         } else {
-            Write-Log "✗ Cannot reach management server via HTTPS: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
+            Write-Log "[FAIL] Cannot reach management server via HTTPS: $($_.Exception.Message)" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
             $prerequisites.ManagementHTTPSReachable = $false
         }
     }
 
-    # Check 3: No conflicting registration state
+    # Check 2: No conflicting registration state
     try {
         $configExists = Test-Path $ConfigFile
         if ($configExists) {
@@ -339,11 +345,11 @@ function Test-RegistrationPrerequisites {
         $prerequisites.NoConflictingState = $true
     }
 
-    # Check 4: Sufficient disk space
+    # Check 3: Sufficient disk space
     $freeSpace = (Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'").FreeSpace
     $prerequisites.SufficientDiskSpace = ($freeSpace -gt 100MB)
 
-    # Check 5: Windows Firewall not blocking
+    # Check 4: Windows Firewall not blocking
     try {
         $firewallProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
         $activeProfiles = $firewallProfiles | Where-Object { $_.Enabled -eq $true }
@@ -364,13 +370,13 @@ function Test-RegistrationPrerequisites {
     Write-Log "Prerequisites check: $passedCount/$($prerequisites.Count) passed" -ModuleName $script:ModuleName
     
     foreach ($prereq in $prerequisites.GetEnumerator()) {
-        $status = if ($prereq.Value) { "✓" } else { "✗" }
+        $status = if ($prereq.Value) { "[OK]" } else { "[FAIL]" }
         $level = if ($prereq.Value) { "INFO" } else { "WARN" }
         Write-Log "  $status $($prereq.Key)" $level -ModuleName $script:ModuleName
     }
     
     # Critical prerequisites
-    $criticalPrereqs = @("ValidSetupKey", "ManagementHTTPSReachable", "NoConflictingState")
+    $criticalPrereqs = @("ManagementHTTPSReachable", "NoConflictingState")
     $criticalFailed = $criticalPrereqs | Where-Object { -not $prerequisites[$_] }
     
     if ($criticalFailed) {
@@ -386,9 +392,18 @@ function Test-RegistrationPrerequisites {
 # ============================================================================
 
 function Invoke-NetBirdRegistration {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(1, 10)]
         [int]$Attempt
     )
     
@@ -440,8 +455,6 @@ function Invoke-NetBirdRegistration {
             return @{Success = $true; ErrorType = $null}
         } elseif ($stderr -match "DeadlineExceeded|context deadline exceeded") {
             $errorType = "DeadlineExceeded"
-        } elseif ($stderr -match "invalid setup key|setup key") {
-            $errorType = "InvalidSetupKey"
         } elseif ($stderr -match "connection refused") {
             $errorType = "ConnectionRefused"
         } elseif ($stderr -match "network|dns|timeout") {
@@ -461,8 +474,14 @@ function Invoke-NetBirdRegistration {
 # ============================================================================
 
 function Confirm-RegistrationSuccess {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(30, 600)]
         [int]$MaxWaitSeconds = 120,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$NetBirdExe
     )
 
@@ -492,43 +511,43 @@ function Confirm-RegistrationSuccess {
                 # Check Management connection
                 if ($statusOutput -match "(?m)^Management:\s+Connected") {
                     $validationChecks.ManagementConnected = $true
-                    Write-Log "✓ Management server connected" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Management server connected" -ModuleName $script:ModuleName
                 } elseif ($statusOutput -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
-                    Write-Log "✗ Management server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] Management server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check Signal connection
                 if ($statusOutput -match "(?m)^Signal:\s+Connected") {
                     $validationChecks.SignalConnected = $true
-                    Write-Log "✓ Signal server connected" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Signal server connected" -ModuleName $script:ModuleName
                 } elseif ($statusOutput -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
-                    Write-Log "✗ Signal server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] Signal server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check NetBird IP
                 if ($statusOutput -match "(?m)^NetBird IP:\s+(\d+\.\d+\.\d+\.\d+)(/\d+)?") {
                     $assignedIP = $matches[1]
                     $validationChecks.HasNetBirdIP = $true
-                    Write-Log "✓ NetBird IP assigned: $assignedIP" -ModuleName $script:ModuleName
+                    Write-Log "[OK] NetBird IP assigned: $assignedIP" -ModuleName $script:ModuleName
                 } else {
-                    Write-Log "✗ No NetBird IP assigned" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] No NetBird IP assigned" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check daemon version
                 if ($statusOutput -match "(?m)^Daemon version:\s+[\d\.]+") {
                     $validationChecks.DaemonUp = $true
-                    Write-Log "✓ Daemon is responding" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Daemon is responding" -ModuleName $script:ModuleName
                 } else {
-                    Write-Log "✗ Daemon version not found in status" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] Daemon version not found in status" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check interface type
                 if ($statusOutput -match "(?m)^Interface type:\s+(\w+)") {
                     $interfaceType = $matches[1]
                     $validationChecks.HasActiveInterface = $true
-                    Write-Log "✓ Network interface active: $interfaceType" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Network interface active: $interfaceType" -ModuleName $script:ModuleName
                 } else {
-                    Write-Log "✗ No network interface type found" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] No network interface type found" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check for error messages
@@ -546,9 +565,9 @@ function Confirm-RegistrationSuccess {
 
                 if ($foundErrors.Count -eq 0) {
                     $validationChecks.NoErrorMessages = $true
-                    Write-Log "✓ No critical error messages detected" -ModuleName $script:ModuleName
+                    Write-Log "[OK] No critical error messages detected" -ModuleName $script:ModuleName
                 } else {
-                    Write-Log "✗ Critical error messages found: $($foundErrors -join ', ')" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+                    Write-Log "[FAIL] Critical error messages found: $($foundErrors -join ', ')" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Success criteria: ALL critical checks must pass
@@ -588,8 +607,14 @@ function Confirm-RegistrationSuccess {
 # ============================================================================
 
 function Get-RecoveryAction {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ErrorType,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateRange(1, 10)]
         [int]$Attempt
     )
 
@@ -612,9 +637,6 @@ function Get-RecoveryAction {
             3 = @{Action="FullReset"; Description="Full clear and re-register"; WaitSeconds=45}
             4 = @{Action="None"; Description="Manual intervention required"; WaitSeconds=0}
         }
-        "InvalidSetupKey" = @{
-            1 = @{Action="None"; Description="Setup key validation failed - no retry"; WaitSeconds=0}
-        }
         "NetworkError" = @{
             1 = @{Action="WaitLonger"; Description="Wait for network connectivity"; WaitSeconds=60}
             2 = @{Action="TestConnectivity"; Description="Re-test network prerequisites"; WaitSeconds=30}
@@ -631,9 +653,18 @@ function Get-RecoveryAction {
 }
 
 function Invoke-RecoveryAction {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNull()]
         [hashtable]$Action,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl
     )
 
@@ -673,13 +704,31 @@ function Invoke-RecoveryAction {
 # ============================================================================
 
 function Register-NetBirdEnhanced {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigFile,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(1, 10)]
         [int]$MaxRetries = 5,
+        
+        [Parameter(Mandatory=$false)]
         [switch]$AutoRecover = $true,
+        
+        [Parameter(Mandatory=$false)]
         [switch]$JustInstalled,
+        
+        [Parameter(Mandatory=$false)]
         [switch]$WasFreshInstall
     )
 
@@ -698,7 +747,8 @@ function Register-NetBirdEnhanced {
 
     # Step 1: Daemon readiness
     $daemonWaitTime = if ($JustInstalled -or $WasFreshInstall) { 180 } else { 120 }
-    Write-Log "Waiting up to $daemonWaitTime seconds for daemon readiness (Fresh install: $(if ($JustInstalled -or $WasFreshInstall) {'Yes'} else {'No'}))" -ModuleName $script:ModuleName
+    $freshInstallText = if ($JustInstalled -or $WasFreshInstall) { 'Yes' } else { 'No' }
+    Write-Log "Waiting up to $daemonWaitTime seconds for daemon readiness (Fresh install: $freshInstallText)" -ModuleName $script:ModuleName
 
     if (-not (Wait-ForDaemonReady -MaxWaitSeconds $daemonWaitTime)) {
         Write-Log "Daemon not ready for registration - attempting service restart" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
@@ -783,9 +833,18 @@ function Register-NetBirdEnhanced {
 # ============================================================================
 
 function Export-RegistrationDiagnostics {
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ScriptVersion,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigFile,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ServiceName
     )
     
@@ -841,8 +900,8 @@ Write-Log "Registration module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUw7pmN3A9a722amylRG8Zzs0
-# vfGgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUuFheHt1bPk1yYh4zMw5Uv7dc
+# bPSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -981,33 +1040,33 @@ Write-Log "Registration module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Axs5xC2LvxHw48yIcFD/jOIs36EwDQYJKoZIhvcNAQEBBQAEggIAsGKc5eMtZa+g
-# 28sKBE1eBjjY6KiRS75PjdnC1NqZOfeUkQf4PkEHQSEKfG6eDEGwKf5mCVQqsUx9
-# MpJ/W+T2fBrXDt876dAUOHT6NkLP+I2+QQDg9HrD4TWhOSyvJqXFkCXWVlLFOQJZ
-# iGFEkQLs42btvcUpeOkSDl68r8UHJSWyGGLmXFyzprvruF3tCJhwbk60rMkpcRoa
-# IuvhoCIZeVgGa3I7XvfpxPuj28LTMkz9fPvt4zFGX2zHB6ADf+0KJOffEi2PpT+2
-# fKuAXWpWf8W2q0iVYE3/33kuOkVEaeM7j1Yn/mYbaES1s5lFs6hd+lMCyICFYkWj
-# Rrzw+SHqmlEEM32SzbplKEOThfykWqIdrp5YREgcT6zDgMSqUJUr6cjoIyMji2Mb
-# wmB1zNnZumaExQ54i8NYrtGsBuK8tlWmJjFiKf69gTDvW2ms8x6DJdmDAAZZC2Tc
-# nSgga5sF1yilc+Y/RN+16qHzyjw/EBcA0DSXCUVnsHsZSiJFFDsyODBCTNRU0ulr
-# gC88todhJOk3JY3/Akl6iICqL8KcT/Ya9GhoM5hYxDUURSbgn2qQrRKyLRCT+aTP
-# 6x/E7/0EbHxfdOnst4ELmQ7UL6NmcVos0hugy2j1fiN6tIp40nl1Rv45IX9cVzBZ
-# 9HRlp7Gqxt8AaHCuF31/jL39QOtVpYKhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# LOCIew0KOu9sHukfdeZuXnEeCQMwDQYJKoZIhvcNAQEBBQAEggIAgnU45m96S3Lc
+# G/1mKqMC0Gj6P+2SuU5tkv6sT9w6jQ5slTRQUVzpLiEXKBm3JekBaB9mxOe0cNgZ
+# 6AfBTse5sqmxo9zM0hPbxVBXBrGaeZbaBWBcnR+r0NupgAe7aV9rsT7VLzt+HmyP
+# pXvpROIm9TQz35bguFs1LHtM9g/p5ptVlrBS5Z++e31WzLJsAcEuPfr8CiQAEX3u
+# 1j6eluxEPM0TLTSC7qQjtPAfTo/CvLl005DBUICgK7auDW/khdynP4fhkmYUjGC9
+# XFNcldof0VVKjdtWsVQZk5X/7QAol+Q7tDDojpGMfZ6Txh75beCkfqDBpTLEBsLh
+# uhKSt6wezEuYXUMv/euqVPROUJtitChgzqnj2qEt4o0v+6aeQ99PndhmTBIXKCBi
+# Tm0zJKKU/BTqzrwSa/RCAR71P0NooXyDkB0EEoSxiaiPMAClHbXY5dnzGLWkTamp
+# mieIeJPI0xpGGWcSO1j65BfHHEcvkg3ZqkTa9dE4kmJft/9At+pZvW1tsQ9OlBCs
+# xQPO5lhBlsYjkkhaCV2StJdCcJiBViHYpUcoZtfRIZ4G9EO+H+nsZbs60pojyJc2
+# oq63+JNIT8mTMC+O9FRM5FY25R6FkBEGzNO35BrSe+UFNKhjptCrsEqQS14jo1pY
+# xuLjvNJ8Bmd10h9rkDHSClQ/IFxOy7uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA3WjAvBgkqhkiG9w0BCQQxIgQgfUvDTvEUSySKDlAaJp75D/Eg
-# TA/bGcgqFM3+91KkzTEwDQYJKoZIhvcNAQEBBQAEggIAQVXLVz3QEbEsiYIE7Fv9
-# /V5/jyAp27WZpTGPk7kJUvkk+sjZ4zP5tAok7VlWMP6bQ39VFn4Rp8ik1jk27WwX
-# h9jzYjh1Jul8HEGnPk1rKndZDKWrNZw2dhtnWaIQqrWVIYRD+GbAkNduhO1gWajY
-# 1XA2yGQLQOPR7SFNDOy9zoZQbR1VOftbMhdR6dmvYKC6a6JnlL7hN8z9QjcrBheq
-# b7pwAoqdtD5bp67Oi4MVTCgYhbVpoCQpSkeeK01dkppkRi9/UtXev4n0KU1vvBgj
-# 0+nenhcL7dSehcDho+irS8ZaE9Yl/gaaH7IcyBr9xo2WKNhK1GrjWn52QLIFmyc8
-# LoxpLeM+03aFBgPKFuqon1nzIx864bwRea7COMdtcd6QohEZvWxp4W+FvwTjCa1h
-# nbk/A9LPB5dYQjGc1AKQr8EDlfgza/2ZYbvcASJ+AUAN1QkvUgvbxp0uBSs5i0KU
-# j0FhM0Dahjv0WSo31NY29yXHv6KRK9ILopqtu8HspiQb9rnraGO08oBFujs6/6sz
-# /IDYdfVA5gnZpLYFc7ywJexoo5ue0OHZs2rDslSbYG4rTT39Aq63g39G1DlhqQ+R
-# le8yZLSTozqZqAT2/RWMAnGzxly5zb3GsiV75gNPQsGzdUTxNTezB3C8wtM6HwUr
-# ChJg7HvHyxMpHm2DBFRsSMo=
+# MjUxMjAxMjM1OTQzWjAvBgkqhkiG9w0BCQQxIgQg5K/N3Oox4OU/okXsFO/qbREm
+# dm6FU14PjKYsZX0KLXwwDQYJKoZIhvcNAQEBBQAEggIAzSBVhXLsfL6eeaRGsFjd
+# l35AAads/ltNRxgKDCQ8lGBhDfMgd88Y7fVev5UIJL13k6jt+U7O6fyJlYMDXIx6
+# s5H9GhBbak/BzPiT66GRqHnlwL06Styc+sIAHah5BI5D7f+sSzm5yso4oKnLuVjQ
+# hjWT0nAyCmtzpN6iecvt/Ic3SfGMfxDjna1KhtFY4Bgy69Ka3DFwZkruSQ1CUW9K
+# sc19rYERU4wd2dZW7kbPsUYf/nrdR+HqN4gEkZhL1chcsSo+3H6Q1G2XGnWB4p9A
+# o6EH9nl5z+WsLxuNIMgZuDdycsdYBFqBnb1iHIVe05IbEHRSoAq0bD5bNlh0QP+H
+# JZ5IVR9NJF5F8xHEfF1fswvJ7nTX/7V+DpPQp+VWkV9+kU8oUajnsnz7HzmCJez2
+# 9yTaVwBxisLcV40GcuxjueftaXvI6rVYkR2sQLNXBR/R1TmRp8cV6j1mTAHttwfE
+# 1fPfxer8uKQotYl+otN3TYjt1LSg3YchKUTLvLr9QEi7nVTC8O3Od/nQN1ySUgpt
+# e+P5vV1bZSztM41nzjsJfeQtMKcWjPcdl61CXvMGSdrGSMLVo1FCYet6vBQFpxvs
+# zR140ZRKEyRhMrXn1QYeRjW1/BdZsuzzto+7VTj1ftwI8tFh1B//yggqEZeZ1QnK
+# rOni5dTi1WdVDOzOuFhfaAQ=
 # SIG # End signature block

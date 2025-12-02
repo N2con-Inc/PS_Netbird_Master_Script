@@ -44,8 +44,10 @@ function Get-LatestVersionAndDownloadUrl {
         Optional specific version to fetch (e.g., "0.66.4" for version compliance).
         If not specified, fetches latest release.
     #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$TargetVersion
     )
     
@@ -156,6 +158,9 @@ function Get-InstalledVersion {
         Method 2: Registry check with validation
         Method 3: Windows Service path extraction
     #>
+    [CmdletBinding()]
+    param()
+    
     Write-Log "Checking for existing NetBird installation..."
     
     # Method 1: Check the standard installation path (fast path - 99% of installations)
@@ -269,8 +274,8 @@ Write-Log "Version module loaded successfully (v1.1.0)"
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU07xSkSzk6u4wvKLTtAzJ2VFe
-# 872gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUeGgi4tF6/jutW8m163crpLG/
+# J76gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -409,33 +414,33 @@ Write-Log "Version module loaded successfully (v1.1.0)"
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# uss0UUu/dms3cnreFG1fxBGICHIwDQYJKoZIhvcNAQEBBQAEggIAWmlxSTkol0RM
-# Dv1R10iDiVxy0O4OVY+MONdNHHp/Xqaue07iYFaGT2x566wfA7CvXm26qAoJkwX9
-# cG4mjVDdduVzap87+fUuATi9jrOz37CarMuYlWHK7IyRaBjks8UdjPbMNr4UJXi1
-# 1PLGNptYW4pJea3dIJyWBN5fii9g1kg5hGrewxcao+uFZMMy41b2xzG+vldyiO5N
-# kjaKlyGC7XhNBEdNvY+w7otxB5bdffA+gAKt36eKSOKigx/2sp+N0zdHbPaz7QUX
-# 6SzDCZzD0AfZXhvJ1JeyMaprHEI7PBtKnfsnTumSmaS1VuTi0n5fo0oMMFSQWwJh
-# s6N/E1rPQPssZ7iH/kCqLKP73Jsg5muAUdduvnjuKDemYdKLxGUWcgh2wJdGGDb9
-# C8x4pw6noGYM6fuig/jfRu8Fxxb3FdeRrWyINgeh0MpyhMLvrTLJ9LNWTTuxAwCH
-# 0gBRPKw1lk49BPp3UkFwXNKApI12XWjCPe5YggAJufX71lmbK7ohItUhsWkJYf1c
-# 9cKvvwAUNKGD5uAHYSxZO6nhMfimjvV6g4iKwKDwdwYtMhPgAqILRVQ7a1otdzan
-# vAh2sDDNUNYEiYte+0BEe0yDnFfaZlbnXAhgNFCFJk5o+3cB2ODaUYUwXgIuR5Ta
-# w4tfmEDvs92AfGgPKORRgKzDZ0CfcLShggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# Zf97vB5Cd8e0TilFga1b9KfkG/4wDQYJKoZIhvcNAQEBBQAEggIAg8nX6lIENTNX
+# nbG1jY/7MrNKKTjpGms7d3yIuCk0GBj0WNCjCz61psI3yLdEPffdgZQUvr/wA7kG
+# tjwsIDeb9uu6cQ/o/Vsewc8Mmjyavn4oncTcfKPuvX8nkuPRN2UofUz6BtX1nOsF
+# kdpAIq2guyPy1uMYIqeSgLN+zUhB6g0ZuBgDMMu5dZL5rX7wwC84YzW3O96Ivm/g
+# 58cJ6aPga0p9ux9QXf0fzUlFOlZDb4SvzTIV7BffDxDhYxY65tQSsucD9JzkgKhZ
+# sSOg1fadFILUKfRTC/dJ3No5ZWHaK4g1z/BTkE9gG81AyolDnGvggy5JuE7jJ8zC
+# dIPrjFwWjxG1BMBENV2iERUEYwLUxv07knjw5+lLzU+n/5az8HX/nowss3+ckUCu
+# Shw55IrFjynqf2sv795iB/aehg5ydtOq3UAdXkJvZCMflhnYuLM+9Tp8JLT/erVi
+# oo3OgujGU8lOFsd7HaBsjR+MblP6oRa7fpTvpGEronOqPw3up80f/1Xqj4ivAzY9
+# H0mqKTtqsY4iTSV28oTt7pj8mk43lfG6FnJA7USfxNiXziuXDp75MIJ9cRoJJC9/
+# JjjXWjb0gKib7k8eAEUw0G16Xc04SDDbN7j5bdlQFDMoBo21Cuv9fXlGVa2ZBPVo
+# fpFF7GfyUOgHyRToBwmw9lMlAkeQ9fahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA3WjAvBgkqhkiG9w0BCQQxIgQgZbqzlhOgBEuGwHdmR7E8Rq3n
-# RzArtPZb5nZePdFotn0wDQYJKoZIhvcNAQEBBQAEggIAyXavJvdZWCwtTzpef+hK
-# I0IMU3YqjmsAa8q8yzWwTJ2nSkdFtJ9IBfo2txpuX2RPIx5R/nBAQDGfy2Lg1Qr1
-# Uh5UZbcO1l14r7Rc6Ds6Rr5y8u4RgrUaeMdBVP4nARo2XTpRSwfUpIPQL1SdTLIX
-# 8ab5W8EMWdit92JWKqe+Gf14g2fwp3w0KZBKK99u6c0KkfKxqT+e/TQBoktUO63I
-# HIZ4WlxKHPZeNdY+u1KEJ/eAkCDJF5oiEtuLx9H0zTa52dnKz73HRN8dy3YIIiZ6
-# oZK4Wg727VoJ0Yf7v4yF0Tetto7McrdkmB2VsGcWpFiPda38Lo0qAEKFr/GyuDcK
-# g6G5AE1OU+Eg0X5I7spgafHa6ZxVJKuB/+3q3PT6zw1oUesJFmRS6G7EUh7FePti
-# CHqTyzVdSpI2YJKVOjL2Q4Z3v+BROzaXNwfUMSoSwn4tDWncPkwG57+EO+cjtfV+
-# H04q7RwO65lE5VAuEsqdulqziOhzYf5E/zmeKihW3Q6uJQcrghgrYj+9TgVnsegG
-# WH/o2pVCuOLqUvvl/HTXfVllgD2OC4WeNyrdf/ksrvYkopWmelhEmjil/whRYeU9
-# +jvSmrnoadd2A4eOgDOI1WgAyNLwCz0pSrb2dxTS87UeG4I428zwIdVJ/FTsoIyi
-# EnbxtAwpjynX41ibX9b3oTw=
+# MjUxMjAxMjM1OTQ0WjAvBgkqhkiG9w0BCQQxIgQgAknW9CELvnTM/QFrfSdPce3w
+# TMwwowIFV/EOLPuxbZ4wDQYJKoZIhvcNAQEBBQAEggIAu29qJtJTPsCFAIu7aGFK
+# pS0TgiaKRY6H6P5Vz/YLgXxLPUPltYPX/nQs1nYgyFGNUctO5BTfgGuKis+1nOOk
+# mU8SfTJiTc03Aa76ZvJN+MHKGZcQ57hfPWsKW9nWGb3T0hAMkMnBp/fSY25y5zy8
+# I7jVchov2sZRDLn9HxnOCE0mvngc4kXAu+Fo+Xivg12Kl3yP9xIM8jgkgVrmwo35
+# DJp3uueepowcPFPgIl7e3UFdkY3J5gD8iufAAEq3Lo0oZLMG3WeJ38Rf2sbE5POO
+# o+xMeNeqNGwVSlNq3m6NY/36QQ+tzrtA2bKJ7N2cKl35Iox861s8Yn08jfCJt1Ly
+# aUgN+4q093KeqypyCvrCYkx556dzfjZuTsL9BlV5olsx1JYzcoe1cJrBfQaVxXEE
+# lDsecNCPmebV9xxbewJyaLZjg1a5vBENFNsDho0lBU7KYqId0O49xNGMLh+lkcxu
+# vk3VSepXGvH4vF4VUcgsHIMWfVmbdoUhky7c430ls/Q+o3z0xxK2pIEFf2eJ/lwm
+# PpHXEvQeWDiSjGCnin9ZOf08zHqDv8v6tHcTvuTSiZVbTGulq1nSvN40m5QwXi36
+# K6tlUumU6mzz3S/Va5oqwv/2hIBgFpR//1i0sJ2fASfoKmFoDy7eWJgyVjhsMCYG
+# EmjO9Z5Y2RUYMoJOpt4V2CE=
 # SIG # End signature block

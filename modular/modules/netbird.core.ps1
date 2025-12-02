@@ -40,8 +40,13 @@ function Write-EventLogEntry {
         Creates entries in Application log that Intune can collect and monitor.
         Silently fails if Event Log operations are not available.
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$Message,
+        
+        [Parameter(Mandatory=$false)]
         [ValidateSet("Information", "Warning", "Error")]
         [string]$Level = "Information"
     )
@@ -71,7 +76,8 @@ function Write-EventLogEntry {
         Write-EventLog -LogName Application -Source $source -EventId $eventId -EntryType $entryType -Message $Message -ErrorAction Stop
     }
     catch {
-        # Silently fail - don't break script for logging
+        # Non-critical logging failure - write to debug stream
+        Write-Debug "Event log write failed: $($_.Exception.Message)"
     }
 }
 
@@ -83,8 +89,10 @@ function Write-Log {
         Logs messages to console, file, and Windows Event Log (for errors/warnings).
         Uses module-specific log file for troubleshooting.
     #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Message,
         
         [Parameter(Mandatory=$false)]
@@ -107,19 +115,21 @@ function Write-Log {
 
     $logMessage = "[$timestamp] [$script:ModuleName] $logPrefix $Message"
     
-    # Console output (always show errors/warnings)
-    if ($Level -eq "ERROR" -or $Level -eq "WARN") {
-        $color = if ($Level -eq "ERROR") { "Red" } else { "Yellow" }
-        Write-Host $logMessage -ForegroundColor $color
+    # Console output using Write-Information (pipeline-compatible)
+    if ($Level -eq "ERROR") {
+        Write-Error $logMessage -ErrorAction Continue
+    } elseif ($Level -eq "WARN") {
+        Write-Warning $logMessage
     } else {
-        Write-Host $logMessage
+        Write-Information $logMessage -InformationAction Continue
     }
 
     # Write to module-specific log file
     try {
         $logMessage | Out-File -FilePath $script:LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch {
-        # Silently fail if log file write fails
+        # Non-critical file write failure
+        Write-Debug "Log file write failed: $($_.Exception.Message)"
     }
 
     # Write to Windows Event Log for Intune monitoring (only warnings and errors)
@@ -141,6 +151,9 @@ function Get-NetBirdExecutablePath {
         Helper function to locate netbird.exe.
         Checks script variable first, then falls back to default path.
     #>
+    [CmdletBinding()]
+    param()
+    
     $executablePath = if ($script:NetBirdExe -and (Test-Path $script:NetBirdExe)) {
         $script:NetBirdExe
     } else {
@@ -162,6 +175,9 @@ function Test-NetBirdInstalled {
     .DESCRIPTION
         Returns $true if netbird.exe exists at standard location
     #>
+    [CmdletBinding()]
+    param()
+    
     $exePath = Get-NetBirdExecutablePath
     return ($null -ne $exePath)
 }
@@ -177,7 +193,12 @@ function Get-NetBirdVersionFromExecutable {
     .DESCRIPTION
         Tries multiple command formats and patterns to detect version
     #>
-    param([string]$ExePath)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ExePath
+    )
     
     if (-not (Test-Path $ExePath)) {
         return $null
@@ -246,8 +267,14 @@ function Compare-Versions {
     .DESCRIPTION
         Returns $true if Version2 is newer than Version1
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Version1,
+        
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$Version2
     )
     
@@ -277,16 +304,17 @@ function Install-NetBird {
     .DESCRIPTION
         Downloads MSI from URL, stops service, installs silently, handles desktop shortcut
     #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param(
         [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$DownloadUrl,
         
         [Parameter(Mandatory=$false)]
         [switch]$AddShortcut
     )
     
-    if ([string]::IsNullOrEmpty($DownloadUrl)) {
-        Write-Log "No download URL provided" "ERROR" -Source "SCRIPT"
+    if (-not $PSCmdlet.ShouldProcess("NetBird", "Install from $DownloadUrl")) {
         return $false
     }
     
@@ -372,13 +400,18 @@ function Test-TcpConnection {
     .DESCRIPTION
         Used for network prerequisite validation
     #>
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ComputerName,
         
         [Parameter(Mandatory=$true)]
+        [ValidateRange(1, 65535)]
         [int]$Port,
         
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(100, 60000)]
         [int]$TimeoutMs = 5000
     )
 
@@ -411,8 +444,8 @@ Write-Log "Core module loaded successfully (v1.0.0)"
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlAi3QgPXtyY16CIsrn9caZMB
-# 8UKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZ1G+ZOoodWQhQ6AdkK/zWLlh
+# omqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -551,33 +584,33 @@ Write-Log "Core module loaded successfully (v1.0.0)"
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# RuhWyNqY0+iUI4VUD0/mDygzgrIwDQYJKoZIhvcNAQEBBQAEggIARuUcgg5wHtTj
-# tFfgWRQ8McxtFtxnWyOnXbJS5PT+TuuLIaaspeCAbr9f+W7PZIoSXCNsXLdiZaeH
-# NrANGThRgXOk/55bBhN5vg9Eyx7pdpth5IFZtQ07RlHjKhQWwT2A8ibEXoIKb8p4
-# ujjcbjb7lcBAp+NG96ORo+1IQ9xWR3TbicqBiP4+Lq6k9dufvQtRPcI0VNX1EIOD
-# XQREEq1SDC767Xbhdb25bAesx+UsCLnkcogZ7KLXeqHUyV/KTMbpJlsbpvGlj0HY
-# eVUHBDHbNezFIZE5ql5q4LWn1nXpLXjHlwas2X6NRPriq/7tl0CSnHi9IM+rhGkS
-# CzqKb86rtkZvUySeUO0fW5wkCbGRV49Ru363AqAUZf6YrXBE44bRidlpM00kTLKF
-# fo5YNUOccsplhb3tl7c2Gw1fzWeJcQWv11vIaxgXv96OUi9BxYl55CuysC091HV9
-# RSqERIM45pIwtMSZcWoCf8H8yu3BrbafKKkkltDyKD5pHOVqRpmviihU7PRxqhB8
-# 7NhLvx5RHF4D7SpZHBlILtB1BO5n/E33wPzPHQ/J7dsGs90FlLvyZO7k5LSCgUks
-# 7jsL1kETPgoyDQwZ1husZtm56w2qpsJJku9Dp0m+IvILLjWKsz8tF0wj8VUsLAU8
-# 2UOis+GZn53s8I2HgNKFoQIsly8SyC6hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 0ozKYJFIosGu1enWdSJm4fn5KHgwDQYJKoZIhvcNAQEBBQAEggIAq7/VbYXCcyPl
+# MD1UCj1y0gVVX9jFPJy+FUAuSnMw1p0Qpb4cZ9/u0vixQtqoXTruXbDOtxo+aCsE
+# v/icjfJvBqUVmJOjOE8t+5M+6+vUd5VpycsCfmuru5QtuDaj4YUmp82uHdKyGnuq
+# gmH7PhwHRIu74daUC6PjddOw1mBFRVqaiUNScCGhANxOTQK3NjXjBJVxvg48CDZN
+# QcVHSB13VzJPTM+JuTo7WGu69y3I9A39sigTZ/0CIV1nkT4t0dNOp6VwLB53U3KS
+# Rb7Nyt3Ie0POMe9VMYPCYdnSctpgiM5AsLLji+t5WUDWQxRzeJVUFpj8dweoyIuC
+# z0P14+lLLD4eSPn4p9YMFycahec/3TlcF7VrD5vNNY28XxxTP9mshUPv8dZLRBsr
+# eEm0VWvDTVWtVtlieMEZZ5PuO1j0z2w5AAq6Bc+vayrVoVMEVHr1lksob1nNFGha
+# Ld+YlrSPpg3jimj9EfuYjyXHswlUfBn0Xaf7/BPdyvxNVMLJeROWZd/JBzJsRCki
+# oEPan4mNaGcTQ3Ox1HC5VTTTq3BTIXcPsPUv24LzLimvpJWmr8qJFIp1bYbVamaJ
+# hUAg9vZlc8FXXoWBvTjhxsJ7NeO7eb5N3etz8Wjyc7FacyhcgWTkZ/+SQayhQCoN
+# qHc8i3tdJBVkpjZhuaonAkEz3U5gvOKhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA2WjAvBgkqhkiG9w0BCQQxIgQgZzj1l6xSTmvpXfWefePO4sAr
-# ANVMjthMR03G1pjjnGMwDQYJKoZIhvcNAQEBBQAEggIAQL08vHd/ZK75Eypoevuw
-# wEC0ITz7cWIesQwXSPpZaqOfeEGYMfB7E20KG+CLyF7/ompYOAwENIJmYEu9BSB8
-# Op7BC9dOmLXQZrn/3chJ/dovT5rc+j7/pzm3fMk8JAwIKxdv7e2BphqZB4QpgkqF
-# JQJM+FXvi44FqxQSqeP2rlrjU18Dsp5fyUXBCp5+YffZM4ddUdNEn+GQXQPAiZeP
-# Fh1jdrP7L5wY7i+jVgB9Ts3wm4uMWwkOzQaWks/5e59Dg6DW4GAb1rOMLYLNiz3M
-# bN8kJzLb42pxYn7Ov3iYI8a5Y1pJnX95eNURDAqvXrkYju24tsc/ODV23qdCclnn
-# DQm/w4SAIHGSElJBu9T0EIvom0yA9f+G2U5vpNNYdmB8fZMBGhx5X8bXYzZgNaJq
-# 0l6AGZMAgHmmKbPfkOo6nEa5FCxaBySrj37UbxK6jHiNqtTpLc/fpunzyL+9vLrN
-# eBXyPoxWESzlgTp9swFroaLr96YVR9zvmWMkHWS8z1y7N9CDQelhutZY941sGzhK
-# YTvtMTc3+qu2eHlD705BIqcTVMdfkfOMR8QTSuaJfKwiMfoFXwKdqJ30VJ6Dhpjp
-# 6zQIF8lTVOnHd1Z6IvMHQaE2hqPLdq4MpUbP3s0UzV0Z6nJjGhGS3jwWy85nGHZ8
-# NDa0vauJ/Q4KtOfcEYzgDCI=
+# MjUxMjAxMjM1OTQzWjAvBgkqhkiG9w0BCQQxIgQg0ZcS7SSUEqsQPlyzX5cSzvSs
+# EE1TaBB38zXqXgQH4rMwDQYJKoZIhvcNAQEBBQAEggIAjnjtqOS35OI2ql1DjOfR
+# 527G+7tiaK/Mdan7tnsb1iOdxdTbnZHgRDOz7M99yQ9v7j6cyRCEShnPYO/c/xGv
+# y0T571fDsegmMH/O5v4V2n11sxaaPuZtGWY7kL6E7xAZnWTo/rE7tWRT4F4ZhYMk
+# RW8LIWIaCn8bgfkGGYWUILPVU5loFwWvi5SIaRRhp6nDKyeCD86yC6Rs86mfXZru
+# UMO5fCqIWUiRSBc4a9TcJsVJCMa+59dtipl4TuWib8aekIh0J0CUxHvWBBLZ7rSq
+# fo0OzWSsgpJvzILpfCPUAVoDbdTO6SJE2GQlxaEO0QupLq0/rSnKTJ/brS6DDVrT
+# Tli3pOBAz5GPUhC8aX5D5W1hzNovxv5/SUY1OYCK3s2bfhXrJGttAWcUerhqFoZw
+# xY4+VB/m9cowqf3Fnts7JFJ3uUsU+7MmFXMIQLImw8/FgctrvXf5ead9daaQAgUM
+# kuUez0vehKRi1pgl1u8yRYAahvD9cNOvfKiwjtL8PBZJkfyhO5gTgvMAlx9Rigob
+# JE6Rk0P1DVYZwthNl7EicQMgehTsk0kb9vVEZYkn70pzV4CluQLuA+h+eoRrhLi8
+# adNPVfOYsMG2hhp6WalD14FkgJIuObPOw6UdvsO2ZWjyQxYEJL+yEK/ulMjDH/jb
+# k+2XHkYd2SIuD2xEWQzIyRc=
 # SIG # End signature block

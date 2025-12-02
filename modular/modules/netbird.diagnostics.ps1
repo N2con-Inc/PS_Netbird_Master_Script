@@ -21,11 +21,24 @@ function Invoke-NetBirdStatusCommand {
     .DESCRIPTION
         Handles transient daemon communication failures with intelligent retry
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
         [switch]$Detailed,
+        
+        [Parameter(Mandatory=$false)]
         [switch]$JSON,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(1, 10)]
         [int]$MaxAttempts = 3,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(1, 30)]
         [int]$RetryDelay = 3,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$NetBirdExe
     )
 
@@ -115,6 +128,9 @@ function Get-NetBirdStatusJSON {
     .DESCRIPTION
         Primary method for status checks. Falls back to text parsing if JSON unavailable.
     #>
+    [CmdletBinding()]
+    param()
+    
     Write-Log "Attempting to get NetBird status in JSON format..." -ModuleName $script:ModuleName
 
     $result = Invoke-NetBirdStatusCommand -JSON -MaxAttempts 2 -RetryDelay 2
@@ -147,6 +163,9 @@ function Check-NetBirdStatus {
     .DESCRIPTION
         Returns true only if Management, Signal, and IP assignment are all confirmed
     #>
+    [CmdletBinding()]
+    param()
+    
     Write-Log "Checking NetBird connection status..." -ModuleName $script:ModuleName
 
     # Try JSON format first for more reliable parsing
@@ -225,6 +244,9 @@ function Log-NetBirdStatusDetailed {
     .DESCRIPTION
         Used for final status reporting and troubleshooting
     #>
+    [CmdletBinding()]
+    param()
+    
     $executablePath = Get-NetBirdExecutablePath
     if (-not $executablePath) {
         Write-Log "NetBird executable not found - cannot log detailed status" -ModuleName $script:ModuleName
@@ -254,7 +276,12 @@ function Get-NetBirdConnectionStatus {
         Helper function to eliminate duplicate status check pattern.
         Returns connection state as boolean.
     #>
-    param([string]$Context = "Status Check")
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Context = "Status Check"
+    )
 
     Write-Log "--- $Context ---" -ModuleName $script:ModuleName
     $connected = Check-NetBirdStatus
@@ -272,8 +299,8 @@ Write-Log "Diagnostics module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpR7gkCS+KgpTdppvBGPjKiau
-# RtSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPfc6plZ9pzggmw7rpcSJy6nl
+# n8+gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -412,33 +439,33 @@ Write-Log "Diagnostics module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# zrBHPV68dn07I+xzUpceo3UFKIswDQYJKoZIhvcNAQEBBQAEggIAKMAd0Wl7C1sV
-# 3Y3G0Bd6G+7Hdt5SrkrBChY94weWTfMgyp5BxfK4G7OXedwiuHvL0FBdewi0lJ9N
-# aLIyYRwen3O18xi2oyiY2O0GZmDStHIhSt6YP0wXp3jwbAYIV/2y7aufp4iGkcIx
-# qlWtjoG42xbfuEkKOV+VKLfA99k+S4XBF1LvWXmQWSY0718Elv9pi/EVyLgj5oLW
-# PWMALZ1M0sqofkY3jvZaWbvycH4efCP9IibCl2SwPc4nagRJKOjL2GYfz3gNKBp4
-# Z8xkjQdCeUSsvtzWwGGbZ68i9lWXEPbqyx4hbxReZgOv9tExZ39bsTR+BqszpXQA
-# d8Pzsi2VVwDcOD97BqFMuKSEJYC2+M6rXs/y6CuiA9lRTJrZ8vR26wtcWVyHfgId
-# XjiuCqh2Aug6vRf5VghflYScL3IDpikRt3tDnTYA24wzRZo6EHNMhs00bThDCxR9
-# XSfrOJyP9re29ihgrWSI+IyBj0pnRCqxoBz5DDkzMXlUdxbdVnc53pLGPhmtOwpW
-# 7l+4cWZeXWGFV/SWILhae9woZWuMNqXb6SjrE45Q1dn3k8n7h5EVvqcgS5qxXJBe
-# 7bgbaS3mY27G0uXR3/OZU25kErppH2xlFrehuYl1g8xelSiYuvFfxHOVJUjKNrey
-# 9TdHfDSLPBHYEwsbR+BHQT/evF1iWsehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# LJFJOoq1k/+tqYRLQ4vN9P+8M7swDQYJKoZIhvcNAQEBBQAEggIABShzLnsSnvJK
+# jF9yp/KLt/0XBV7w85cZ2E1COCFiYFb+Bi3WroZO9a9TXlhtbNAFVWKu0jPyrj9h
+# iKhcPCyEw2xj2uAkjx9XrjrctRYr4EoKeyWfPEny5Qr5IC94jCayt0yAzEruQLaX
+# H++o/vs60m+xz3OrIFArwUcmHGuUboJWgK0BaWW+yTlKksyIu7ZvPfnOsaAD3XTS
+# cz8eKh3dPBpzp/OdfuX+SsbHkx9IlJkIorQAPOSAn1Rsp4FTlFsexkBPsbzdGQ3L
+# k+knGPWZhv4hI4hdx7jfqtS8EWRqONP12gGKwehTpbBGIdYuxRkPGSMuMsrv4jg3
+# sqoZj5P60stuGSiLZf/EF0+qhEqBxEKo7LjtTTneAKz+Kj+Oy4BZUK3IxRtfaDS7
+# KilzbBMutuN2HzkXBszrDpZeeXAKfnBX8xfO2NfVH1lyoCK0ofLOj7Jz1fXiSnSC
+# EVZPr1hIPn26pkuP3Qnp9XW2YxBSrQt1GYpzymoLm+php0L+F4YjIpkZNsFvsuTR
+# Bhe5Jk1hArWXmVmEJJBfTriIx/RrAUJTvhw8cNhWp7AVAuOcmSI86c1yPvhKMT3U
+# yvLS6/KLpjrAtLyvsDWk/teT17D5TBXliTFwYRIC23ilQH/+JwDIUL2/6xu4cWhf
+# sKACC+Sbe1Z2+ixdh0dldAcyN6DorQ+hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA3WjAvBgkqhkiG9w0BCQQxIgQg8nbIWGqzrdkm08cSSCg5DR78
-# wRhHdUE3hyZONWM2q24wDQYJKoZIhvcNAQEBBQAEggIATPMgYrpTzvadBz6MmfJe
-# 47rwe77OgVTgvPhz770v7FEgnQnu8Ln7VVTGMXBHqU/fnpNRZZKPZjXVw5m5pCht
-# AuXjzfvbSqtHz8bubrK+6rtvriEp63swCS2XlEJ+LRkfKm5zvlXbisrJU9JEidpy
-# uME0k8/Gzw1T+fO+IecxBUDROFruRkIdN6GZpkQkutiY8fp4kFiRPbfrWanRXwWZ
-# 47ySyEn5UVildZSp2o6sPcKfQTk1Ez/RgYBkIuP/WtXWhBUAN2YG8xsFh92top7J
-# OlfLF58JAvVTq8JZKr6o5SBxyEwPvDlE8LrToWAh1eJjIeTzBrZDH2BVoBP5bkGZ
-# dvNggEnv1i95jpJE45QXN8aWHI3Kzin8j5Y0kiuXt9FW74gXiLrgRM3BkV+L+aTl
-# 63xPS8N5AXtbur0wuF61XxbPanPniwXSA84CnQ6r9fvVlJBk11ehGW8xaGHFw6fD
-# akc4g++lal7kxkKNRReois1QxgqXWFQzADDXGFfPvUW3swepRfPLNzJJIKDioalk
-# fcavFtIpOiRLuB/0tUli6fRvnQ2U7TizFAwGlXHTomtIkifU1acFlsscQpgHy6n8
-# cOiE1QgBLXsntr60EksC3tCJe6YdiAp5hMm/lPIFHuKc7G33Q3/yqWx/H/pmyplT
-# FBdpd2//Bsk2djnLBdLqECQ=
+# MjUxMjAxMjM1OTQzWjAvBgkqhkiG9w0BCQQxIgQghh8vxrNJSdD5we2S4cEYE5GB
+# +/JVkfiZTeKkfL08X70wDQYJKoZIhvcNAQEBBQAEggIArfvQMIsiUjqaWg7OT3gL
+# GwGirvJaxgrOv8+oBaoA0bEssVC7xEbTSI5n2vgf+gSWsxGmrYyJkNtP7IXcbqQl
+# +zC1dDePDysrLgfymnkUXu+ifmmyyj2NAVIXvwRQOVsXdsfMck8dJqLzTynW3iOb
+# OaEDGZePQZS7mi/hh46mr5xnQIYzdQeu8va013FMff+vpzjQ+2C/+VhZGrHO66oY
+# odT2+NZN94kSgaH0t/QoLS2UmGljZrIm44L7WI7SHjU79ITZx5Ls6n1ss6gUaXvA
+# WMSQPhYLx7oNAGAHV+1I3tuYWjmKuZhlXP0pUDoNVoZxUVojNL/Vg/LQ4FccYjA4
+# H7KijgfdxXQb8UesVO4wVbzDVVP4CR1xhwgWznzA/HSkdOJKnINvcL24K31T2WOg
+# 8pQM6wwZtkRBXDO16kYN1lF0EV6AwTaOAdcVIgGYUcn8UayOvbghoyxU+Ln7fIbl
+# SH1ZHTW3cszqb9Nkgrj2rODXzISE5sUn9/7q7ZZDFX7k5HUJVhLAz/GD7FLda0En
+# HOu+IeUtAqv7a19LpDZ2srEc0S5HtCgZazzk32fegSew7dkzIN4efPtz65NsZb6i
+# FT2WjCTkU36W2wN0QaUkukntQ2TC93pKBdunZ+ONrCyFWCM/nc3mqHpyjYC89V4Q
+# DdGA2U2KWr/1nwWiXL2yRJY=
 # SIG # End signature block

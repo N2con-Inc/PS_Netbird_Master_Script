@@ -33,6 +33,13 @@ function Start-NetBirdService {
     .SYNOPSIS
         Starts the NetBird Windows service
     #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
+    param()
+    
+    if (-not $PSCmdlet.ShouldProcess("NetBird", "Start service")) {
+        return $false
+    }
+    
     try {
         if (Get-Service -Name $script:ServiceName -ErrorAction SilentlyContinue) {
             Write-Log "Starting NetBird service..."
@@ -56,6 +63,13 @@ function Stop-NetBirdService {
     .SYNOPSIS
         Stops the NetBird Windows service
     #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
+    param()
+    
+    if (-not $PSCmdlet.ShouldProcess("NetBird", "Stop service")) {
+        return $true
+    }
+    
     if (Get-Service -Name $script:ServiceName -ErrorAction SilentlyContinue) {
         Write-Log "Stopping NetBird service..."
         try {
@@ -76,7 +90,12 @@ function Wait-ForServiceRunning {
     .SYNOPSIS
         Waits for service to reach Running state
     #>
-    param([int]$MaxWaitSeconds = 30)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(5, 300)]
+        [int]$MaxWaitSeconds = 30
+    )
     
     $retryInterval = 3
     $maxRetries = [math]::Floor($MaxWaitSeconds / $retryInterval)
@@ -102,6 +121,13 @@ function Restart-NetBirdService {
     .SYNOPSIS
         Restarts the NetBird service with validation
     #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
+    param()
+    
+    if (-not $PSCmdlet.ShouldProcess("NetBird", "Restart service")) {
+        return $false
+    }
+    
     Write-Log "Restarting NetBird service for recovery..."
     try {
         if (Stop-NetBirdService) {
@@ -131,8 +157,14 @@ function Wait-ForDaemonReady {
         5. No active connections (prevents conflicts)
         6. Config directory writable
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(30, 600)]
         [int]$MaxWaitSeconds = 120,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(1, 30)]
         [int]$CheckInterval = 5
     )
 
@@ -210,7 +242,7 @@ function Wait-ForDaemonReady {
         $totalChecks = $readinessChecks.Count
         Write-Log "Daemon readiness: $readyCount/$totalChecks checks passed"
         foreach ($check in $readinessChecks.GetEnumerator()) {
-            $status = if ($check.Value) { "✓" } else { "✗" }
+            $status = if ($check.Value) { "[OK]" } else { "[FAIL]" }
             Write-Log "  $status $($check.Key)"
         }
 
@@ -242,9 +274,17 @@ function Reset-NetBirdState {
         Partial reset: Removes config.json only
         Full reset: Removes all files in ProgramData\Netbird
     #>
-    param([switch]$Full)
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
+    param(
+        [Parameter(Mandatory=$false)]
+        [switch]$Full
+    )
     
     $resetType = if ($Full) { "full" } else { "partial" }
+    if (-not $PSCmdlet.ShouldProcess("NetBird", "Reset state ($resetType)")) {
+        return $false
+    }
+    
     Write-Log "Resetting NetBird client state ($resetType) for clean registration..."
     
     if (-not (Stop-NetBirdService)) {
@@ -295,8 +335,8 @@ Write-Log "Service module loaded successfully (v1.0.0)"
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkaksBvYIYt1HO1tSdbHELZQT
-# sWagghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUToc3xqhpAYZIIyWw7tNOKC6q
+# jc+gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -435,33 +475,33 @@ Write-Log "Service module loaded successfully (v1.0.0)"
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# j3G7A/o3WEF6nopvSfzOKKSTRnIwDQYJKoZIhvcNAQEBBQAEggIAblITjsyvrEif
-# BivDwQcRVGKFAiUz50Va6drnbBF6sDfly20wVMfmIU56rVVSx4RdFWhMalwnBKEp
-# RDFGGOyn/gPjRD6NJ4YUgl4N78MDIZh5siiDWhgbzTJZvo0xb+jCoW3XYz7fgJiP
-# B2cVVOYsm9PQCkNTx3QYwxf1yPsKYi9YAU8foAz6PkiRvn9QDxMlAwVNIwpS/fHs
-# q7bOQJVPhAEs0PRwPcrxnG3IjLW5UZAzkHKDCSP7c/kSUGeCh+Q2N4lz+P9nE4Xj
-# dPcq0GQmMMh9ye05sQvgRl6+5P0zmTtCbcOoEQZhLc/9k5qUMHwetBt+cfh8bE2M
-# GrG4epbYf6MUbqkd/Odov7q0Oz9N+Ex/69QQZgu0vts0rW3KWry7O64KMnxxfvZK
-# b+ux1gVuhkxFZlwewTHEO/yKIxBmZPKr6p0zIZjKsP84cWoDfPh6hfvzXyU3SDNo
-# CzSJBNSSKfSoRDVxtazHD37zVJ+ciy5ZR4sXPA/rExeIsW12lGaTy0ACOmtX9qeq
-# vx50euXOeNMs9ecLTvhys27ECOeN03EgaT0CKwaZ/yyaIWLWxL13sK3NWaICDvuu
-# sLRFdIZRFkUcHcXfUgg48XEkJ4lIHBb/pxy3rLHIB4ZhUgq3LZx48LrhRXOUqwHW
-# 4exgl6c+QLPUeb9UmXRwFWL+Em0GYV2hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 8Jiwjlbo4xxNmEvCkyeNggak9zswDQYJKoZIhvcNAQEBBQAEggIAXAF2DzplSJQ6
+# h5D9oARgY0HTMGTv4yD2EMWdt/4NdCfnAvGAHVTlspDLp7CCkuZ97N4Y33HLW/CS
+# XrfGUi4f70+Hdysfi+Np/ywZ2YPwrpmZIhSmKOon3Uub+d9axM4AmLI4iCAOTPtL
+# b2MqE8mPZjfjGbsqpJd0Jjgu94YZfs70Z+jnsIasv4Ml8GfTfw4wq3TxpqyuVtH3
+# OOrJvNyrVJ70qQi7PDme5hBakgCx3a7DCiAptwMZlzSPvRSR8tn6gaQ8uxzZ1R8E
+# PMRP4s2E5kQrg2JpDZJB5FB6gTdzFnDbV/kwS6tuDb5EFsXRy7DC5NuNx+q0OICw
+# 7cCWnRNt1+sTTdkNUTL48pLF1+jb3ZAq5WKP9ayG1ppfJPZsAECT2j7wmozWnNhL
+# LUsRRiYHx6biNBumLFsF4RejXFaXf6OU8ARwX9qfc/q+gfkxxN2EaC68+f9gzFYF
+# g5QL/cYNQTlLmaItwqnYOgOB1B7evAnFvNX9ajvWvkAAwCpzljeOMhlODHW+mFkJ
+# XkXxZki+ojpB6XvAGrgb1WK1TV/eCfOw4JH3b1nPsZKiy+54RxOM0nVRj92KQ0ft
+# C4NlobhwX4o7E77960QM9ADmoOo4kemif+rHSFFzuNxFlMRhLjvmP4y+g3Pz0Ju2
+# ovVpxf0FufNrAqiafe7YA7i1ahygkPehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA3WjAvBgkqhkiG9w0BCQQxIgQg8mavfEY3m3JNP83vnxVXDMQi
-# ZqnGY651U8dzK61qRrQwDQYJKoZIhvcNAQEBBQAEggIAeqqEE5JVzCskrD7AdCak
-# svuxRg23rTD47G97QGyeZOTF9kfJEArCYQBwTbNYCkUN0A/h9rPjWyhf15IUmeeL
-# bXbjCUZKa2kbqByLG4rjxzjfnp+h17qXq+2wOn7tlesQf30n+OxXFR9LUTEhMBm9
-# XAAZR7+TGmFZJ3SgdRuJ1l4pInYabEECL1HyUkQ5g1KxDzXhDCX2Z0uVcdaiuZIl
-# mwJfAMTb/gAJw0ymegG6dPDFP9LZ6ZqyK0WEe84liV55uEnmaEJJv3TvLHQBgHpE
-# nCwkamfnDBA37PGHiPmDpUB+i7FLzbO8msunpET8BAqmN+kI3f0rfUx0GwpX1KGO
-# R35V1SEKikd8WgtpLTP2DGIEZmVvmG3U93cQ8iAesKoS4m9OkzRilGhJ06fPrpS8
-# vspozxI74aOTF26dgHsaz1whQE+Glnqcmna54IglT1cUiCCiTsgFBaMCwI6W1HhB
-# Xt1GKzVcq0Rlm1bLy/shYQc2F9qN/sdXOrfYJOjX6V/gJIr6g5F1kDliqlaK+LGY
-# BxRc6/lKdtwzvnRsF8Z09L/bo4juBhvAfnFLh19c5FZnP9jIPCdvSRzOTlAt3f46
-# ZijXCC8RBPpqNR2iR7eODJl6B0dPXyBPnPfZqlRi1qx1ytc6b44pANy61/stKsSQ
-# RlyPoKTWn/SjXpkw1PHIqYM=
+# MjUxMjAxMjM1OTQ0WjAvBgkqhkiG9w0BCQQxIgQgLNreeiO+Npjwo0BCl7kiJQoK
+# bLQ0ARSZcE4yZ8co/lgwDQYJKoZIhvcNAQEBBQAEggIAm3VWu+ViAPdMKGMaXVk6
+# T4hJ5RzhejO7d+0VESyOFpOLXDlS7ihBkYdqLmk8Z4PyXwiCuqy6s1kNoU4o/4V2
+# vDtbgUw0mwFUhTzgG0tJgHipuZ0L9l2sKuCJBDrZM1QF+TKJN/a/plffZZYbLgJB
+# /NvSIFPM9Ayx5Zw3kk/Nbr6X2JKEFohR/T36M+AV3L5mXMzmiYBJJ3HbYkaa+6gK
+# WEBiyrtS3Xf0Dv9YJy/BZ0zfDoyN9PLJfWMAc0pO/3qL6t+Mu80AHN0bvP7x2VIL
+# AV/DIGn7XLflfy2Z7F1jETFK7WTj0s0oZGiJjLRo9yHb33CwiHwvvwGFMyoRDIXC
+# uIc97Y9SvctD5djh1H5wCaH3McmM7iWp6tnpPmGY9sEiYhk0XcwJsvizm4tsz3GK
+# A/r64A7U3HMg16oCBKT4cQG9sn7JguOd9nr+Jf9GOfCIxwgPpRme+3VfcY2YNaHg
+# Yz3tzPQfu8wEreTE21HomhEAjR1oc3DL2MJCrb2UnkfNkpwXh12mLP+K3DioIRed
+# Kmjbu2ASzId5EoWuLviR7ji4CE3NWlVEoFmuFnkAiuNq/Y6F4i9wSxjs2tNkScnr
+# S5JYblc10jACQy5RnuyC7ZkZlC0cLg4mc+7Ei/CpQhcOfLzjufgdeYIqehlgsAb6
+# kUyqpUh30hhJeR417jbklVc=
 # SIG # End signature block

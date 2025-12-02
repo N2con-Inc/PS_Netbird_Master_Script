@@ -34,6 +34,9 @@ function Test-IsOOBEPhase {
         - No user profiles created
         - Limited service availability
     #>
+    [CmdletBinding()]
+    param()
+    
     $indicators = @()
 
     # Check if Public user folder exists
@@ -78,6 +81,9 @@ function Test-OOBENetworkReady {
         - Internet connectivity via ping (Test-Connection - always available)
         - Management server HTTPS reachability (Invoke-WebRequest - validates DNS implicitly)
     #>
+    [CmdletBinding()]
+    param()
+    
     Write-Log "Performing OOBE network readiness check (bulletproof mode)..." -ModuleName $script:ModuleName
 
     $checks = @{
@@ -89,13 +95,13 @@ function Test-OOBENetworkReady {
     try {
         $pingTest = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction Stop
         if ($pingTest) {
-            Write-Log "✓ Internet connectivity confirmed (ICMP to 8.8.8.8)" -ModuleName $script:ModuleName
+            Write-Log "[OK] Internet connectivity confirmed (ICMP to 8.8.8.8)" -ModuleName $script:ModuleName
             $checks.InternetConnectivity = $true
         } else {
-            Write-Log "✗ No internet connectivity (ICMP failed)" "WARN" -ModuleName $script:ModuleName
+            Write-Log "[FAIL] No internet connectivity (ICMP failed)" "WARN" -ModuleName $script:ModuleName
         }
     } catch {
-        Write-Log "✗ Internet connectivity test failed: $($_.Exception.Message)" "WARN" -ModuleName $script:ModuleName
+        Write-Log "[FAIL] Internet connectivity test failed: $($_.Exception.Message)" "WARN" -ModuleName $script:ModuleName
     }
 
     # Check 2: Management server HTTPS reachability (validates DNS + connectivity)
@@ -106,7 +112,7 @@ function Test-OOBENetworkReady {
         $webRequest = Invoke-WebRequest -Uri $managementUrl -Method Head -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
         
         if ($webRequest.StatusCode -ge 200 -and $webRequest.StatusCode -lt 500) {
-            Write-Log "✓ Management server reachable via HTTPS (DNS + connectivity verified)" -ModuleName $script:ModuleName
+            Write-Log "[OK] Management server reachable via HTTPS (DNS + connectivity verified)" -ModuleName $script:ModuleName
             $checks.ManagementReachable = $true
         }
     }
@@ -116,12 +122,12 @@ function Test-OOBENetworkReady {
             $statusCode = [int]$_.Exception.Response.StatusCode
             if ($statusCode -lt 500) {
                 $checks.ManagementReachable = $true
-                Write-Log "✓ Management server reachable via HTTPS (Status: $statusCode)" -ModuleName $script:ModuleName
+                Write-Log "[OK] Management server reachable via HTTPS (Status: $statusCode)" -ModuleName $script:ModuleName
             } else {
-                Write-Log "✗ Management server returned error: $statusCode" "WARN" -ModuleName $script:ModuleName
+                Write-Log "[FAIL] Management server returned error: $statusCode" "WARN" -ModuleName $script:ModuleName
             }
         } else {
-            Write-Log "✗ Management server HTTPS check failed: $($_.Exception.Message)" "WARN" -ModuleName $script:ModuleName
+            Write-Log "[FAIL] Management server HTTPS check failed: $($_.Exception.Message)" "WARN" -ModuleName $script:ModuleName
         }
     }
 
@@ -147,7 +153,12 @@ function Wait-ForNetworkReady {
         OOBE-optimized network waiting with exponential backoff.
         Max wait: 120 seconds with progressive backoff intervals.
     #>
-    param([int]$MaxWaitSeconds = 120)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(30, 600)]
+        [int]$MaxWaitSeconds = 120
+    )
     
     Write-Log "Waiting for network initialization (OOBE mode)..." -ModuleName $script:ModuleName
     Write-Log "OOBE network stack may take 60-120s to fully initialize during Windows setup" -ModuleName $script:ModuleName
@@ -198,8 +209,10 @@ function Install-NetBirdOOBE {
         - Uses OOBE-safe temp directory
         - Verbose MSI logging for troubleshooting
     #>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param(
         [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$MsiSource
     )
 
@@ -255,8 +268,14 @@ function Register-NetBirdOOBE {
         Streamlined registration without complex recovery logic.
         OOBE assumes fresh install, so simpler validation is sufficient.
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl
     )
 
@@ -320,7 +339,12 @@ function Confirm-OOBERegistrationSuccess {
     .DESCRIPTION
         Lighter verification than standard workflow - just checks for connected state
     #>
-    param([int]$MaxWaitSeconds = 60)
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [ValidateRange(30, 300)]
+        [int]$MaxWaitSeconds = 60
+    )
 
     Write-Log "Verifying NetBird registration success (OOBE mode)..." -ModuleName $script:ModuleName
     $timeout = (Get-Date).AddSeconds($MaxWaitSeconds)
@@ -334,14 +358,15 @@ function Confirm-OOBERegistrationSuccess {
 
                 # Check for connected state
                 if ($statusOutput -match "Management:\s*Connected" -or $statusOutput -match "Status:\s*Connected") {
-                    Write-Log "✓ Registration verified - NetBird is connected" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Registration verified - NetBird is connected" -ModuleName $script:ModuleName
                     Write-Log "Status output: $statusString" -ModuleName $script:ModuleName
                     return $true
                 }
             }
         }
         catch {
-            # Expected during initialization
+            # Expected during initialization - suppress error
+            Write-Debug "Status check failed (expected during init): $($_.Exception.Message)"
         }
 
         Start-Sleep -Seconds 5
@@ -369,9 +394,18 @@ function Invoke-OOBEDeployment {
         6. Registration
         7. Verification
     #>
+    [CmdletBinding()]
     param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
         [string]$SetupKey,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$ManagementUrl,
+        
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]
         [string]$MsiPath
     )
 
@@ -511,8 +545,8 @@ Write-Log "OOBE module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUp8Q+x5Np4njrqcMKE31fPNL/
-# ROKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEVeUHToJDRDlFBiopMcJzVgL
+# nmugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -651,33 +685,33 @@ Write-Log "OOBE module loaded (v1.0.0)" -ModuleName $script:ModuleName
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# V3dtFa0KrdUzyczPWcQh/GjX2RkwDQYJKoZIhvcNAQEBBQAEggIAN4vLdJ9Fqg8r
-# 1w+WJxv6NPm3hjVwjFH7m5NtSodpBHW2YgtxoceUM2XPfssIPXmCjqnkb1NekCNQ
-# BGdP6KtT+2O0zvJq9gTF6KgiHS/9R1HtGbmSbaWwRXGl3s/wdrq8OPtMQDNm0Z+O
-# up0IEXQHXi+9eU5LCeAjibEMoaOnIxHzV6Bq94oYit0okNLXENsivd5az7QfwxQN
-# VVbgcjrPQbpRZfwmcs+Ou2DG2uI9vLQTOyW14yoVnkuP0pZAH+OGSLMzAsws3Eeq
-# axfVJE6YwFwTRoJKSnuAcVjiEYaC3ttsN5CqAo251hzARklsPSUE+dLR1P/8SmWh
-# RV9JAtZT6cmassZJ4VjR9dpE1IcyNy4xF3WDo8+tuhcjGg3iMx1IDMeVgItS9fm8
-# WHSPWoroVcPf7b4cbSYAGYvolT7+l7Wj/na7qYX9OBBejYFvTOTkNdQugGtXEQFy
-# //aeUBuofCNcGtuW/VdCirzf+XS+JJw6W/GBEGoT41khgIAZ+7VjvHokR243IAIQ
-# KRTnfYHYrQrvAN7Pulguvwa8GLBJ2nbtzBg6DASfYI6d9wdKPXYzj/QLyIW2Vlke
-# e0NA/n6LOuIYZ9aZgJu/3hfqif3K2Ga8aBPFiMpmAJ8pSOzOoJjnpqnc+vyRx1KX
-# 3njcjwn4txFF5RJ4lMCcbv8esy6vMcShggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# dkHryzq3/iskHXF7l60fpQuOcFgwDQYJKoZIhvcNAQEBBQAEggIAMn2SjgDdU+gN
+# xsPLzsf0TnEpI3c5OAGo1PG+vHAxi6M+wfRtVODEgI0XRvQQCSFiE3w/jHA/KF6z
+# De+moqp3wMriIq2rM1u70kQvVd/WsaFbsYbChr8zfDVzsg46lUsVIYxd6rzRF/FX
+# scgtQ4QspyyC8T9VKOvJLKlBB3xEDF2/OB+8jYcG266EvdQS3MyAU9U1FtWBzZPU
+# JMcNJHZUa8C4VMoLR+ZmhyRMam88T60tbuOcM/DNRldNvd8AE80mnyRolkcLj1qw
+# VgeXEgAj9LA8MshUn2e5v8nw5tHEUNXPGlS/HFmcBsEciWRlsR/gX0eE+iRejcGS
+# Uh6a9d5B9SPmQKaHY4A6iPIbxiCsHctvbADOdWoiv3SSewFTs/QrQdg9bAGfuUik
+# JP820R2S0sjz5uY/f92/dztxwtwYbQSNURfhrTQ+xLJi2WHbsOFMY7bUyvuDxbzF
+# jiWINQ7Pt1YWzU6gOfWyFzqKCXWmg6yYNUFkLmH/u2gAufC41JPEvwcHqJ5tao7B
+# rsbysmkZgbLYA6hSWo8j6vgKZzm7DqELQQILTr9w31U4FYmvNBFi/PZ2JeohajQO
+# D2ilVTOJ9Fx32IcpZiLUEOe/65StaPjCEqkR65Rltv4PKTEDB7xSs+k6X6wecLH8
+# 9QlcIGWLXocCNi86RP2AQ2yQbXPTmxahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAxMjIxMzA3WjAvBgkqhkiG9w0BCQQxIgQgAlMCt74HMRbIJR8osAt/b/hY
-# IIp26ovP2/9lNluEWdMwDQYJKoZIhvcNAQEBBQAEggIAuhPqHDgoApOJpaUEQ5EJ
-# rpF1DUNx0uumKj1aaLURiNkbpcG8cLLYd4kPCIBoOxZbob/2VhEkJx/xyAybJrMn
-# YDQD6wHRcclOQGPl/y8OUWON17aiECaOdNw039blcJ63vukRlSqvkoMyH6VgoF7F
-# VwnlsR7U3MPSaEQR98MljHYr4vi8Cv/SR9XLYwByBuImO0Cb471Ac4NVDj17tEcz
-# hVJ2k6t/eJrc8taE7q61ywIOxc0fkY+Fhw3VV+jlDVQMkyOOYepalDlC1WY1KHQJ
-# dsB/46KKIgtZO2mFWXDYUKh4aJVgbNCvLe6uwUzjezUmPuTo1ATYxoYijyj8wTNi
-# 9aDxAvHH9IPfKbr5ymaOaaq5K3sXtL+sz206NjeHeUhHXkC4XDP4IP/XQO37uNq4
-# op6MUqDpQj2OWXcT14jKGxgCD2HcNNBCorbPnfyeGhzEWCmHHJ6l7EPGlA89wB3U
-# 3AasRMNqe5YVMHK+vvE8rR5vf5Nk5K5WJbAoZ5SwhfuiOK74Vj6FViEGle2S9p1k
-# LLWg8xl2gaawrv1970gRNJDsTtD9IhZ1YejJxDSkJAMYI620nZ3bOpnxp53mCWKe
-# uYZuSlFGWuqN8iBle4X5YZCD0ORdqbLR3NQ+ZAsfnoL0dqXLKvCNMLMyTwCEn6VG
-# 1paLVR8KCHXyR2gyznhscAU=
+# MjUxMjAxMjM1OTQzWjAvBgkqhkiG9w0BCQQxIgQgFnaGL/WglSTvqrA5rYRQ52V8
+# mvLvpVY7bdZ9oeDxoGkwDQYJKoZIhvcNAQEBBQAEggIAMD+uoGlnmgDzR6hJGN2k
+# HSqiL6ErZ+YBF9VX6588z4xrnQvybT8wy9Z7xuc4BlLKRd/w4ebMbw5BOw/7aLT9
+# RFZY0o1eVnzK9ZgXw6a26W5AwAGmMP6wPVE3jS8IZkl+Yh0/HmRl3QCv79VnWRZQ
+# sloF6zH3B3UIr3TLjlavnWpjIbss+wu+dF37sjfYB44ma5F6d+g2ttR1EDhV5d/+
+# iq9l3HYbR/Mc6B6C8EGg9u3wd4okK+LJUMcWzLL/kBAcVNkLB9ShZ0hPqbTHxPQ2
+# zCkikyBqU1Dj8X2HO4PQcpphNhV5Vl+9NBSs7phCZiuFqJqjMkH3ZsFN2qpsUG7l
+# s3XBXDICiJiFrMFwQmyGIDXrpX2JnuEyxcRxDcIxkmPf3RBBFwhWcWpNg+RC987H
+# 546pJF9MJ+MWLZfpKqNTGq7COqZs9ZdFXmZnQC5oDnkbJFRKCskEV1ITTRUHnvKl
+# JuqRIZ7L228oMlYQKdykHz1Lb75Fmvc4Xyuatpedgzlf3tlZ9Gly5Rx5YLKzuJvW
+# 5UDn4MOmZluocZixyXwP7wsHE9yBzB37jWUiclruiGMAZVreOwnB4p7QCZDNeXxO
+# e/g5ltOvv2iKQk3MGNoeDuGQgjWTE6Lsi2PNaVBeK8lxopujiZ699dwZ0b6mJjpn
+# f2PKf36m+lw+Y4Xqomz4Uj0=
 # SIG # End signature block
