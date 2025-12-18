@@ -113,7 +113,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.3.0"
+$script:LauncherVersion = "1.3.1"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -752,10 +752,10 @@ function Invoke-DiagnosticsWorkflow {
     $connected = Get-NetBirdConnectionStatus -Context "Diagnostics Check"
     
     if ($connected) {
-        Write-LauncherLog "✅ NetBird is fully connected and operational"
+        Write-LauncherLog "[OK] NetBird is fully connected and operational"
         return 0
     } else {
-        Write-LauncherLog "⚠ NetBird is not fully connected" "WARN"
+        Write-LauncherLog "[WARN] NetBird is not fully connected" "WARN"
         return 1
     }
 }
@@ -817,9 +817,9 @@ foreach ($moduleName in $requiredModules) {
         # Verify functions are available for version module
         if ($moduleName -eq "version") {
             if (Get-Command Get-LatestVersionAndDownloadUrl -ErrorAction SilentlyContinue) {
-                Write-LauncherLog "✓ Verified: Get-LatestVersionAndDownloadUrl is available"
+                Write-LauncherLog "[OK] Verified: Get-LatestVersionAndDownloadUrl is available"
             } else {
-                Write-LauncherLog "✗ ERROR: Get-LatestVersionAndDownloadUrl NOT available after loading version module!" "ERROR"
+                Write-LauncherLog "[ERROR] Get-LatestVersionAndDownloadUrl NOT available after loading version module!" "ERROR"
                 Write-LauncherLog "Available commands: $(Get-Command -Module * | Where-Object { $_.Name -like '*Version*' -or $_.Name -like '*Latest*' } | Select-Object -ExpandProperty Name -First 5)" "ERROR"
                 exit 1
             }
@@ -848,8 +848,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtRuR34Dx/tEad/kXtzC0Ur5q
-# XJmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/Xxvp+NR9bVuzXCz2wbmCkvv
+# WMygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -988,33 +988,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# SXOS8SP+HlzcZPgyymJYNQCFHswwDQYJKoZIhvcNAQEBBQAEggIAhzUpo/r2tKYY
-# EYRjiizTFvLDEUN/4WKEDYYtB99cxBh6lkJaH/yM9YtN2Ztto0keALc+2MW8pyQA
-# +Wdxlhu6Q1wGlZGYPZHR/8Me6CkEYF8Y/fv2I/5Mh35Ka8ECKBeKIlHoXAkohzMW
-# I6qscQ6Eg9y91QOjc79TokTG9vXW13+PGvewkeOo8zvG5uNjh25WlhnYUfsxfmZc
-# xPOjFj/lcuEF48pnIpiIHCTaYW1sRoooX0o4WERPHDtHKvij395aF5tZBa76zvyO
-# HZOX8kpBe8PH9hz89huWUyNkBZKF9+q/3b2mTN1LXHNzzpEXDzl/yAbhPc3NauVX
-# PtSuGz3F1fJJV+aGf1XyximvGGxkMMrxG3CTZTzZN8Kvni7GCTKiFiBdlmY3RdZH
-# l8Hjzsl1yibOKPKfUkGHPGOYFZLaktXIy/WBW7yV7Q0z7tgEBwQlQQRizUDOIBVb
-# r1edQYh3qwsiq6QGcXoIiwmP+DZk+PJixBkhfrd6/WFUmBlW8QAggbMG3RMRLHZ3
-# s4GL8PVvpFvyo8Y9806mYD3Hq5u/R0tE3Ufvi3yM8C6thPNF+ljVXTU1baYONz7w
-# 0G4OnXpMQdnMMUGlCrhHFuL3OfwTodeQG0DqxFOFRzAxWU8MTzGVAUY3T8IqS6My
-# Smeb3OMkDVsMkOYIjLo8S5OK79y851uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# nnReTpFnta4qktAlTYzcXrRDoAYwDQYJKoZIhvcNAQEBBQAEggIAgDB0jvrOfTBu
+# +CaIL4XDuYoNLk0JkvkLbVAc6qtsclaz4X7AZifa1/yHRjrr207LaIepObSlUgId
+# rQpiiPOoh21zBJKNVfQaZIl+1ZCHmur3oDCqPcBVhJyVtJ/QErj9rew7a8AuU2zG
+# 7GZtX1B2EyGCJ0CGpjRGvTpf5ZG8BgFVMB+2g8wC9cLT5YN6J2PWkZBZDjk5fjQG
+# 3VLwJbYFFRLHSTSnSKunlx1ZGt7xEBIaQVR4pPj9UT2pZ7akn4X5f6ZYMOd/zfbM
+# ZLIQK1u4B6HlpM1s1SvZvnbxyyIPWfWTo6fGCmpnKKZAr4F+9U2yx1miV8DWj2pt
+# bTQflE/SQHIzTn75sB24pek0xA5qwpAtXQwrcrKA2cw89HQablyWh4m1lzZuXi+x
+# pptqFK0NK8ZTesaXNP5fUSSHMoyFFToBO4o6WMYVx15nu1JhSTfeHmm6FzyCCuig
+# aYCG1y/HvbOtXJZTleS6FEFksNP8Bmvozljc4WrtDtQC4yFm9FzxadXyQz8/aPrn
+# Z3aQ+lKXaeD1CJPWTi1e9U+F3R3G0+dSLtnkFfa94VnIxO3as5lT/uI4d81WcPq3
+# zpAzdz2QyHzrVi8fSK1wH9/hHbANzcPqMqPJ9UomhPVYtfOHeiDxqfUjtxBn1yRm
+# nva5POaF/LzVqLLg+e9qK5ErfbROtFihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjA1MTUyWjAvBgkqhkiG9w0BCQQxIgQgJljg3Bktu+6mmwFDlsjFMkZ8
-# rijb5wuoufEe5U6UDcIwDQYJKoZIhvcNAQEBBQAEggIAnvjZwNKiJBBLKCVYkp1D
-# CMV9XUs8sVtHw4A5Ff3fCb5iETnGILpQWKpuUgMDKauqnaICe+3eaIB2VG8WEA9a
-# QsETBBjHhFHibFLkgtwjnOsmkLP7yJW/403ESqEZR/gS8j5zZZg56g/b1Hrd2vhZ
-# RWsSotfA8RpTEZmU+mbHqTMdNaruRWjSBtnFzrPHTiCxuxsgtc5YegYSKy9DQNZ8
-# 7AO677R+Del/JittOpplpOh665aFpqfCXEF+o9sAcEE8tlMBdw8b16+okddUchIb
-# LmVZ2bMkeVMx5WWZx260ielE69ONuMYGXGIIDfy6+N4+CWQmCFmMLt4rr7II8Byx
-# zCWOhKhtHFIrMFkuo5t5qiAwvCnLjivOrcxFPHQKioQTp9wnuc8/O74MmwRJIMps
-# oJLQHUCOD8uFVWICVWE+vvsBPfBpWpZKICpc1EWzlC+LSPE9CbHP8sqfk2yd1ULU
-# dovC/zRuC80v3YoMTHCIDUOIGZrRBHg9y+RPglgmy33hfpjM6pBHJjb7kBgXjhNM
-# 9IgCpaPzX4tjXjRov2pVw68o4qJS9GA3Wi7XT1fMhY6VGuumOqe96hEoDMAnS0qj
-# V36nIWpBbJy5FrXPjai2RxMPLidoFgoUyGqDZ+uiAv+BwxHLnfVyA2Eg9fJ4VLEo
-# A8bWm+JB3o/VMJiFSp6S+OQ=
+# MjUxMjE4MjA1NTM0WjAvBgkqhkiG9w0BCQQxIgQgnoNvwHP2dTFfyuJh58lM72N+
+# XjjiFKkcb/3eFkrr6jgwDQYJKoZIhvcNAQEBBQAEggIAhm2LOI+iga1j0G6+k8SK
+# JBq4Khq5LrPLnGPJ7Lp84/ZRCQssBncy8NIyk7qOKRo5+KGnf6oEZyqXexM7eSx5
+# cfzP5/LrSp7REwWB+q1K2Yi5AfTA6OSYWdiLcXtiTaNEIX0T6BuHclLLZbeV6hZT
+# 1cBBD6HzjCJGRPuXwNn0VvsI0Ct0TGd8woqAEkGSndzRA/1VV+fZI84vuRUIv6s1
+# 0ndNhlxQcqxfKrAn7/ARMwFBH13APWF+0NPtXSozglBIWwKpW13E6ZYcT7WEyP5L
+# AaoELw7eEQu5EvF47v0sgC12aUm214xSy/9T2UFDCXNBOf/AOrP55VsO9Y/Po/4X
+# 98huhgbf8Rm48z14CYwBbwAo7yWOuJwN/p6kNeum24nQWtl0Cc0B2nJKp+NA7S5Y
+# m1rPtFXvOlwMVRmQAlBscJqy4dPau0nidBrILZqI3fZurW8q9PYHmrANT1Q92/o6
+# PGeqPPoMlJLBrqTqbLXgJEvPfioM/IXIWA/Np4lhi9eIF2LIDMW/urG+Z6ZLrZ/Q
+# 8FKQ0E0o7/Bmgxk1ejhtNUbFRweo3qdFgF8QRg7jRnKDQwi5AOXCdbRYG2YIScRu
+# gRNyjL0Pk3+AA3axpUGFz6aBjXbLndR6QjVbpd1wrNkq2gZToHYw3J4Rvq9xSzhi
+# GFnB9lpj7Zge7gtMC2bcV+o=
 # SIG # End signature block

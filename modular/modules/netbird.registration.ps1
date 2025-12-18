@@ -1,6 +1,6 @@
 # netbird.registration.ps1
 # Module for NetBird registration with enhanced recovery and validation
-# Version: 1.0.2
+# Version: 1.0.3
 # Dependencies: netbird.core.ps1, netbird.service.ps1
 
 $script:ModuleName = "Registration"
@@ -253,7 +253,7 @@ function Test-NetworkPrerequisites {
     Write-Log "=== Network Prerequisites Summary: $passedChecks/$totalChecks passed ===" -ModuleName $script:ModuleName
 
     if ($blockingIssues.Count -gt 0) {
-        Write-Log "❌ BLOCKING ISSUES FOUND:" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[ERROR] BLOCKING ISSUES FOUND:" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
         foreach ($issue in $blockingIssues) {
             Write-Log "   - $issue" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
         }
@@ -269,10 +269,10 @@ function Test-NetworkPrerequisites {
     }
 
     if ($passedCritical) {
-        Write-Log "✅ All critical network prerequisites met" -ModuleName $script:ModuleName
+        Write-Log "[OK] All critical network prerequisites met" -ModuleName $script:ModuleName
         return $true
     } else {
-        Write-Log "❌ Critical network prerequisites not met" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
+        Write-Log "[ERROR] Critical network prerequisites not met" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
         return $false
     }
 }
@@ -578,7 +578,7 @@ function Confirm-RegistrationSuccess {
 
                 if ($criticalFailed.Count -eq 0) {
                     $elapsedSeconds = [int]((Get-Date) - $startTime).TotalSeconds
-                    Write-Log "✅ Registration verification successful after $elapsedSeconds seconds" -ModuleName $script:ModuleName
+                    Write-Log "[OK] Registration verification successful after $elapsedSeconds seconds" -ModuleName $script:ModuleName
                     Write-Log "   Management: Connected, Signal: Connected, IP: Assigned, Daemon: Running, Errors: None" -ModuleName $script:ModuleName
                     return $true
                 } else {
@@ -900,8 +900,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk+Ze+X0Kuhvs0wyqdc7TuaA+
-# GgWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWs1IN5ewWGgyMTZNEYjv8eFw
+# hDqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1040,33 +1040,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# qPPJDrfVJm/qpUZRe4L3Ng23MO4wDQYJKoZIhvcNAQEBBQAEggIAM9jLAj64S2gG
-# XDvRYnjyfyLIdinV6vTSW2rpuJesaJwc3bZLCNr0u01E8Se8OFJ/KGq76c4ssuOv
-# 3cr4IsiHkqhZCGHgLti/YYmE/gZbZ499uQA+Av+2+oy+LPOzoTjtEJQmR2IpM7LU
-# Sh6J7HfYEKbjMMPrRIi4WjmLEmGcqGxQYybpZi40DRGVQKsZHP2CcpKoIe7/8NHI
-# j2TXJqonf0TjOtfQ/iINoPwD4c4WbsoSHFTwEccANZBJYKK8pzIQxnVkJSWm+V4C
-# IAuaDU1dW19JX3J2ILN6BQ4CvgU7gl9UStC7jcZuko1W94SnRBsqGxowoYVzKXfG
-# 97xkUEfJEhfmJFRKnIMZkwa/CUZkGz0AEhQIyk0wbjf+Kyu5hhAMnsBa0RbcSdBm
-# I/cS+f3PDMdm2nDyRBL//fqSFCTeBqQ6qrUEPRzarucqcwdASiXR2So034jbrzWt
-# 82I943CnAxu6Y2xudTFylTwnfvJYTJ6o87qoypd3wMCFsWIZKljzygQe6dcMb0kI
-# uA39H64NNrVm8XC2n7JVfGdrRqz6CSYQVLSKbBFVQYj6pkua6NlNNfHtKLbkrOBo
-# eNky6MDX5vVQloWrYVlhyB6ajGNUx2W16fG42iQtcUVy0LGvhFTOrkIqeizHmo1y
-# c+yr0S2vsKm2XSqrUFPF5N9XwIS0KiWhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# tyAzFIkItMfHxHeNg1Y42rVXFJMwDQYJKoZIhvcNAQEBBQAEggIAIFG1L6guB7yR
+# W452OuXTBVTV3D22h6YR/6PR+3NO5ooKVG59FXEzKtk5c8uB+VJ13JhG2kbhyV9P
+# V5CmRgC90tF0W5FJveIlNDNDf7elUlDyQ9gwp3dCu0mjyqXLMYnSlwO2p4Y3Ldte
+# krftKgZ1gLRo/hDcC0fHhdpoeD6wV4MdwOxGYWSAs+M/IjLADtjqTJyS5SJhj5Kx
+# GXMaFCWFdpRiQcfVlzAdguI7f9S9073FSZjXhXPh/KNwxrQfbO6zmi7GEDS8/RU+
+# JCenOCw0jwsPtudUIuO7nFei/KwTKNwU8kVcwGIkW8K4+nztus3+ANBbXQd/xwGZ
+# D3JNISnRi2o2+ZTyKDDJ2OkxEOrX3jQPdwMAtfeJZQBgl0MBb94x4y95fd6q4M85
+# JrLFsCNG5jIYILUbSEA7rqrfzZ2snpomLmi3slTmpYn348AgjwWcDmW+5NILhxq2
+# ZSWnfynsQtAah+1t1Y1BjhEV2roPwR0IEWKaKiZhJo94C1rrw3nPM8pACVZNemFB
+# rrHHUl9/zUw+5WYKdgxMxgcIyYMIz/7BezkfV7HqS40oB/NZpJL+DhHB7G11L5Zq
+# MPacS+2B7TeXRJYFas7APahGg1zIgzQOpV2GdLrA34CJVwSrJbbI5p1ffDRj2TXx
+# IygksWStm5xQaFYAo/oIuZL1T2g+vpahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjA1MTUxWjAvBgkqhkiG9w0BCQQxIgQgY7KG5ueLl/c72yvDdh86dmSi
-# NP4tccsgdvbZI1Dwn3gwDQYJKoZIhvcNAQEBBQAEggIAN0vE4ZBz8nNjjL6+Iiu4
-# SzntogaFaCZcEP5YJ/DaG0uMFrbtgUFP8BCGcNVxeB1LU6YHJ9+QOOHU/cj6CESa
-# rVyvvdKVhLmX1RMov+3JKDcHjh6NTI5DHMcQU+MZ97P9KxWvUf1sbd1FRO7dgPOF
-# TjG97G2QLMbH1XkszO5+zrFXtUNTluTbSkfXl129Hv8ADdhw9TBvXq7PaWBE4X9f
-# lI/9X9nWiMWV5a2ZrPcV9509hXqskOkNDgEpTJ4PW2plVEZni7j9++KKW316Xja9
-# 4TC5Fbqquv3BqZiz72a2st2NkbxrWlwsM2DyRFwUID8TTLJZPz8PjzBqrjkzfk2+
-# jRpk60ZqhLQrEJiyBkk9I3aOrBGA6khgnF+FSaVYejJk6Cvu0ShGgcnDnSRcRKSR
-# ELJQzDna46jx/S4hyXYheE+zlwO9lbKHJsBzyzz6NZZCa8Ep6VokqYg2Z69VKLpP
-# WYnuDVjPGTSMXRTFc1XI73LkXXiY5Vbt0ox887bjEDKhFIPQIeXJhCn46S9yWf9v
-# BjjRG/Bfbwd4BmQVD5Pz4WBbkTyLljMcJWQrq5c2qTRT8qGvowEmfWrxwkIhaZU/
-# VieKyCId3n+f/EfKCb2/J/W2GQhDBmm/4vyy9F63vc7XqkYWq3mK8R3dddYWJk0m
-# 7PzUMFzPixtB8A3pgt2CXok=
+# MjUxMjE4MjA1NTMzWjAvBgkqhkiG9w0BCQQxIgQghOho+akWKcKCM96Q0TySrOIR
+# evCToyXBJm28hlgKsZowDQYJKoZIhvcNAQEBBQAEggIABWqKrKFKs+qPvxVjhqPk
+# P+5U3Kr5XDHW6OhN81OjH6n9ylxAs3sMx2mcbElx7hDJS7j27acl8sOxAiYoPbpp
+# MZiwsCHKa1wEndYaw8n5ZKC+whh1MGjfRfSM18r4nNoHGOnOsx1xmpHf8dhQ78hr
+# dcx3AemakcA1S2UKtBNPwybw52ZoBq924MPpVqC4IUo8ZoJvBPfO5JjAhBWvSAh3
+# F20fDY5BU38tYZXsJatB3vIzRVlXU8zaIIOlLsBeeAlM6UsJUUxRdsjDMIVIowHz
+# Y8rQnjX1GeC5Dx7f52okT56OMpcwI2jbG41pqfxwOf48z0jBYJEA7C+rWx2Cl19N
+# g0EfxP0G8kZTcCEs5UeKXtl6yhCqnoMvfKncPewsL3oiCCYKZ1Wfm3Piw6yUsmwl
+# fpuzvyAxi6wPl5yGgHDuJAhkhVHwqCGnhW0lZSbHopUGTHN2UtKieUdldzaULB1k
+# 0wffT2HmbqYnsY4oLey6Sj9jNGHXslUSuXAU0zUE3gYgPpcla6BIs1b3vppXW1Jp
+# wy7FR6HVWVLDggoGsn2JFPKz27iHWEGV+67H3WZvbJHUnonxgSmFxJTweJL2CEUO
+# NfGNqLt21uFPpRbK8ibzjyizBURPLcNAXxkQDJ/NajGVCZivJaY2JamX/c2FnD/8
+# RFpWDa7zwzWRyqmuFR9j1Cc=
 # SIG # End signature block

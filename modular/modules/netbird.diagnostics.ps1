@@ -1,6 +1,6 @@
 # netbird.diagnostics.ps1
 # Module for NetBird status checking and diagnostics
-# Version: 1.0.2
+# Version: 1.0.3
 # Dependencies: netbird.core.ps1
 
 $script:ModuleName = "Diagnostics"
@@ -174,7 +174,7 @@ function Check-NetBirdStatus {
         $hasIP = ($null -ne $statusJSON.netbirdIP -and $statusJSON.netbirdIP -ne "")
 
         if ($managementConnected -and $signalConnected -and $hasIP) {
-            Write-Log "✓ NetBird is fully connected (JSON): Management: Connected, Signal: Connected, IP: $($statusJSON.netbirdIP)" -ModuleName $script:ModuleName
+            Write-Log "[OK] NetBird is fully connected (JSON): Management: Connected, Signal: Connected, IP: $($statusJSON.netbirdIP)" -ModuleName $script:ModuleName
             return $true
         }
 
@@ -204,25 +204,25 @@ function Check-NetBirdStatus {
 
     if ($hasManagementConnected -and $hasSignalConnected) {
         if ($hasNetBirdIP) {
-            Write-Log "✓ NetBird is fully connected (Management: Connected, Signal: Connected, IP: Assigned)" -ModuleName $script:ModuleName
+            Write-Log "[OK] NetBird is fully connected (Management: Connected, Signal: Connected, IP: Assigned)" -ModuleName $script:ModuleName
             return $true
         } else {
-            Write-Log "⚠ Management and Signal connected, but no NetBird IP assigned yet" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+            Write-Log "[WARN] Management and Signal connected, but no NetBird IP assigned yet" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
             return $false
         }
     }
 
     # Check for error states
-    if ($output -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
-        Write-Log "✗ Management server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+    if ($output -match "(?m)^Management:\\s+(Disconnected|Failed|Error|Connecting)") {
+        Write-Log "[WARN] Management server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
     }
-    if ($output -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
-        Write-Log "✗ Signal server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+    if ($output -match "(?m)^Signal:\\s+(Disconnected|Failed|Error|Connecting)") {
+        Write-Log "[WARN] Signal server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
     }
 
     # Check for login requirement
     if ($output -match "NeedsLogin|not logged in|login required") {
-        Write-Log "✗ NetBird requires login/registration" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
+        Write-Log "[WARN] NetBird requires login/registration" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
         return $false
     }
 
@@ -299,8 +299,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmgVCfKKBXwjFk5zSSMdStEsD
-# xYmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDF5Zwn5HS1cx5rejj0tOHXsu
+# fJugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -439,33 +439,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# cYxbwTiMCKA2QXnZ3U+rsazVJkUwDQYJKoZIhvcNAQEBBQAEggIAED1xruXM6yjy
-# RSrTP4Fo0vShZeFX2D6OQSzXuifhYE1/nLoON5xcsdZ+92RJptqbpQN5JrgOGbUS
-# SavtvBko06CKb0mzcDK4o2ilXAFIbLE7NW/w8Tu1yr4KEOepEBmLlo/8wVv0rvbM
-# MMe7SMnY1gDChOup7FKjaUBXFU0pBNKi2m/M9Sxfys6KfhYNmluTtDkSaAaPA/uT
-# Rh7LBYfR2NopOQD72qpCJLlAJ3+JAmHu4UsIUa0MSpOvjG+ulodjQf9Os114GlsE
-# Grb77oltc2ZWOsJyImUTTM+CP4PWg/0D1D8famr4K6hRbDkuuIOX3PXZUHNtGHft
-# Hzkb9u/P5arz3C4lKE0niWT3UhZpSq1rT3wYjCi+RKXiqXeoNIGaft2gQqstpYJt
-# RKC5q7Fhn4U63C3gyKtfToPEIJWMH4XiE9IPNLXnNwhpXHgxnsBJFCrmCgyT/IDG
-# hKe3tW31t+EQOrEhG37enogS34otZOvmiNXNc2j8CxPAqGPEkuceRQu2WaBoYCb2
-# 38UNK8SmjPwj7Vy9rFRhgwPDZGNQHh71DMKt1IScewRENtGK+Pn/84NBrkuFlRw0
-# WRSIw+Zo7Ez16hNocpV65tleaNg4JNOQMLGldZ7dGTgtwgaQVPVxKfjyT3LOkL39
-# 3HHuMsQgJj6wkRHmwHx6XKvwZgJvD36hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# rw1sw0jsjK07xyj2wMwxObr7ix0wDQYJKoZIhvcNAQEBBQAEggIAT7Gay0li2981
+# 4159Uw5vuGA5fS1DYrylinY6tu++S/dCN34uVXLdm0idTLhd+gO/iwjUhhzB7Gi2
+# Cwa170owWcGJ51Ayn6KpaqwUCdPSb3pRSo+yA5Ckov3/qNwW9LGFnymnj0K07w3B
+# BmpCmV/PRXcavtwpA5XylSCfcTir/idmRBht9j9cHIlnQYuCdz1qoOIHuEq7HNOm
+# e/eWOPAlCkcN8xpSyHzlek9pGR3Q0pWMHjBHS4x7gdiuByZZfOHGvVP8EcyrgVEk
+# gKzrXy01x0OqXw0kBJieLqbZzdnHKNbeffF00PtI9IU3jZE+9ON0PBQKP+dULxzv
+# w7i3abuxU4x5+sQDTm9B/3j6JwjUrq3nXKSoSqjApOxY72biIkjmKRW+aIoajq/v
+# P4XmNKHzC9YwLD9ZnniEZyRhPveHcdEOi3cZpFPkTo72Ca5b+09xVhOuEcWWgEBT
+# NjrAD4T4Rhj76CsdTvc8GOFwWTb3S37rUZWKeQL3/x23fcxI6HO02lFctjpWaSGD
+# /pSXfQQxTtCO5vOlZeDGnzMo3WlI1NRSOtVTWXOxpKqrp7bA/t01dZy84RsqIlG9
+# 7HeXuBBIu0tfMM+hiDB3RiDbPYRPZYgyOILtvUiwbFWiAb5M8zwsblIhJ2/PO5al
+# Ahmj5gqKQYW2b762qAZbSVY4L8urR2uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjA1MTUxWjAvBgkqhkiG9w0BCQQxIgQge1iQ1V1KnwZLYU4EYDALSND3
-# K/u8NXLIgoyVH+ZEWOcwDQYJKoZIhvcNAQEBBQAEggIAYAhfzKAABm3C+uvaUQGx
-# 8JRhKOwtYCcn42IjzJ9pMb1YlOpbi0VbLn3pvDs+y/2aYq9uHHVYjl7SuAMx30q4
-# FgB3HCg8tfzHNgF71DKk3WXdM8TvcpB02nqOiM1GrFgEIOfmD0as8BcA4q3t7Epn
-# vbDpYM1EqulIMuVPYJhsunScFUDFiDWJWivhAGxJjBxcCkP7NhIENCZ+OxqhVmKT
-# 9mYpnRFuzuobcuv5WDDUTTXtOTqXC5zwl2fpAFmCnc766t4uggFsdAyN8ewSEHDC
-# uKKC0Va6fLiZ5AtdwvqqplOMO1r/lnNqfwAbq/UopDCAtZRL8UVvgyZZ6qYDstxj
-# ncDfNbUv+ruz8jQiJrBrlbbKCGnLsmJ0f57emAAOzgJF3M/wajQpvGUsppTwOmn1
-# PAuJgSaV3vfDwExw2bCCJlUuRwWM4zEuL+asv5dj8Lqg/lq7EB/xBoLcs0uvNnAF
-# N2Z9sM/ztdbkBIupiHBRShFmamUcqrLPBi3u+t0MVi2OV/MniYEAzJKpfP7BMQui
-# exImVizIYCYFC03dpAPe+hYNP6My9odmDP5GGh4TxgdmEgWfxF7hO38nIwS8cYjq
-# H29E+Wqa3+u6ZxdzSsoPcEZ6QC71N9bTyWUjBJacKKgQ9ysyQhDR8WCmS6Kygonl
-# lvK5qkAnxqVdIpDOjdOAKeo=
+# MjUxMjE4MjA1NTMyWjAvBgkqhkiG9w0BCQQxIgQg0Q7XIzjttwZrkcC8WSlDu7LI
+# WEM8H3orWg0Ls4J2JSQwDQYJKoZIhvcNAQEBBQAEggIAW8X1j0G5joJ3c4Chel46
+# DOkpQeQ7soGvBoyYVIZ1dOd+dDyznD32BQDxIc3BCiUQcPmM4+BmIs6tge5xIHhv
+# Xs2vtuAj5nVE3JFIhsfkXN3K7YXVHtLyT6myEWSURSIaS8dmXtRDNqOJNLXwIECJ
+# 8jYWwChJCQSH3D6O6900BzCsrfEDYhdcGK4GLXg0+ZXxWKpBuW3uhTwGRsmM2x62
+# hx7ksS/sPnb9X3ZaRGuWF4oOEk24gwN6d8NVpX82HOFH3txBraS0AhTiFTi0dcDJ
+# ftKU0ydJd1Hy/qm/0s+3HIExPfD84k145El0nOCH6kx1u9cpFpFVR2drgwIwXQ5W
+# d/fEC7WVH2dWp3gLctPmzUEhh+24QtmzzM3P+kq/FQwb/0Tlo9L5dMxvyKpe7nDO
+# yjSw2SOCP3RRPXfBLHb+sFq6yQ2o8CUX3kAArCOFu2z3isG3x4+kYXa6TE3n/5q0
+# /GYDb6FjWE9D89pPVJG8ztEe/RwAhrPop6YeNDUeceVGo2qSYYCYRXfD3Nt0zEy2
+# wLPsTJXYHQieI1kaPqP2p9RXASCKFfWcnjzj+c8uKLhZNhiNKCL/m9fZtGqmSFs4
+# XpyWTaEMHvOYUFGdSOjR1sQuF9qRpPEM9ERleaNsu/UxdtPqa57oZFI6mWlt1gwM
+# k11jE8TufW8pt7O6le49bik=
 # SIG # End signature block
