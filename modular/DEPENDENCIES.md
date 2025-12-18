@@ -139,6 +139,20 @@ The launcher uses **direct dot-sourcing** to ensure functions are available acro
 
 **Fixed in v1.2.3:** Changed from scriptblock invocation to direct dot-sourcing in `netbird.launcher.ps1` lines 329, 347, 367.
 
+### Auto-Detection of Local Execution
+The launcher automatically detects when running from a local repository:
+
+```powershell
+# When manifest found at: $PSScriptRoot\config\module-manifest.json
+# Automatically sets: $script:UseLocalModules = $true
+# Loads modules from: $PSScriptRoot\modules\<module>.ps1
+```
+
+**Fixed in v1.2.4:** 
+- Corrected manifest path from `(Split-Path $PSScriptRoot)/modular/config/...` to `$PSScriptRoot/config/...`
+- Corrected module path from `(Split-Path $PSScriptRoot)/modular/modules/...` to `$PSScriptRoot/modules/...`
+- Auto-enables `-UseLocalModules` when local manifest detected
+
 ## Verification Results
 
 ### ✓ All Function Calls Validated
@@ -203,7 +217,7 @@ if (Compare-Versions $installedVersion $targetVersion) { ... }
 
 **Solution:** Ensure launcher uses direct dot-sourcing (not scriptblock invocation)
 
-**Fixed in:** v1.2.3 (2025-12-02)
+**Fixed in:** v1.2.3 (module scope), v1.2.4 (path detection) - 2025-12-02
 
 ### Issue: Missing dependencies
 **Symptom:** Function calls another function that doesn't exist
@@ -243,4 +257,4 @@ foreach ($module in $modules) {
 
 **Last Verified:** 2025-12-02  
 **Validation Status:** ✓ All 42 functions verified, 0 issues found  
-**Module Loading:** ✓ Fixed in launcher v1.2.3
+**Module Loading:** ✓ Fixed in launcher v1.2.4 (scope + path detection)

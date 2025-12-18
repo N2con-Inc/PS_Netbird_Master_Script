@@ -56,9 +56,10 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.3 (Experimental)
+Version: 1.2.4 (Experimental)
 
 Changes:
+- v1.2.4: Auto-detect local execution and fix module/manifest paths (use $PSScriptRoot correctly)
 - v1.2.3: Fix module loading scope issue - use direct dot-sourcing instead of scriptblock for proper function sharing
 - v1.2.2: Fix module loading to share scope - dependent modules can now call each other's functions
 - v1.2.1: Fix module function scope - functions now properly available in workflows
@@ -109,7 +110,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.3"
+$script:LauncherVersion = "1.2.4"
 
 # Module cache directory
 $script:ModuleCacheDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -254,11 +255,18 @@ function Get-WizardInputs {
 function Get-ModuleManifest {
     Write-LauncherLog "Loading module manifest..."
     
-    # Try local path first (when running from repo)
-    $manifestPath = Join-Path (Split-Path $PSScriptRoot) "modular/config/module-manifest.json"
+    # Try local path first (when running from repo - launcher is in modular/ directory)
+    $manifestPath = Join-Path $PSScriptRoot "config\module-manifest.json"
     
     if (Test-Path $manifestPath) {
         Write-LauncherLog "Using local manifest: $manifestPath"
+        
+        # Auto-enable UseLocalModules when local manifest found
+        if (-not $UseLocalModules) {
+            $script:UseLocalModules = $true
+            Write-LauncherLog "Auto-detected local repository - using local modules"
+        }
+        
         try {
             $manifestContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
             Write-LauncherLog "Manifest loaded: v$($manifestContent.version)"
@@ -337,7 +345,8 @@ function Import-NetBirdModule {
     
     # Load from local or download
     if ($UseLocalModules) {
-        $localModulePath = Join-Path (Split-Path $PSScriptRoot) "modular/modules/$moduleFile"
+        # When running from modular/ directory, modules are in modules/ subdirectory
+        $localModulePath = Join-Path $PSScriptRoot "modules\$moduleFile"
         Write-LauncherLog "Loading local module: $localModulePath"
         
         if (-not (Test-Path $localModulePath)) {
@@ -787,8 +796,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUY0qpQWZ+XHygaG2Ck7CCUXyd
-# iW6gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUI/jz33Ni95G96mmeS8JHCAp1
+# qR2gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -927,33 +936,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# jc4nXJCadkw/wibYz4e1RpzDDe8wDQYJKoZIhvcNAQEBBQAEggIAxSf8SFdaJe4k
-# VSxTHfDIJ0b9K8qftljgYi5BNuIMnszuxw1luOuArvTXyGJC/F9cZ6M6zJ/DxAbG
-# zj2DAKqbWuYdVV1u4LsUFCHKKIs+MDQ+Tjg31SXod/0p2+fEcAw8pqh/c16at47O
-# gYeyIDLVaJMeon1S8C0mdMXh0nOTw7qW5OwrYH1RQr6V7KrPYz+jlg5hgb+l2Mo+
-# o688kfQxKRV+QXgig9IZbwoVZIyjNT/DSmw6Ti/UuxWnMOt6M4k13ug49IVqrlzS
-# ErUEQsOuE3nhmb1OeZYCSgC54pntmVQs9nWcChm9x5MVRX4o6nBH5szHwFL17H9Y
-# WwNx2enxkX0Q3j35wQhqqQ0eOHI2MtsRBEAGbhJ9P+pk+PbsAs35cSk7NFrwQ2Qc
-# mHCRaDHSuM5n12nKbxGWP8i1rlgxQge+Qluajk3S/RUVBA+HZfUkT8N4gUrDQbPs
-# SGAdZ2aQRsVzMq0COQ4dcKOIYxxNT4GZ6av391XxLVadOFa06unT1e+CeCaV/9e9
-# fcAkTFScCEhPRwfaKWyGV/wIRvFF6x8Rse7lir6bjnqxkCGHFf2rx9N6GBOzxBgs
-# UVEOmAZ/IF9bLLf2av8qxg7ItOLiDaPh+/yMY9UsKxLPFVj+aVAAMhEm+WBoGXhB
-# W5OGSdHrNwjW/Wk9CI1RYgdy56kM4OWhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# Mc15Vr5BF1rBxCIH0DhEc5cXFVQwDQYJKoZIhvcNAQEBBQAEggIAHTQCqH72wixK
+# /h1A4TQCsHBZw5Lxn+xfXmDupNYUCzaQHKpo2chQFkhGvthQ+lCmMx487J99L1KI
+# NjWo5F0CElM89ZI4s4dEpcwsZ/hD5vY8i2GLVer4Eol8o8+/Xl7Hf4WRsUx5+LLR
+# O+bvTLbObVgHQY/zVK6IaBXnHniy0wFyovIzJIaz0X6yf+FKmsWE/ZTD4pt3/5S+
+# j6IpaBLPlTAYlyuPUIDM3IsRyoNnRflL/zvRC3NAVCAwPGGSapZhFm9M/wYopLkM
+# GGv75IgTa1+2B390hy4wqgcwewdxLQhSJ8T59R2kvel/02DD6fLkQwxIsEpd1LqN
+# MeiuwIzc50bQycnYZY7oX5caG1JnA1WK5vZGUhOgCYpUWwMzHnOH2DHEekEsVp5K
+# r5zJq7QFfkaNinQOlku+cJJirQHcWh04aVB4uQqffJf7Q/2l6//+y42AjPIiTIm3
+# S1mOa3byX7Oon+/+xBLBk+bjEGSTgulzol8z5a184p9lL9mN2y2cEniIS7y2IYub
+# +GPPQKXB//2MGtGSx9qLhKYtcS8sqQA1ztD1N6O6FLkKbuwF1sksX6uGKelBJ61e
+# B/j8cPsc+9j7L0EGZx8q2oWuEJLbPTdDBj9x23oPNiMwTyz3iqsVywQ1FFGlrWSF
+# T8EdG2pmHKJivGa5h87+O9GyWj9twbGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjAyMDAzNjQ1WjAvBgkqhkiG9w0BCQQxIgQgiSpTHjvzXoMqJvu3CcVxPzg0
-# Jn7k7/tjkeUmIfsvH2swDQYJKoZIhvcNAQEBBQAEggIALGprJExSQ8KFl7OmcNg1
-# 6KHZO0T4Li3Qh2ojxK8wTaoVc28dzJ+ldE5ZdETFkBPUily7kufNogdG8Bcbc1Na
-# YH19hTOt9sxp0z8oAzlAX9oJ57IABW4xOBiIhMFMMsuZfCd2Gh8H67shqDOIDXSw
-# E1b9MI7d+Ct3BD8sRgR+Oc/g546Yj8Yt2cL1qwSTu6lTCHeRw8o3WDWxAVDhot+7
-# dObuZrTV3Fpminr8kYgm0ORt93JMxlMT57oTau5UxZ0Lt4tEIJlhUeVSJyBu3f8v
-# S44qBqMIYsGY5/AxP7ecX4AYzZohPXk7y9VlPS+lRyzHiZrrZ1769zHo9oEAGe1d
-# FACNfsky0dx0EHwk4ZuQpEAW6+9fkUsm6VXoWyA7AGzW/9uMj8pklQpK0zwK0Seq
-# R+MzLrlhM1XzXjkipPTZGC27CSeaQM9yKk/MjKdOtMBhnW4vMCMEFpVQiGphFiKg
-# FBjNGwbW2hfepWrxw7zVF9m0ow0iI4iabHXjxgcTRO3C+2PrbgYmqNLNoRRo0LKs
-# FDE+lR1ATNw/4Fbj5h86RkMADPIZ7a0tuqLSeITiRCSf+1n4M6INHstyqW0WrvQS
-# 4KtrGmavlmwS3/Yq9mpqCs/SXdVB9eNbml9YzKDxPmSkdMaUvEqL2nL4t3RGu++a
-# Q6AajfYJBDrAw6ShxBDrYrY=
+# MjUxMjE4MTk0ODQ3WjAvBgkqhkiG9w0BCQQxIgQgTCibXEOLlvTJ3gFSytafIEPJ
+# gwRVG3LThE9KETU0RpcwDQYJKoZIhvcNAQEBBQAEggIATd1cYXMLnW+Hx1/RuVKz
+# aSsO4kASCGIP1RTdDC3nbK0LjLYelTMT9QvRUvxfaVTApx9jh5RvOPqKIa3cvHmi
+# ynDlJoFMhGiO+CgOxt/wGGnFcYds98YUDE6L/mLDXujaOAd0IX7u/7wOjwYMw62v
+# tiI8reBk3Yd5k720urlgNf60mg1FOzCavL0sMLne+YLhxuapZ2iyWUOVe57CZmAM
+# G9ktie/hkF5ICzJvCeaqzQXjPNVmq2BauBodmgCQe6lyKrz2iBF6tQVztRTm1t5U
+# JXSr4YgoqqJ+H3n4wxaxrfXfrNCk0APTRX9sgFv9YsGZ4zwMNm8Ox7jeHJnpdC61
+# UWwMPg/42IZ/Jfv6LWaiZyhS6TivO/lReXGQRSb1uRccVW3mVoYxz/6uodCEU8Sy
+# 4W9F5WtKejNbPeMqaPAMhXdlMvnRArXmkGeaaObjwQXG3K7f2Ocsu99ct5RAZXCy
+# TIf+x8iYuuKrhskflJRhEFyQ62syGD+XPD3otgE8kuCiB1QkCdf0hwKCmJvY+miE
+# fu34qk5zFj6pNBXN86y2zpifAaWeMEM1+VHiW1vWocjskooRBbJyVSiEVGfZYve7
+# iDw0dQ+XIS+fLdcbHWadDlkRYiNAxL6SVDdq/4Zk9PI7k8etW1Y8zVhvAYhJx59L
+# MiX2Zm9h7IHUfn1juQGcn38=
 # SIG # End signature block
