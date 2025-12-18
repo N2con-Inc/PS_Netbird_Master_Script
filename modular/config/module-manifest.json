@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
     "version": "1.2.7",
@@ -9,19 +9,19 @@
   "modules": {
     "core": {
       "file": "netbird.core.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "required": true,
       "description": "Core installation and logging"
     },
     "version": {
       "file": "netbird.version.ps1",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "dependencies": ["core"],
       "description": "Version detection, GitHub API, and version compliance"
     },
     "service": {
       "file": "netbird.service.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": ["core"],
       "description": "Windows service management"
     },
