@@ -1,8 +1,8 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.4",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
-    "version": "1.4.0",
+    "version": "1.4.1",
     "file": "netbird.launcher.ps1",
     "description": "Main orchestration launcher"
   },
@@ -27,8 +27,8 @@
     },
     "registration": {
       "file": "netbird.registration.ps1",
-      "version": "1.0.3",
-      "dependencies": ["core", "service"],
+      "version": "1.0.4",
+      "dependencies": ["core", "service", "diagnostics"],
       "description": "Enhanced registration system"
     },
     "diagnostics": {
@@ -39,7 +39,7 @@
     },
     "oobe": {
       "file": "netbird.oobe.ps1",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "dependencies": ["core", "service", "registration"],
       "description": "OOBE deployment logic"
     },
@@ -51,9 +51,9 @@
     }
   },
   "workflows": {
-    "Standard": ["core", "version", "service", "registration", "diagnostics"],
+    "Standard": ["core", "version", "service", "diagnostics", "registration"],
     "OOBE": ["core", "version", "service", "oobe"],
-    "ZeroTier": ["core", "version", "service", "registration", "zerotier"],
+    "ZeroTier": ["core", "version", "service", "diagnostics", "registration", "zerotier"],
     "Diagnostics": ["core", "diagnostics"]
   }
 }

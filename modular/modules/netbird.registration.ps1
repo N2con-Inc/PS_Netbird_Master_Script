@@ -1,6 +1,6 @@
 # netbird.registration.ps1
 # Module for NetBird registration with enhanced recovery and validation
-# Version: 1.0.3
+# Version: 1.0.4
 # Dependencies: netbird.core.ps1, netbird.service.ps1
 
 $script:ModuleName = "Registration"
@@ -670,11 +670,11 @@ function Invoke-RecoveryAction {
             return (Restart-NetBirdService)
         }
         "PartialReset" {
-            return (Reset-NetBirdState -Full:$false)
+            return (Reset-NetBirdState -Full:$false -Confirm:$false)
         }
         "FullReset" {
             Write-Log "Performing full reset (clearing all NetBird data) as recovery action" -ModuleName $script:ModuleName
-            if (-not (Reset-NetBirdState -Full:$true)) {
+            if (-not (Reset-NetBirdState -Full:$true -Confirm:$false)) {
                 return $false
             }
             Start-Sleep -Seconds 10
@@ -772,7 +772,7 @@ function Register-NetBirdEnhanced {
     # Step 3: State clear for fresh installs
     if ($JustInstalled -or $WasFreshInstall) {
         Write-Log "Fresh installation detected - performing AGGRESSIVE state clear to prevent RPC timeout issues" -ModuleName $script:ModuleName
-        if (-not (Reset-NetBirdState -Full:$true)) {
+        if (-not (Reset-NetBirdState -Full:$true -Confirm:$false)) {
             Write-Log "Failed to clear fresh install state - registration may fail" "WARN" -Source "SYSTEM" -ModuleName $script:ModuleName
         } else {
             Write-Log "Fresh install state cleared - waiting for daemon to reinitialize..." -ModuleName $script:ModuleName
@@ -784,7 +784,7 @@ function Register-NetBirdEnhanced {
         }
     } else {
         Write-Log "Existing installation - performing partial state reset (config.json only)" -ModuleName $script:ModuleName
-        if (-not (Reset-NetBirdState -Full:$false)) {
+        if (-not (Reset-NetBirdState -Full:$false -Confirm:$false)) {
             Write-Log "Failed to reset client state - registration cannot proceed" "ERROR" -Source "SYSTEM" -ModuleName $script:ModuleName
             return $false
         }
@@ -900,8 +900,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWs1IN5ewWGgyMTZNEYjv8eFw
-# hDqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoJLiwVke9sDjvCjBS7jKzOw2
+# A+qgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1040,33 +1040,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# tyAzFIkItMfHxHeNg1Y42rVXFJMwDQYJKoZIhvcNAQEBBQAEggIAIFG1L6guB7yR
-# W452OuXTBVTV3D22h6YR/6PR+3NO5ooKVG59FXEzKtk5c8uB+VJ13JhG2kbhyV9P
-# V5CmRgC90tF0W5FJveIlNDNDf7elUlDyQ9gwp3dCu0mjyqXLMYnSlwO2p4Y3Ldte
-# krftKgZ1gLRo/hDcC0fHhdpoeD6wV4MdwOxGYWSAs+M/IjLADtjqTJyS5SJhj5Kx
-# GXMaFCWFdpRiQcfVlzAdguI7f9S9073FSZjXhXPh/KNwxrQfbO6zmi7GEDS8/RU+
-# JCenOCw0jwsPtudUIuO7nFei/KwTKNwU8kVcwGIkW8K4+nztus3+ANBbXQd/xwGZ
-# D3JNISnRi2o2+ZTyKDDJ2OkxEOrX3jQPdwMAtfeJZQBgl0MBb94x4y95fd6q4M85
-# JrLFsCNG5jIYILUbSEA7rqrfzZ2snpomLmi3slTmpYn348AgjwWcDmW+5NILhxq2
-# ZSWnfynsQtAah+1t1Y1BjhEV2roPwR0IEWKaKiZhJo94C1rrw3nPM8pACVZNemFB
-# rrHHUl9/zUw+5WYKdgxMxgcIyYMIz/7BezkfV7HqS40oB/NZpJL+DhHB7G11L5Zq
-# MPacS+2B7TeXRJYFas7APahGg1zIgzQOpV2GdLrA34CJVwSrJbbI5p1ffDRj2TXx
-# IygksWStm5xQaFYAo/oIuZL1T2g+vpahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 86E024cDwn4p+ZGWgRCnsmWRQ9cwDQYJKoZIhvcNAQEBBQAEggIAVcDM4UBZS/6d
+# 6SqHCCo9h93GIKZ6gpR+RWoyFElKPj0PXpP4EIfnBcffHS3sbi4a6QZYB8Cb75cp
+# YFX5DoVma9I6DyRnzlRMXqXq2gkELp03xy+snjaNc6dzFLNtFYygLHnC0mJSloHU
+# w6lRG9dGhgYNJPQxtSDKBkF0s9V/wz4WYhlrFGGgEhkHiDNxwuAbemazii7KoC7c
+# g8YuHASfDR6qa3o0RAJhgXWx+HAI5Fmg6n6clQlZRZSVdKsuVUSVHrBlac/zbzzJ
+# +XMQkmAKlXpXuQMSx4iOQYZq70mzwRN1esYVWK0GUlOHtCCvT97BB70ilzI9lO33
+# GBaFkPjgSCLtVYaVTKx22mbjO7eaeZjDY9mbMm4D9jETTV7PMlD1EKp6tUkoExyY
+# z8atJB15Yzv2tPbTgCXkeXxYPHfQruwHOfiYuM6YwuczA1wWXEoP6eDU1vmDRXt1
+# 5JoOXb0+Sh+h1bVa1bpvf6W6QMi3/QSxWTyLrmRvloMM+E152J7O3K9SuUcjp9ts
+# OcvsAZzcKDQmDwhjVd/PDEz9m+nhGf6UT+4eL75oKhk9qwfAfX6WUlacF0EzerdQ
+# fXC52qHnpalJVI5qMHfMNRBiHy72p9KS8lyp74+QG88k+PQmgH+pNUN/8VAZrknk
+# BKbFhdA8YCjsavpOsN819uXBM38Xj0yhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjExMDI4WjAvBgkqhkiG9w0BCQQxIgQghOho+akWKcKCM96Q0TySrOIR
-# evCToyXBJm28hlgKsZowDQYJKoZIhvcNAQEBBQAEggIAhjyI1qNg5aX9fEIcIukZ
-# WuCCLjb5SJMyLu2KYDhm3RNejbZInPpM/jGnk8RdYsuY0WlzYxVGMjkFgkbPJkBa
-# 5QtXlZLI8LqCzmCxvZPYruTuiXM5wpUmYF2Q+ZpX7tHDfK85hcb4MG+4oqEyefp8
-# o4WY+9wbiqzO+OVXAX/1S4DETYtwxo+MqVuqemB3NT9n3r4Ftq1lXa2UwfTbN4mK
-# AecFbCmcQ13bONCCdRQYzH3zynYQYf3Ekst3Xd0+RjeLGWE+zheXgtVn/LUIphX2
-# +FZE1x0M2kZZ9Pg+AWaipHxYjKkN3T1m+vYAlOhB82QeWb/lLt9zI5ZdO7ODjkUf
-# oT8WSTfLyiW6gf8O8MZ4Qv8wKdL5h+qF6rxnl9lrFpUJGfiPmo6q4vNKWNKZef9K
-# zgQwEXuUVthCQJA3HE/Au0f962uzeSAH1OPGV7q5ViNgROLacFDz42nZ7YJARY1h
-# RdtxhJkTMjSQ3FSmDOBfDWjqrFoGix7z5LWcrHupRxINH+kVrMw+JT/OipavWrMi
-# NmqP7T8yr+qgBw1rP0Qd0Xb0dswX3PF3PBz4raNl/2BwRJOr0A1f0ZYEBFD0U0K8
-# pM3AU3KPGY/Io81lSRfYLy4oTusNNbOJadDvc/qB2aNaqhrJsdN5xHSX8WZ88+SD
-# U2d/mhroaUTa37TnYuuvA30=
+# MjUxMjE4MjExOTIxWjAvBgkqhkiG9w0BCQQxIgQgU6R1de3zOsEV1uy2sWiD7dl6
+# ZCUraH0jca2WcgujabcwDQYJKoZIhvcNAQEBBQAEggIAZn2QcRPYenpGYz+vj2q5
+# 7ylwTFqLi8MXeELzzGcSZ6k1+VLXInZdg9NlAZK1Brc5coRc/Ow0TgjXJq0BwpNI
+# 4dyNMyS0nknuFbPB1TSwHa+VQuzOVrWWIH3x6m2PC8fGnmka1JAwoDBWBbn0jSfx
+# agKBSR0gf9oqRFvK0f3bdzqM9UgIVDbWrM5278xrdcYDW/rkyFS4Op1hcN7q+HBy
+# inihFyGtinhTuDHdHkOD7KOZ+MJ0xv6ZYOJXjqrir2kNYdNf1AgTFjLo1moURfjC
+# 8gWB2hxhSUmaLau/d4fKLXJlY59iIcJkCEfrPSJrWJxwJrAbFjEjJOMn848eDSFk
+# 8ciCdyue77QvKWfKY/l2tzZMpAY7euOAV5bYHs8QvKbLw5fYLI5b8BM9jlceLcKZ
+# ulmdu4/JSXrsCW9/OpnGL4juFI6gsWEXjwuunkulg0az0vBpE1G+/n8l4UxlMo72
+# zCBnI9VAMkz5zdOf7lZ5j92Y5UqfREWd0hrsbSK2NcJIDcyUnrnNLhe7qn2lE+XH
+# Ags7Urg9b9ZaAck/zrJ7PbwHYCrFl1bx0yf8IN8JBGoorHFMNx0qZWbwLhTviwWn
+# sMW7N66xG5+ZX9/nB1uXi0Dua6s6oB5Vi7oZZRQTs1wBvHTjQ9xHaqErQGrhk+lK
+# X56yLkCMB5LXEBIVDa9xgaU=
 # SIG # End signature block
