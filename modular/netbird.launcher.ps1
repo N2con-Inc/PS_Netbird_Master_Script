@@ -56,9 +56,10 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.4 (Experimental)
+Version: 1.2.5 (Experimental)
 
 Changes:
+- v1.2.5: Fix module caching bug - use version subdirectory instead of filename suffix (netbird.core.ps1.1.0.0 -> 1.0.0/netbird.core.ps1)
 - v1.2.4: Auto-detect local execution and fix module/manifest paths (use $PSScriptRoot correctly)
 - v1.2.3: Fix module loading scope issue - use direct dot-sourcing instead of scriptblock for proper function sharing
 - v1.2.2: Fix module loading to share scope - dependent modules can now call each other's functions
@@ -110,7 +111,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.4"
+$script:LauncherVersion = "1.2.5"
 
 # Module cache directory
 $script:ModuleCacheDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -329,8 +330,9 @@ function Import-NetBirdModule {
     $moduleFile = $moduleInfo.file
     $moduleVersion = $moduleInfo.version
     
-    # Check cache first
-    $cachedModulePath = Join-Path $script:ModuleCacheDir "$moduleFile.$moduleVersion"
+    # Check cache first (use version as subdirectory, not filename suffix)
+    $versionCacheDir = Join-Path $script:ModuleCacheDir $moduleVersion
+    $cachedModulePath = Join-Path $versionCacheDir $moduleFile
     
     if ((Test-Path $cachedModulePath) -and -not $UseLocalModules) {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
@@ -366,8 +368,8 @@ function Import-NetBirdModule {
                 Write-LauncherLog "Downloading module: $ModuleName (attempt $($attempt + 1)/$($retryDelays.Length))"
                 
                 # Ensure cache directory exists
-                if (-not (Test-Path $script:ModuleCacheDir)) {
-                    New-Item -Path $script:ModuleCacheDir -ItemType Directory -Force | Out-Null
+                if (-not (Test-Path $versionCacheDir)) {
+                    New-Item -Path $versionCacheDir -ItemType Directory -Force | Out-Null
                 }
                 
                 # Download
@@ -796,8 +798,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUI/jz33Ni95G96mmeS8JHCAp1
-# qR2gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSEete3dFNjrzjtUG8HfmgWEh
+# epSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -936,33 +938,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Mc15Vr5BF1rBxCIH0DhEc5cXFVQwDQYJKoZIhvcNAQEBBQAEggIAHTQCqH72wixK
-# /h1A4TQCsHBZw5Lxn+xfXmDupNYUCzaQHKpo2chQFkhGvthQ+lCmMx487J99L1KI
-# NjWo5F0CElM89ZI4s4dEpcwsZ/hD5vY8i2GLVer4Eol8o8+/Xl7Hf4WRsUx5+LLR
-# O+bvTLbObVgHQY/zVK6IaBXnHniy0wFyovIzJIaz0X6yf+FKmsWE/ZTD4pt3/5S+
-# j6IpaBLPlTAYlyuPUIDM3IsRyoNnRflL/zvRC3NAVCAwPGGSapZhFm9M/wYopLkM
-# GGv75IgTa1+2B390hy4wqgcwewdxLQhSJ8T59R2kvel/02DD6fLkQwxIsEpd1LqN
-# MeiuwIzc50bQycnYZY7oX5caG1JnA1WK5vZGUhOgCYpUWwMzHnOH2DHEekEsVp5K
-# r5zJq7QFfkaNinQOlku+cJJirQHcWh04aVB4uQqffJf7Q/2l6//+y42AjPIiTIm3
-# S1mOa3byX7Oon+/+xBLBk+bjEGSTgulzol8z5a184p9lL9mN2y2cEniIS7y2IYub
-# +GPPQKXB//2MGtGSx9qLhKYtcS8sqQA1ztD1N6O6FLkKbuwF1sksX6uGKelBJ61e
-# B/j8cPsc+9j7L0EGZx8q2oWuEJLbPTdDBj9x23oPNiMwTyz3iqsVywQ1FFGlrWSF
-# T8EdG2pmHKJivGa5h87+O9GyWj9twbGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# UMMK+aPLH/29VQm318Rk7c4mCMswDQYJKoZIhvcNAQEBBQAEggIAcIUbl1Af5fF+
+# 2+dtzE/d30HN9g+R+wCnMrW9WEt8xCzz5YMDNlKqhbeQwh/+9cdpUl+bihyYLdjM
+# 0Fnvi41MDCp991Cp5MvZ6UN4pqrw+3CpLdHT5vtkHblHsa8UOI2Ks0o/CapGRuyj
+# zgi8vLH6WvEAZ8KVJFL416C+d+WNkrrd5uYctmlgKn6jz8wb1wO0xqdIKcd5HQPz
+# 1afWfO1cnVGSbfHlb/P4y/QGUO+WHsWkokXrQbFfZeG7BTUbVc+muoU5pLK1a9Jc
+# HTfIM8YPJ1X6MWo3Wc8bOowXyroRCPO3i8A6gEhZ1dbD2xYpG5LGFzJCzuRloNmN
+# si+NnazPIFtDj8AmdDu+IxTn0YgGx1jwGcME4TqPijqrfBiRTZqhwEuGiHnd0D/Y
+# aGD81D+cBgt4MgXMv3TVzYkiA8r2qyCotTeiXyotr30fYyv2VoIKSVS95UFI5pCx
+# rhH9WdEmv0U2mHk2rRN56LIlc6t8gLg+fI2kWSLb8CZ3XCwWRb5rcEtHf65yide5
+# fgbF/Cd+rezurhsKTb2NPUeThQCG6gn+pxVQpbQeIoaOj7nArnnyGDu0N2EbLdUH
+# MECtPxG0OvIjd+e0iYc2K6/JxiBIjseMKGPz7yGwt/bVQNbwrRf2YEKvzUZidF+P
+# cmnaYng5nBjT5k7xs2/8Dj3RvPqJl3GhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MTk1NTAyWjAvBgkqhkiG9w0BCQQxIgQgTCibXEOLlvTJ3gFSytafIEPJ
-# gwRVG3LThE9KETU0RpcwDQYJKoZIhvcNAQEBBQAEggIAHZLN/tfSnYFvlDuW/sK2
-# FcJhtx2cks7vXXu6iLJizublQVGP+ctxrNH8IPW9WhwPLGScAwBBBW32wuoK22VL
-# UySpXyhXFp5elRg+wEv2FFtj24E9dMOgTOETubQlnUoBV+tm9IsnYDC5KsIkPDtN
-# PBH7/WjmDJXKlOn393UTfKEv9lx3eAQKO6G4rgaaH6R20Kq6RM0ZiDHJTN0lB2bM
-# FKCsL2kSAjgRJnHfzmZDV42s1LF2v1tqpNU8Y0V3T55h1QVs1tG7MEGUP4o4Iaa5
-# xymyQeQNlYgyz2e4QHeyxtZ7ajcio5PiI8k/0nIsMnflBrV/4X2PvbcEKoey2J+4
-# DPJGWgcmP6ZjwNtbtz0lxpoq4ChJMztWtbKL58YkdGakR+bZZbWqkS75cH/v3jy4
-# Dx5Xj4vnGM/GUFS2t8s9JMEJdKCNgzfA3A07Q31LthTWIYCUsoRP4Jo4KfIn1bq1
-# 3zNz58GsV15CUvxlr4XpDQv5+h1+UlNuLqydgagUQmIeCUxLnedJZXwHwTq0tpc3
-# wqKIiosQFxJzAjFlYRaBnhGQ4m4xR0h4GSet2nUkafUATI1WT9wrGfrUsPXeTcXM
-# XE4WFo03WzZXvnKqUSiEvJ1ZHElrLHaBgbcSehKS13W2XibokXG0unYoamEUgJD8
-# WhVy2yAUtLQYvPdaRY3bNyQ=
+# MjUxMjE4MjAwMDMyWjAvBgkqhkiG9w0BCQQxIgQgWxg5zxH4/aroE2BBlJKITpgd
+# p5CT/VWaB8ujYqpwd6kwDQYJKoZIhvcNAQEBBQAEggIASziWd/hGsS7HELwFSy+D
+# uehB/aW/G3gTJJiEq2k0CdwTxbikPGMZRqrKqlE1KG+6YsbYZDRlCk8YJ7doBiR5
+# 5LKTVRJJTKGNO4BEIYWlOPufB8kUOiLAZBCGmBm7P7Tko27UnDAW0MgY9DMMN3VK
+# PwUExI23V9aiowCbkWlbFAAUl8pNMnh91fDA/og6e6LcDhTFtzNJNTdGGnpSopJx
+# 0nMU2ZSqXW/jAekdmjtSyOIob61ET15Lc3DhJsWNID7IH/FVApO/kjlk1ECExacL
+# R1+rI0cgFobeYv25c2SaYSelCKsekZyEDsw+uqr1v5rW7BCTBKNbyL9M3HLzABY3
+# Vc2rjqPHq4yIwnJFkhFAglww91E0ueO1Dy7jQq7RqmWdhauyorX6aCGHFeyHsNuF
+# dg8PJBpL/aMWCJXIHMV1JNm61fhYKarrRPfy2yC8Y0vBZICIMa7RHpI0L+Dq8xP9
+# pZeINTH0YwVsGqfR5t7Rk+qrN7Pdh3YLsPOdKOTsU+r5vuICDjau0JE7n3RQydm8
+# //hNcYiRCLqPCsL7ISQkFNDBjyJxmnFjAoYSp0oZ/lb6G4acuAYfD9XyeHukXCBn
+# VjEHSTtP/hww5kQsSRYyFFjFS+z03/oMdLlKeQX+sXgmMxH8st40GXftVx8Zi06M
+# +zsEFF7l4lghbu26IlHAWNE=
 # SIG # End signature block
