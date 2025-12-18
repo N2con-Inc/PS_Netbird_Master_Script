@@ -56,9 +56,10 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.6 (Experimental)
+Version: 1.2.7 (Experimental)
 
 Changes:
+- v1.2.7: Simplified cache invalidation - use manifest version as cache directory, invalidates all modules when manifest updates
 - v1.2.6: Fix module loading order - ensure core module loads first to provide Write-Log function
 - v1.2.5: Fix module caching bug - use version subdirectory instead of filename suffix (netbird.core.ps1.1.0.0 -> 1.0.0/netbird.core.ps1)
 - v1.2.4: Auto-detect local execution and fix module/manifest paths (use $PSScriptRoot correctly)
@@ -112,10 +113,11 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.6"
+$script:LauncherVersion = "1.2.7"
 
-# Module cache directory
-$script:ModuleCacheDir = Join-Path $env:TEMP "NetBird-Modules"
+# Module cache directory (with manifest version for invalidation)
+$script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
+$script:ModuleCacheDir = $null  # Will be set after manifest loads
 
 # Launcher log file
 $script:LauncherLogFile = Join-Path $env:TEMP ("NetBird-Modular-Launcher-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
@@ -272,6 +274,11 @@ function Get-ModuleManifest {
         try {
             $manifestContent = Get-Content $manifestPath -Raw | ConvertFrom-Json
             Write-LauncherLog "Manifest loaded: v$($manifestContent.version)"
+            
+            # Set cache directory based on manifest version for automatic invalidation
+            $script:ModuleCacheDir = Join-Path $script:ModuleCacheBaseDir $manifestContent.version
+            Write-LauncherLog "Module cache directory: $script:ModuleCacheDir"
+            
             return $manifestContent
         } catch {
             Write-LauncherLog "Failed to parse local manifest: $_" "ERROR"
@@ -286,6 +293,11 @@ function Get-ModuleManifest {
     try {
         $manifestContent = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -ErrorAction Stop).Content | ConvertFrom-Json
         Write-LauncherLog "Remote manifest loaded: v$($manifestContent.version)"
+        
+        # Set cache directory based on manifest version for automatic invalidation
+        $script:ModuleCacheDir = Join-Path $script:ModuleCacheBaseDir $manifestContent.version
+        Write-LauncherLog "Module cache directory: $script:ModuleCacheDir"
+        
         return $manifestContent
     } catch {
         Write-LauncherLog "Failed to download manifest from GitHub: $_" "ERROR"
@@ -331,9 +343,8 @@ function Import-NetBirdModule {
     $moduleFile = $moduleInfo.file
     $moduleVersion = $moduleInfo.version
     
-    # Check cache first (use version as subdirectory, not filename suffix)
-    $versionCacheDir = Join-Path $script:ModuleCacheDir $moduleVersion
-    $cachedModulePath = Join-Path $versionCacheDir $moduleFile
+    # Check cache first (cache dir already includes manifest version)
+    $cachedModulePath = Join-Path $script:ModuleCacheDir $moduleFile
     
     if ((Test-Path $cachedModulePath) -and -not $UseLocalModules) {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
@@ -369,8 +380,8 @@ function Import-NetBirdModule {
                 Write-LauncherLog "Downloading module: $ModuleName (attempt $($attempt + 1)/$($retryDelays.Length))"
                 
                 # Ensure cache directory exists
-                if (-not (Test-Path $versionCacheDir)) {
-                    New-Item -Path $versionCacheDir -ItemType Directory -Force | Out-Null
+                if (-not (Test-Path $script:ModuleCacheDir)) {
+                    New-Item -Path $script:ModuleCacheDir -ItemType Directory -Force | Out-Null
                 }
                 
                 # Download
@@ -816,8 +827,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUiPzdGBeiqBGGKFlR3Yk5U5Xn
-# Oqqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHpY470LFHTZUNLN89axCTQYJ
+# nA6gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -956,33 +967,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# awiBD1NJ3inIkKqarGtt5794lKMwDQYJKoZIhvcNAQEBBQAEggIAKrPs5l6eaWpl
-# /Th0kJox32GvHw7vgjkB/6wB29Ku1We10uA2Ndinfq9Xuhug6hkmhwFVQLYzrtHV
-# e2iDZpyfvfcJYLfK4GFA3xJAFY8JkNWmSWptr81qOmAs/e6cZxZZnvho6kMcIhb7
-# DeJxsnEpzMFMxLFosCUE8x38rzp7MZuRgxGLNVe4ECnRulJy7DFTuP7QMvToy5Bm
-# W+JEzhWLPWOz0Qc42E+C9XgciyE0bG2Q7TiPUOunxrbAmqKUx1xzO+LJYWIEEA6k
-# +zERNW0revhgSu29RLuyknKVbXeT+m4VKBKTBltUM2cmWWkP6V4eC6L9YoyJ+JTA
-# AKatqpZvodkhEsxu2cMA9GIxkwkI5Xo/oIR6aF5hxYHE2Sq+R76zDdK/r3aqYw1/
-# yIxFU5ODQyysM0uUklgkhEK+aWc53mbLmeS93hqEl9h9dhW3Qg7RiSoGdHPF0hsl
-# EDAyJL0jQoY6laBRMqWq4MfMSQhCXQG6C6vAhM/9TRP0AGFEJ9X/ZSl82jSuD7n6
-# 3fmbu6JxsPxXELbx732QViPtQhfo/0Be1S2b8VCwXls2BV9WT92bca7KRndSrfiF
-# UYI/WIyYTuekhawBmgm9+w6zSoFU82S5xmnz0FByeZzPuOsDz2MN35DmGjNEn7ex
-# hTsssK+1rUIZDmgObO/A/z8tqRPhspmhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# N+TT7gmikrPYbmjoQC96lCzP+QgwDQYJKoZIhvcNAQEBBQAEggIARRA/IV5lA6OU
+# a68ab1AzZ4KA0uigtUut9d0LhogCYfuS6KB7+2D/cTe8ThIkn72dlhUzYojAEaXy
+# Qm3YZ6botaaoeBQv9IcdGSV/Fp2lj/aFmHF0cTeER5bY4KsZQPzq7A15oW+XVVb+
+# 4rycWvekL3ZulpJnbWbkmfmafd31b4nxpQs26wR5zytcLc/mkc8oYgP9zgcG6eop
+# 7RKYyIJwoUyNkIVfCiOXUCfbvMed7mq5V050lLwYOvEMQpnuTtHvEuXLg/7i9lOA
+# jDxKtRXbocNm7/dPS+we8kZJxynGbChfxk6Z3ga5WUzuoIvJJ51r8UOJUPJScklT
+# fgX2n8kjheUCH84GNByjDZqnaF6eEn6+qrsYSrOaf0jKDRmmnypwFaOUZRq+g+16
+# rawSGG6x1jyrh/k5FgUgqu2entro4C0vBTuIcf9ipwliqPV7DdhbYYmtbedUImdB
+# 7KOeXmjAc8udj/wguop+wIWsImp9ZL9ez54tjMpns7d/O5qqZF3cCnhB+o3aYVx6
+# nbl7n40OkbPOFJ272eBKTETvmlJ4sX/QeAN10U/jin0K5erNDLffwYbUvoKsriIQ
+# O/aNU32kOY9UO025jt/CfihnZPeg7kS4+J6L4XGRBO9iOb9q90ao4pfwftJLMq+w
+# BTxntA4sDcZBmqnprhkp0oyyHK2pA4ahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAwODA0WjAvBgkqhkiG9w0BCQQxIgQgy6eR3K0PdctWKl93bnRk4TA7
-# 7eafacFsvIPYztHLHFwwDQYJKoZIhvcNAQEBBQAEggIAuDP52Ze3tylPCH7/Bh43
-# dAnhGjb9hcN6LKVIgNh/5MEG3bRn17ayBVXFhccMZDfyTjUftWbwrn+CT74oSxeJ
-# j9qK2e4hnmygh1A9kZBi86rU4qWYJzg53QuPj2VW+Kw8YVGaCvT768+kCNAo9lIf
-# SPCS8Ysc1zi2FSAaGEoJAvJ/WKCQ4RvDs0ChInSGBAkWmPKDPOgZ2fM4wGcSz+p0
-# ywKT13ivjc/OgbndVfF0dM/evvynDOjO0I5ZHE4j4fZyCdnUJSaC18dkwrvSnIjx
-# EGvVh99PEMiP2/5t8CqKWfZrhMbArSz3bRuN61XGSxLPbrchR/cBScoa+QQB4eHJ
-# MqhrECg8xc5aF22iqAG8/BAeuwysO/Z2jCsx0g0frkBS+SWBs61TSSQ029ZMmwfm
-# 8/fde++TQbQX4APdqtrfDm7uzYt2DXPw3mSZ/dp3/55IDX1UhdfgT292jSZEJpBH
-# nFCREeVBmd3KwUd9GRWM1tDhIyTex3ASgcCJmV8kLr51I5gJrRrASUONl1ZCQ6tf
-# XJSJ182mTNKV8YI6BGg12ogccuRpyL/8mpk8VwwSv0l5lxwzuWZ4JBXWYy075a6d
-# t8/YcWYT4BsVtA2cGkZJC/1b+9bPSSX6qFirTcsY1i5nxhsVCgJOAfCpTPLiTtNb
-# e6haZigvmjIemaHH6KsMVbo=
+# MjUxMjE4MjAxMjQ4WjAvBgkqhkiG9w0BCQQxIgQgUQ+rMfmke8lD73x6JNXyYNs0
+# e+jAfuwaVWmvKwJVo9cwDQYJKoZIhvcNAQEBBQAEggIAGar3yd53jGVHm4DsR+Nv
+# y2I9BgrDY8tYYA5p/I2AvBsCIQv3zXDsVBzgUoeXfMZq9NLshZ0QA47VFiUtvKQ8
+# G+cNm6HIHL9xFGLxjIgpQBYPOAk35z2GwIk9aXL4PfvkqzRExoHZll58D7/yTMSy
+# u4jrzjO1mTJeSbX3I0AuUcTeOnJxRGnttcW3XLpUhkPN0IZ0P4pLgUgK3r3PIHBC
+# X4DT1gY4MzH/PVxT1VIX2qrJ0R84y/gdGBXz/rjTY/6e8Zv6+ToHDbrZ0cRXW4ir
+# WOdp7WUGxqRsrvewfSTAzz//4TpDl1Nc5YWJpkjLNAHYBm9ZQTkgLW8OT/QwJMUa
+# 4Zi1jj6MkSwc6tExrrx9xg5WVF9UcYWuj7FQY/EWTdHsjgUAnIHWZWkbqUj6mlrj
+# EuGW2To+rxZBB0iQtwrGnUpDlB7hwB6ROs2pg+koWnZRUjVT6EX6GpDaU9R6aJ7b
+# E0dfeTex81kvSiZ3t7WYqTJb/VlTH5gSaXNgm0QAnru0vaG/+eSWMTGkkcNGZwo2
+# ihOiWmDdlLAqVk9eBEW5TnJ0N/j7Cq0xnhUWcq+O6wvBKxFh8Ca+WAjXkdeg6CO7
+# lYX+MdmVgptkFBDPPs0ecyADbpACb7z6VAmyMds6a6P56ijI8IdAeFZcZ88lHiYV
+# a1xC9fzCX7hGVTzsCLKv0Nw=
 # SIG # End signature block
