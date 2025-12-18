@@ -113,7 +113,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.3.1"
+$script:LauncherVersion = "1.3.2"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -349,11 +349,9 @@ function Import-NetBirdModule {
     if ((Test-Path $cachedModulePath) -and -not $UseLocalModules) {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
         try {
-            # CRITICAL: Dot-source into script scope using Invoke-Expression
-            # When dot-sourcing inside a function, functions only load into that function's scope
-            # Use Invoke-Expression to ensure they load into script scope
-            $script:__ModuleToLoad = $cachedModulePath
-            Invoke-Expression ". `$script:__ModuleToLoad"
+            # CRITICAL: Use scriptblock to dot-source in current scope
+            $scriptBlock = [scriptblock]::Create(". '$cachedModulePath'")
+            & $scriptBlock
             Write-LauncherLog "Cached module loaded: $ModuleName"
             return
         } catch {
@@ -374,9 +372,9 @@ function Import-NetBirdModule {
             throw "Module file not found: $moduleFile"
         }
         
-        # CRITICAL: Dot-source into script scope using Invoke-Expression
-        $script:__ModuleToLoad = $localModulePath
-        Invoke-Expression ". `$script:__ModuleToLoad"
+        # CRITICAL: Use scriptblock to dot-source in current scope
+        $scriptBlock = [scriptblock]::Create(". '$localModulePath'")
+        & $scriptBlock
         Write-LauncherLog "Local module loaded: $ModuleName"
     } else {
         # Download with retry logic
@@ -396,9 +394,9 @@ function Import-NetBirdModule {
                 # Download
                 Invoke-WebRequest -Uri $moduleUrl -OutFile $cachedModulePath -UseBasicParsing -ErrorAction Stop
                 
-                # CRITICAL: Dot-source into script scope using Invoke-Expression
-                $script:__ModuleToLoad = $cachedModulePath
-                Invoke-Expression ". `$script:__ModuleToLoad"
+                # CRITICAL: Use scriptblock to dot-source in current scope
+                $scriptBlock = [scriptblock]::Create(". '$cachedModulePath'")
+                & $scriptBlock
                 
                 Write-LauncherLog "Module downloaded and loaded: $ModuleName v$moduleVersion"
                 $downloadSuccess = $true
@@ -848,8 +846,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/Xxvp+NR9bVuzXCz2wbmCkvv
-# WMygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoEKBpYqSdcfaby8KLtx3h3jw
+# 81Ggghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -988,33 +986,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# nnReTpFnta4qktAlTYzcXrRDoAYwDQYJKoZIhvcNAQEBBQAEggIAgDB0jvrOfTBu
-# +CaIL4XDuYoNLk0JkvkLbVAc6qtsclaz4X7AZifa1/yHRjrr207LaIepObSlUgId
-# rQpiiPOoh21zBJKNVfQaZIl+1ZCHmur3oDCqPcBVhJyVtJ/QErj9rew7a8AuU2zG
-# 7GZtX1B2EyGCJ0CGpjRGvTpf5ZG8BgFVMB+2g8wC9cLT5YN6J2PWkZBZDjk5fjQG
-# 3VLwJbYFFRLHSTSnSKunlx1ZGt7xEBIaQVR4pPj9UT2pZ7akn4X5f6ZYMOd/zfbM
-# ZLIQK1u4B6HlpM1s1SvZvnbxyyIPWfWTo6fGCmpnKKZAr4F+9U2yx1miV8DWj2pt
-# bTQflE/SQHIzTn75sB24pek0xA5qwpAtXQwrcrKA2cw89HQablyWh4m1lzZuXi+x
-# pptqFK0NK8ZTesaXNP5fUSSHMoyFFToBO4o6WMYVx15nu1JhSTfeHmm6FzyCCuig
-# aYCG1y/HvbOtXJZTleS6FEFksNP8Bmvozljc4WrtDtQC4yFm9FzxadXyQz8/aPrn
-# Z3aQ+lKXaeD1CJPWTi1e9U+F3R3G0+dSLtnkFfa94VnIxO3as5lT/uI4d81WcPq3
-# zpAzdz2QyHzrVi8fSK1wH9/hHbANzcPqMqPJ9UomhPVYtfOHeiDxqfUjtxBn1yRm
-# nva5POaF/LzVqLLg+e9qK5ErfbROtFihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 0EGxuUjxkOJYN5I8AnkxD8NyiT8wDQYJKoZIhvcNAQEBBQAEggIAUG5Byd9sqdS7
+# uod44ZNs4Ce3m/RAucy9jOhHahYsbGhFwpUXFDETKZgGDU+e0v7PpGVSnpuJECuJ
+# f69q5vybnfAo5O0qN94Z0GPajt9jZXS+IH4i5ug8GiZ68DLN2J+1/qgT8+PE8G7e
+# zn7TaCuAUf7bObcnvrJFC6BItGFqaNDkImbQAkzj/Z1FAXtxNRjkOCkNbprttrdL
+# yiHk70rby3CCmAdDwS8U+YlwuGKWfllgjQNJC6ZZLOc5gZUWYnyD9f5DzxxEk68V
+# eRXM8ZMrlAz7JGkSHSPfDWhR0EKMValUnpIn9aMwbt+k4oHvVmOc3EkUOwr5M4Bu
+# kOUHkezZMVBqCoIQvxsgTbi3rBOqBDxla6uoT4JnyQRUnSdMBtyeduLlYtlYitbo
+# Wu0wSaRCxbX0Md8nkgjsLrOYMDaBUbOrSRsWLVfdFRbFeWjBeDjwK0VifbE73AD+
+# KjxAM7e0LqHJiyO2lp/oLcJ1z8UICEiGD1WBTG3o02NcSAFJwZAp6RL/2ptThTi+
+# npUB7OHNN44V3XhjD8r3kk1VAxZtofB3rUKFp4bDz9siEsyumiURiNzLAo55+zCM
+# hpMijrn7I5C8fwAmbwcGtXwJvEk3zNksExf+JYkQUwdDsw+ZcKvNj2esZb11ewI1
+# kPiv2s99tDHVrXXFPJOhUMM8T7hpQIahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjA1NTM0WjAvBgkqhkiG9w0BCQQxIgQgnoNvwHP2dTFfyuJh58lM72N+
-# XjjiFKkcb/3eFkrr6jgwDQYJKoZIhvcNAQEBBQAEggIAhm2LOI+iga1j0G6+k8SK
-# JBq4Khq5LrPLnGPJ7Lp84/ZRCQssBncy8NIyk7qOKRo5+KGnf6oEZyqXexM7eSx5
-# cfzP5/LrSp7REwWB+q1K2Yi5AfTA6OSYWdiLcXtiTaNEIX0T6BuHclLLZbeV6hZT
-# 1cBBD6HzjCJGRPuXwNn0VvsI0Ct0TGd8woqAEkGSndzRA/1VV+fZI84vuRUIv6s1
-# 0ndNhlxQcqxfKrAn7/ARMwFBH13APWF+0NPtXSozglBIWwKpW13E6ZYcT7WEyP5L
-# AaoELw7eEQu5EvF47v0sgC12aUm214xSy/9T2UFDCXNBOf/AOrP55VsO9Y/Po/4X
-# 98huhgbf8Rm48z14CYwBbwAo7yWOuJwN/p6kNeum24nQWtl0Cc0B2nJKp+NA7S5Y
-# m1rPtFXvOlwMVRmQAlBscJqy4dPau0nidBrILZqI3fZurW8q9PYHmrANT1Q92/o6
-# PGeqPPoMlJLBrqTqbLXgJEvPfioM/IXIWA/Np4lhi9eIF2LIDMW/urG+Z6ZLrZ/Q
-# 8FKQ0E0o7/Bmgxk1ejhtNUbFRweo3qdFgF8QRg7jRnKDQwi5AOXCdbRYG2YIScRu
-# gRNyjL0Pk3+AA3axpUGFz6aBjXbLndR6QjVbpd1wrNkq2gZToHYw3J4Rvq9xSzhi
-# GFnB9lpj7Zge7gtMC2bcV+o=
+# MjUxMjE4MjA1ODQzWjAvBgkqhkiG9w0BCQQxIgQgqhU8PqTIjdqnXpvF92CENarA
+# 2LBupGSX+nREZXcWrkswDQYJKoZIhvcNAQEBBQAEggIAFXrySmyBUW7pLGuchcm8
+# dO6346jwZdB2QHk5oPuR25mj6UYJSc+D5MR1d78P+iqNriZPKTbdecZGywAozPZm
+# 02wdrQ3aNUHAIMbWuEygDlgfgH31bHDeDJK/0o742MlmcEPO3NolH8eIuzd/US0s
+# RS7+2/gM3Esd8waUG2/otl19ADo9kqwICAVL0q4Xklr3dc3+8b5Qr/orf48Qa0cE
+# byaoqtsfNxFIs94x+4WrnOPef44IhbI5SKZ1sQSePqTKTtCG9z8E3eMS5Nc/gEb0
+# +TA5XV1HcW4ow3QSiYMN2GKR/MIAmXxFQPCGi5McGjWG/7ieBGqpxcgFyRqv0qym
+# IzEYkLVcDdZxY56WiPV25ucUJ6CjnOYs3zKN0thjQM1Rtx+WeNGtG/n8E7GatqiF
+# 1Rj1j1QMvtyNPIVeT0SaY8/Wq45fxrqde8fLyDPIuIRwrnsHFHmkrqml6NPJ3VcC
+# 7cwqq27MBMp9+1fbx6aebolgREws93OHT43LMam7OjBzNKp9o0Rd+390aJKifetd
+# 02NH7j9p+NR6xa7iOu2+poK1xp1Lpl9UefORADQEiSlnmKN8tZrMd3lCjItA5TbR
+# oLGp9G0gprTfK3xDXS9qWSDNe70AgrWLNaOtvFZGYYIYXvEK7jQC/kFGxn3zxFhG
+# kj80Yg0IiO7kWGZAecSyBTA=
 # SIG # End signature block
