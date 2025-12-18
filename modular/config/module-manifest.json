@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
     "version": "1.4.0",
@@ -9,7 +9,7 @@
   "modules": {
     "core": {
       "file": "netbird.core.ps1",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "required": true,
       "description": "Core installation and logging"
     },

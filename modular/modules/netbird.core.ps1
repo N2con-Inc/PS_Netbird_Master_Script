@@ -13,7 +13,7 @@ Provides core functionality for NetBird deployment:
 This module has no dependencies and serves as the base for all other modules.
 
 .NOTES
-Module Version: 1.0.2
+Module Version: 1.0.3
 Part of experimental modular NetBird deployment system
 #>
 
@@ -101,10 +101,16 @@ function Write-Log {
         
         [Parameter(Mandatory=$false)]
         [ValidateSet("SCRIPT", "NETBIRD", "SYSTEM")]
-        [string]$Source = "SCRIPT"
+        [string]$Source = "SCRIPT",
+        
+        [Parameter(Mandatory=$false)]
+        [string]$ModuleName
     )
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
+    # Use provided ModuleName or fall back to script-scoped variable
+    $moduleNameToUse = if ($ModuleName) { $ModuleName } else { $script:ModuleName }
 
     # Format output based on level and source
     $logPrefix = switch ($Level) {
@@ -113,7 +119,7 @@ function Write-Log {
         default { "[$Level]" }
     }
 
-    $logMessage = "[$timestamp] [$script:ModuleName] $logPrefix $Message"
+    $logMessage = "[$timestamp] [$moduleNameToUse] $logPrefix $Message"
     
     # Console output using Write-Information (pipeline-compatible)
     if ($Level -eq "ERROR") {
@@ -447,8 +453,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcDGaJLaOxUjPdDWwOm76R3H8
-# FImgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUq2bTS+lD9Zcd3FgDlIMeRvM7
+# elygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -587,33 +593,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# ox4miVUEyOnCD/XNWDvWW+6rFTcwDQYJKoZIhvcNAQEBBQAEggIAbcFfDgy+RvCI
-# JQMv1OPTxFj/SlY4hUZL7udR+u4wMU0f4IGxvQcxbhhyXEpME9whPllG8FQTKYGx
-# jkLQFv5M2WlOq31xUqKecBmSLBK6W1qzaZwb4KZBk40Z0m3EjPZtRJ+vZXx7aZbf
-# yxGi+oRQgTI3j1tT1DqkrmDKTgZhi9FXrfCtmPkO5L0bNLW2lxv/Qm2+3ngTJmOJ
-# YdZWQAr13Jo3vLWbbi58Lzr1qQKDuSnVAW15MrWPQUnEy1fwq8rSy0+MOkRIkmKF
-# KUOO08O+MGqNdkaJMSS5FnE5bG0dj6XiyRP1EkhEJJUlJYsuZjlf0dpoKcHO2Kjd
-# pKV2cwDBeXzX2eNVvEJf65DcxU+96rElY6/OU1sTX+RkUy7AT1jrCDOxIrwKfwVR
-# MTul9xMWWw0FPv4Ys4Jckkv7w+2lVWMSegq5yUH2+FtYFfXecu0oPAYe4jW3Wtk7
-# 2+P5cbqIhqtNwuMlBRN1QE6PStWmU7duq8dnixrylRpmcyfWRRigxDaN7jWleZgO
-# ehHveOWHWmIRBeGsLIIi818STWblkfphOKoXHxYgKzXjSOAm4OjRROO6ruNJizjB
-# fIXzZ9i8CAlM6rda50w6VjaXFo3xSpK6lrjNqZwC7AMqaF1mYPV/NMlxrjAx5g4r
-# bE5hOhOB7J1nD2kMFTLirFV6asIS9HmhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# htkIX2GYzv3Jd8jP9e8GKTtPGggwDQYJKoZIhvcNAQEBBQAEggIAFtJdO5rFEYGt
+# 2mNjqfZmMilic99dbmCL3Ax1XPu0+RlvyZebfMjV4iEjP112mtvXsjGXgtA5lDVI
+# Z0+3hOxM0pGDcJuBnMf69in8m4OdTvccWWx+AeTZ247yJjDkeuOhYOo0pWMmFWBw
+# YsKavdOwk6m4DGbAmbqCKYvRMB/4aG53HF+RYOifrWde10q500HMfJkWKd+9RIO6
+# FZyeIdYztjqmvYZ+3WenE6Kwy/jqbB/T779j9EjfTF/pbZAQQQldUzqf2WyzJiij
+# jtSIoqPiuVlGHL64StB5k4MIOIoqkqU07jzRYdFGefhvq34kvbzSJ9baiyShppm4
+# tv3SRkVwdxBzlE112OWvAegB5FHu2iYc1ghARsKUIltPBYeE8XXZBtWR4fpjujlj
+# b+btZA28d6EYAWjUYP97BMMjPFG5D7pn4sNlqZEASAhIIx6N4OID3U2cb9g1NZk+
+# CqMZYk2Cxqzy5laDnaieo8LesrqX0GT1n2rf6kS8JwvhQbYRV3CfiANCPtPsVtyv
+# 7Xr+I5kC927OtXKaHECXpX4BULjEDFD5hc/5Z3hYFSHTqqGYNPg1q8IpHfFGVk6Y
+# BqpY3PeocXlCSHPFrRrdEA65jD6+QaOb5w237Rh+3FLs/CxNCo3+SkUcaiSp6Wb8
+# iDWxOGHuekp+3L9khtq6SK+vorabfe2hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEwMDM0WjAvBgkqhkiG9w0BCQQxIgQgqAOItSU56f/+EDCu0LNPwBmp
-# sVAgAd9vtVPXRxftXi8wDQYJKoZIhvcNAQEBBQAEggIAH+BLX5xHDaQIjckK1Cbm
-# 4xPNzAlnaUqSOGaIABwbFPgQpRg0YC9wdkTWZpLSbaJMOkmLhT452dfB63p3H6Zv
-# hS0qrdiPrjk8zHgnYIjVSatFFU+ZY5RXuAZk9oRzjbqFze7kPbof9nydtxoOZm8t
-# O6XluG//byzS8gU4yYYnCoFgsH3uSIaoKM8IIpkJKc0qbz+QY8qD2VbjedsXAfL+
-# el8funNma6ZaIKxT31BqwkKu96oC8x/5aSR6YyGxiIpQ0Ao8iL+0AWYpjnuoeaGK
-# PT871BmfD24wOLOu+tdpl47mmcPc6DhXB2+j9fIDB4yl6G1LCypOSs+Q0qYXvCsG
-# 9DuA8A7QdIEozgN0aTqh1nX5CrAGiXkP4C/YruSGvR8TyfU+mb9k91TApplbnz7h
-# Psl48/QqBf8ccC0HwHJ+AwXVe8hxfYBCro1rt6GLRcKnPW7CP5kFp9Pye4+KbvnY
-# slSmokaAYjO9hEYFOd6AcCY48cV6ADh7BtnNDeW3pNmGJjgOXRW96tBhSjcXdgIh
-# 4CF+qOXIokYmvMx+hvRFaRllsFvm/AH3ETYk01l+zAdVwM258JHzqPPC7Taae9Xi
-# ocfQq4k6cwdXI2GgDd6aI7Xx43f3EwBH7kU+HhhPqHDDWuu301+W+jN2/Cci0Iy5
-# FyusK/3PAh+ArJtVKUp0NlU=
+# MjUxMjE4MjEwMzIwWjAvBgkqhkiG9w0BCQQxIgQg7zGNmx4gs14nXj4no9+ZTleY
+# VZiqEJ+V2B4QXoARXFcwDQYJKoZIhvcNAQEBBQAEggIAaY2CJXFq8QfqEXrVV1U4
+# xPMfHgN4N4pbE2mYue9ceeBfXljuEgUes5ePXShtPPvy40wNqw7KLfSA0TeTnQZS
+# nVOFAq4pwulXBssAwnYCLAph0vN6rZjCNdz68j1VmkhU9tsbUKafoCiCaqHKL+HD
+# KZc8gpKDvqi6brj3Ra/SyT4m0nxJfNzc9W/39ca+8C3x2Us4CCWfYSrzoKXdZf5W
+# SKEEp6PraGKxad9LaHN/7zQwJWRiMu6ENC+T+Fj4Gxy/ycyQSdrIO91tMPD9MTf2
+# wd6WfW+UgOHN27t4ORVdfTGrjCFSu8mHHe39qYjtqBTB3k/Vj8afT8sS1uRgabRn
+# +eV6aDojAzBh9epqv0vswXWdcf0bqZkNQdrYWPqTV5wRIMUEkBUZTwXJHx4wWl43
+# KOksSurYLqd/vDH4VCpcei+ZK3IK/shqXZ8qB7VEkzxdXjxyQJVbmRGnnsCMCMHU
+# FEDFewMubrN1naxuhkwTVRT9LsvGpngtNPaUU0/DnKAi3B5SSS209ZADM5WxAixB
+# InLyNvjyVKoEUxPOcbUdv0juHD7A8Y8N++FBcWV5yBUVnepua59OF8zGlbKWNwr7
+# +45oqSK273DS0ghiYsxF2rtBs4jxK2THEL7xjrRPcfTXkVxe2lzHuxDsArKd/2kU
+# BFABzBdzWdPZU4AxiTdkKn8=
 # SIG # End signature block
