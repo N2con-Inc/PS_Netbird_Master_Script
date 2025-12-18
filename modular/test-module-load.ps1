@@ -1,111 +1,34 @@
-<#
-.SYNOPSIS
-NetBird Modular Deployment Bootstrap - One-Liner Execution Wrapper
+# Test if scriptblock module loading works from inside a function
 
-.DESCRIPTION
-Lightweight bootstrap script for remote execution via IRM/IEX pattern.
-Downloads and executes the main launcher with parameters.
-
-Usage:
-    irm 'https://raw.githubusercontent.com/.../bootstrap.ps1' | iex
-
-    Or with inline parameters:
-    $env:NB_MODE="Standard"; $env:NB_SETUPKEY="key"; irm '...' | iex
-
-.NOTES
-Version: 1.0.0
-#>
-
-[CmdletBinding()]
-param()
-
-#Requires -RunAsAdministrator
-
-# Check for environment variable parameters (set before IRM/IEX)
-$Mode = if ($env:NB_MODE) { $env:NB_MODE } else { "Standard" }
-$SetupKey = $env:NB_SETUPKEY
-$ManagementUrl = $env:NB_MGMTURL
-$TargetVersion = $env:NB_VERSION
-$FullClear = [bool]$env:NB_FULLCLEAR
-$ForceReinstall = [bool]$env:NB_FORCEREINSTALL
-$Interactive = [bool]$env:NB_INTERACTIVE
-
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "NetBird Bootstrap v1.0.0" -ForegroundColor Cyan
-Write-Host "======================================`n" -ForegroundColor Cyan
-
-Write-Host "Configuration:"
-Write-Host "  Mode: $Mode"
-if ($SetupKey) { Write-Host "  Setup Key: $($SetupKey.Substring(0,8))... (masked)" }
-if ($ManagementUrl) { Write-Host "  Management URL: $ManagementUrl" }
-if ($TargetVersion) { Write-Host "  Target Version: $TargetVersion" }
-if ($FullClear) { Write-Host "  Full Clear: Enabled" }
-if ($ForceReinstall) { Write-Host "  Force Reinstall: Enabled" }
-if ($Interactive) { Write-Host "  Interactive Mode: Enabled" }
-Write-Host ""
-
-# Download main launcher
-$LauncherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
-$TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
-$LauncherPath = Join-Path $TempPath "netbird.launcher.ps1"
-
-try {
-    Write-Host "Downloading launcher from GitHub..." -ForegroundColor Yellow
+function Test-LoadModule {
+    param([string]$Path)
     
-    if (-not (Test-Path $TempPath)) {
-        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
-    }
-    
-    Invoke-WebRequest -Uri $LauncherUrl -OutFile $LauncherPath -UseBasicParsing -ErrorAction Stop
-    Write-Host "Launcher downloaded successfully`n" -ForegroundColor Green
-}
-catch {
-    Write-Host "Failed to download launcher: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "`nFallback: Use monolithic script instead" -ForegroundColor Yellow
-    Write-Host "irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/netbird.extended.ps1' -OutFile netbird.ps1" -ForegroundColor Yellow
-    exit 1
+    Write-Host "Loading module: $Path"
+    $scriptBlock = [scriptblock]::Create(". '$Path'")
+    & $scriptBlock
+    Write-Host "Module loading command executed"
 }
 
-# Build parameter list
-$LauncherArgs = @{
-    Mode = $Mode
-}
+# Test loading version module
+$modulePath = "C:\Users\EdBrownlee\OneDrive - N2CON Inc\Documents\GitHub\PS_Netbird_Master_Script\modular\modules\netbird.version.ps1"
+Test-LoadModule -Path $modulePath
 
-if ($SetupKey) { $LauncherArgs['SetupKey'] = $SetupKey }
-if ($ManagementUrl) { $LauncherArgs['ManagementUrl'] = $ManagementUrl }
-if ($TargetVersion) { $LauncherArgs['TargetVersion'] = $TargetVersion }
-if ($FullClear) { $LauncherArgs['FullClear'] = $true }
-if ($ForceReinstall) { $LauncherArgs['ForceReinstall'] = $true }
-if ($Interactive) { $LauncherArgs['Interactive'] = $true }
-
-# Execute launcher
-Write-Host "Executing NetBird deployment..." -ForegroundColor Yellow
-Write-Host "======================================`n" -ForegroundColor Cyan
-
-try {
-    & $LauncherPath @LauncherArgs
-    $ExitCode = $LASTEXITCODE
+# Check if function is available
+if (Get-Command Get-LatestVersionAndDownloadUrl -ErrorAction SilentlyContinue) {
+    Write-Host "[SUCCESS] Function is available after loading from inside function!" -ForegroundColor Green
+} else {
+    Write-Host "[FAIL] Function NOT available - still have scoping issue" -ForegroundColor Red
     
-    Write-Host "`n======================================" -ForegroundColor Cyan
-    if ($ExitCode -eq 0) {
-        Write-Host "Bootstrap completed successfully" -ForegroundColor Green
-    } else {
-        Write-Host "Bootstrap failed with exit code: $ExitCode" -ForegroundColor Red
-    }
-    Write-Host "======================================" -ForegroundColor Cyan
-    
-    exit $ExitCode
-}
-catch {
-    Write-Host "Launcher execution failed: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+    # Show what functions ARE available
+    Write-Host "`nFunctions containing 'Version' or 'Latest':"
+    Get-Command -CommandType Function | Where-Object { $_.Name -like '*Version*' -or $_.Name -like '*Latest*' } | Select-Object -ExpandProperty Name
 }
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/EBBKSriRBKfugTujiYwMHJG
-# pU6gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUB4UqoljRiz82PWAbJppM4i8T
+# 09Cgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -244,33 +167,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# ZQynPBeE+E5njgvYrsTRfV6pP1MwDQYJKoZIhvcNAQEBBQAEggIAgSiQLcMAqS9B
-# AsfE0hVZbexb+W3wXMIWj1oHITJ3BGNlnnKAOi4Co18RSHoaUD+e6BU8FVJKv2Ig
-# ZGYB3MAnDNyFUXLCZvcCZlcU5Ux8T2RBT+1T55Y6SkDm+QfjPN7oHtoSQr4GtPrb
-# ghzmUFyT1afB+mx66F8BMzSsH7TxWokkjglgNKT6IkkiBjxJ42/Fxbx1jg6CoSl0
-# QUGSCXbLHRoKJRzHk7FgIh/pk5wps898wUiBZAgkQeNXLkRxU0LLmV30vv/JCS5c
-# WIdgdCvkwSJ99wiYI9J1bvb9jN2BfPk9zDl6H0VrA8ZjvopQF5GAHN0aZ+LmsXJy
-# chKsho0+V8uxzmoKA5ExeWgIaETrD1YlXBODsg+KZkszHhLZV0KBxtt6qG1IbV2p
-# RQBMvYKq/xDNW1YWnYDJqEVHas1M30LbvgoZf7YM+VgAruqTiX+iEwKQZygVSwHY
-# yzuWn4QW8O7NKwaY5DylRYEQGjNhD1r8lfsQREsJYHkCkTWw6KfwiYFvQ3fzbi0U
-# xZTcEtNB7DPugJFGL+0wSQQCOJLKNzsqg9U4Z0Z41AcpqYY7/Yrh4zcFmTNNkwmv
-# MPUA+tsbw8O3aOnx6HlGx5fVRMncJQ9HYoyZKjX7Nzeu8LzTjtFLodbErKY0ijMr
-# p0VdcSJkb+QhLoDpS/FL7tTZRqDk24ihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# urtll2qRwEGWlVyQ3Z2fAKeQqG0wDQYJKoZIhvcNAQEBBQAEggIASrNMiu3/nw6G
+# BACp4wNpK5E2LezkQerlT9X690/UvNXD7m5nWfa9NvJL2zXwaPyYYQIwWQyWpJAT
+# LhW4lMUS6RYxetmvg/0747DQiWQqRZdlVCa0gPcU/86p5HaoNvPNLDUIQO/IbkJc
+# l1sf9skS28LSSJptlYs0x2TXEznXSx4BX2ywGWMYzjYp9FT9X10DMHKyluk6G431
+# LVkZZo5HDnVOLooeNUytmIhCpGBpPNbqRvrwM79ka6atanc7ymkao0NaPUwezeO6
+# MQ2q4mbMvROTIybLn9iqPTJbBVDQ1YV8g8RPXjvht5Fx0yjkPUoAsyc739SgyRa8
+# Jfips2yEZNaCes6hz/GiNamP+5ObrVtfOse9AQgpbsqrwqP2Ant4trFBMALlLn8a
+# nfFWUJwISzvndJ0/arJBZ2KwjK4V72X5aPMIWLDYc7KOskM1H3TipZ2lcM/Rcy1X
+# AZq7xQadoU/CLlT66w0JtUxTbJftrn5Ng9v5mb3AV57NI2c0eDZpeFEdg80Bdd0u
+# zoEKVgZ7ZAirQqXDYJCvDdQA4H06XEh61oW7FUl2ZBnFzB1yTY3aU+/sSatNnDaC
+# FlkgZcbbtvSyebkprrBPgZtgZdp2a+oLDruswi4Mn733IJaRyOyvEqSWHSUEk8cJ
+# G+Vtd0nWdluEXWQwbvgg7yVAu1JUckqhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEwMDM1WjAvBgkqhkiG9w0BCQQxIgQgkLu+j/QUKfTSwceeN4bslzIK
-# Tvsp2+plnT08RsyyD5wwDQYJKoZIhvcNAQEBBQAEggIAI6OS8ZWPi91TOGXOSjCJ
-# xIX1HoSD3goD4Cy7HB34aM5V+8b3KSvuZLUOZLkdh6rNl7ixqhbd1KNRIHZWvSRI
-# GqQIIw13KsKvuW/Do3cIsGcs2AH3l7YftTERIPZUYerz1+GOTVxxij4fJDieKoKb
-# uDVzCsSo92Ctw2vDcaYTSejFop++9uEKIXFm/KDyacaCouLYXn7MgTVyGeXbYhZi
-# qp0RpIiRZ6DnLMEPLN3tZiIxWkVFgEtAjNqWeLr5rzHyKS6BsP4IWCkcBttz5o33
-# uifvPMerT2b4bnTa3GmQqFj25oKD4Hva/XsXlnoz5OdI7zkrBh+jZqTva2OhfwrC
-# IFJ8c/HdL2xasRpAE4gKmFTirkYtTmMpa09sA2M/Y0Z0rST3A9MGWlUAfmIRmE4T
-# 2tS1iyNNCMPHYxQN4ncx0LySOSMyzM+gq4GbLfs/hQZpajWd7qTjqA6pbrpTofSh
-# usMo7n3X9CRAJ20vhzxUVYkZzyCfGYezChnYc/XpG5YKeI2BqFkKrv5hWkf8ketD
-# EfwSPM1wX90NpZitqyZZfNGmbyp2g3RAflwUUMnx2YJZkNmV+zk3HFi3UBd4UsFy
-# nC3uw4OUqDY+xexMVrK2+C7xBRwGHW9HEh4EKzeLvX8UQkGNbZIGkXeBP+YFuILu
-# vmbdZmrQCX7c2wNwXgpTOCs=
+# MjUxMjE4MjEwMDM1WjAvBgkqhkiG9w0BCQQxIgQgXMN+s4bqlujnJ9UHNtYTuqed
+# gfcAKTglw/3333FktfQwDQYJKoZIhvcNAQEBBQAEggIAjg0r6soDG3VeTeC5KySI
+# HgHWd5R6EWsscrgZqB3xuv1yo0c+RlGdOEPTG0wgyE2nl7INRDDjLWDTFsgseM/Z
+# 2yTqVpJNeHFXdRNT0Ggc9D1s4eI2QGMXekQL3LpyAwKCDgFPiTYj7Q5ocs+7/KFG
+# LKHZAMN21cYuv5m7jXAlIcOp9c3VNs+JkqlwCbU6kGGz0HmqYI91bhAzWufLDqCI
+# NRkg9nlsNnIo9x+EAiK8iJbcqDGy/t21Bm7eIkSCHb8NOb6vPeMxcnXz4gao4DLh
+# Fyz7h+3r9UDl7FdJ45t4fWEcUXYvevIOpQh9riGVqpa8AGsbgz7cpsepcZy8FccI
+# NjJFwsLXboosz6gBBOE9ig/2ZJhlbOwv4QwaNPTlZusBLxtrGyXYqt7ZPtOqz9pY
+# O5lEyBqTZIJve4tFE5eKO/8V41Auz4QwT9boFtLZC21QGtDWiG3VGpVDGJcDZFe2
+# Jj5bD2UfjTY+cNZzV6rd1mD2SdfpD1WY1Br61L+xabA0Rtb7nTVDyC2lzo1U1ZG5
+# OZd+Sgs6sfYGc5B6vH/T1e8qeLOWZYj2szboXI7+LXnInJellQqqYMdxuVS3rlzK
+# sqFj6k1Ih9pZ23YlvDfe40JTatyupj3Z/LZqfwbr2+lPkNssKMPI+WIEXBbHE6F4
+# hFotTa032fo2NG1EXV7osdA=
 # SIG # End signature block

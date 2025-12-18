@@ -113,7 +113,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.3.2"
+$script:LauncherVersion = "1.4.0"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -789,41 +789,66 @@ try {
     exit 1
 }
 
-# Import all required modules
+# Import all required modules (MUST be at script scope for functions to be available)
 Write-LauncherLog "Loading modules..."
 
-# Always load core module first (provides Write-Log and other base functions)
-if ($requiredModules -contains "core") {
-    try {
-        Write-LauncherLog "Loading core module (dependency for all other modules)..."
-        Import-NetBirdModule -ModuleName "core" -Manifest $manifest
-    } catch {
-        Write-LauncherLog "Failed to import core module: $_" "ERROR"
+foreach ($moduleName in $requiredModules) {
+    $moduleInfo = $manifest.modules.$moduleName
+    if (-not $moduleInfo) {
+        Write-LauncherLog "Module not found in manifest: $moduleName" "ERROR"
         exit 1
     }
-}
-
-# Load remaining modules
-foreach ($moduleName in $requiredModules) {
-    if ($moduleName -eq "core") {
-        continue  # Already loaded
-    }
     
-    try {
-        Import-NetBirdModule -ModuleName $moduleName -Manifest $manifest
+    $moduleFile = $moduleInfo.file
+    $moduleVersion = $moduleInfo.version
+    
+    # Determine module path
+    $modulePath = $null
+    
+    if ($UseLocalModules) {
+        # Load from local modules/ directory
+        $modulePath = Join-Path $PSScriptRoot "modules\$moduleFile"
+        if (-not (Test-Path $modulePath)) {
+            Write-LauncherLog "Local module not found: $modulePath" "ERROR"
+            exit 1
+        }
+        Write-LauncherLog "Loading local module: $moduleName v$moduleVersion"
+    } else {
+        # Check cache first
+        $cachedModulePath = Join-Path $script:ModuleCacheDir $moduleFile
         
-        # Verify functions are available for version module
-        if ($moduleName -eq "version") {
-            if (Get-Command Get-LatestVersionAndDownloadUrl -ErrorAction SilentlyContinue) {
-                Write-LauncherLog "[OK] Verified: Get-LatestVersionAndDownloadUrl is available"
-            } else {
-                Write-LauncherLog "[ERROR] Get-LatestVersionAndDownloadUrl NOT available after loading version module!" "ERROR"
-                Write-LauncherLog "Available commands: $(Get-Command -Module * | Where-Object { $_.Name -like '*Version*' -or $_.Name -like '*Latest*' } | Select-Object -ExpandProperty Name -First 5)" "ERROR"
+        if (Test-Path $cachedModulePath) {
+            $modulePath = $cachedModulePath
+            Write-LauncherLog "Loading cached module: $moduleName v$moduleVersion"
+        } else {
+            # Download module
+            $moduleUrl = "$ModuleSource/$moduleFile"
+            
+            try {
+                Write-LauncherLog "Downloading module: $moduleName v$moduleVersion"
+                
+                if (-not (Test-Path $script:ModuleCacheDir)) {
+                    New-Item -Path $script:ModuleCacheDir -ItemType Directory -Force | Out-Null
+                }
+                
+                Invoke-WebRequest -Uri $moduleUrl -OutFile $cachedModulePath -UseBasicParsing -ErrorAction Stop
+                $modulePath = $cachedModulePath
+                Write-LauncherLog "Module downloaded: $moduleName v$moduleVersion"
+            } catch {
+                Write-LauncherLog "Failed to download module $moduleName`: $_" "ERROR"
                 exit 1
             }
         }
+    }
+    
+    # CRITICAL: Dot-source at SCRIPT LEVEL (not inside a function)
+    # This is the ONLY way to make functions available to all workflow functions
+    try {
+        . $modulePath
+        Write-LauncherLog "Module loaded successfully: $moduleName v$moduleVersion"
     } catch {
-        Write-LauncherLog "Failed to import module $moduleName`: $_" "ERROR"
+        Write-LauncherLog "Failed to load module $moduleName`: $_" "ERROR"
+        Write-LauncherLog "Stack trace: $($_.ScriptStackTrace)" "ERROR"
         exit 1
     }
 }
@@ -846,8 +871,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoEKBpYqSdcfaby8KLtx3h3jw
-# 81Ggghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUY+imxvKo5bCbtbYzyA2FDvcR
+# rLSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -986,33 +1011,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 0EGxuUjxkOJYN5I8AnkxD8NyiT8wDQYJKoZIhvcNAQEBBQAEggIAUG5Byd9sqdS7
-# uod44ZNs4Ce3m/RAucy9jOhHahYsbGhFwpUXFDETKZgGDU+e0v7PpGVSnpuJECuJ
-# f69q5vybnfAo5O0qN94Z0GPajt9jZXS+IH4i5ug8GiZ68DLN2J+1/qgT8+PE8G7e
-# zn7TaCuAUf7bObcnvrJFC6BItGFqaNDkImbQAkzj/Z1FAXtxNRjkOCkNbprttrdL
-# yiHk70rby3CCmAdDwS8U+YlwuGKWfllgjQNJC6ZZLOc5gZUWYnyD9f5DzxxEk68V
-# eRXM8ZMrlAz7JGkSHSPfDWhR0EKMValUnpIn9aMwbt+k4oHvVmOc3EkUOwr5M4Bu
-# kOUHkezZMVBqCoIQvxsgTbi3rBOqBDxla6uoT4JnyQRUnSdMBtyeduLlYtlYitbo
-# Wu0wSaRCxbX0Md8nkgjsLrOYMDaBUbOrSRsWLVfdFRbFeWjBeDjwK0VifbE73AD+
-# KjxAM7e0LqHJiyO2lp/oLcJ1z8UICEiGD1WBTG3o02NcSAFJwZAp6RL/2ptThTi+
-# npUB7OHNN44V3XhjD8r3kk1VAxZtofB3rUKFp4bDz9siEsyumiURiNzLAo55+zCM
-# hpMijrn7I5C8fwAmbwcGtXwJvEk3zNksExf+JYkQUwdDsw+ZcKvNj2esZb11ewI1
-# kPiv2s99tDHVrXXFPJOhUMM8T7hpQIahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# er4ne0qWQdb5fCzcrRszmyW9la8wDQYJKoZIhvcNAQEBBQAEggIAb2fuoWMM5A1G
+# 4QQNXe/itNi5UcsaHv2aR9F3FdfqmESqMC4R6Am3j9MKoqpB7xAp9cCfVVo6lxVv
+# Luxswifb7mMHpMQ4UQjFUabFRpHIvnJpXyZ93tTZQqjHpFb0zyZqXhMBElXY7Btp
+# uLen8SpkPTflYaBlLhjH30AomzMVvfg5vekgOBQQ9I3HpRXbPI+ZBacSePCxBQRy
+# ecia08sm8O77zuHMQAFAGIopT05rZGI+qDMx3/xIPZelWJRinjMTo49oCvKlMb2B
+# F5bdZ36b32mpKD3nkd3bHILhbqa6A3e77CVi9euePYEZvtyTP5RtmFOQUoWdejsF
+# eySa0Z/WWUbZzZ1+uLmBTfxd15Y9TbQSkJXrABQ7IIbUxnlgqweTyPqe8lVmIDd2
+# NqysQP3YQrm2Gn04w6HhakKPYKagu3B/U97eqH6gusz4xi9I9cB+ByDTdagHMn/c
+# ePysilAtPuzfRMwVACKKVUiYpPPQslhjDY0qaazA52V5ARUlCD5aKNlHeHw87dfG
+# SfIASBAlwEF7Qki3BJQCegdgkcSEvBwDdhNR9hCIBg8dVFD5gk0uMSJPqx7iy+6u
+# DQYd8Swuxa3tOE9tRNgYLjlkMG4XFx7oHk8eL2iyvudTalxykV+3L6TYHGn4rnWY
+# DHQUfUdQAE5j/NimcjMBrpRGxUhd92GhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjA1ODQzWjAvBgkqhkiG9w0BCQQxIgQgqhU8PqTIjdqnXpvF92CENarA
-# 2LBupGSX+nREZXcWrkswDQYJKoZIhvcNAQEBBQAEggIAFXrySmyBUW7pLGuchcm8
-# dO6346jwZdB2QHk5oPuR25mj6UYJSc+D5MR1d78P+iqNriZPKTbdecZGywAozPZm
-# 02wdrQ3aNUHAIMbWuEygDlgfgH31bHDeDJK/0o742MlmcEPO3NolH8eIuzd/US0s
-# RS7+2/gM3Esd8waUG2/otl19ADo9kqwICAVL0q4Xklr3dc3+8b5Qr/orf48Qa0cE
-# byaoqtsfNxFIs94x+4WrnOPef44IhbI5SKZ1sQSePqTKTtCG9z8E3eMS5Nc/gEb0
-# +TA5XV1HcW4ow3QSiYMN2GKR/MIAmXxFQPCGi5McGjWG/7ieBGqpxcgFyRqv0qym
-# IzEYkLVcDdZxY56WiPV25ucUJ6CjnOYs3zKN0thjQM1Rtx+WeNGtG/n8E7GatqiF
-# 1Rj1j1QMvtyNPIVeT0SaY8/Wq45fxrqde8fLyDPIuIRwrnsHFHmkrqml6NPJ3VcC
-# 7cwqq27MBMp9+1fbx6aebolgREws93OHT43LMam7OjBzNKp9o0Rd+390aJKifetd
-# 02NH7j9p+NR6xa7iOu2+poK1xp1Lpl9UefORADQEiSlnmKN8tZrMd3lCjItA5TbR
-# oLGp9G0gprTfK3xDXS9qWSDNe70AgrWLNaOtvFZGYYIYXvEK7jQC/kFGxn3zxFhG
-# kj80Yg0IiO7kWGZAecSyBTA=
+# MjUxMjE4MjEwMDM1WjAvBgkqhkiG9w0BCQQxIgQgxD1SAc3sBrAcjjZqz/xf8ivU
+# IC5EXiTl1AUBp2VqwqkwDQYJKoZIhvcNAQEBBQAEggIAOYRVkZ4o3CuB0D2l+F+w
+# Pet74s5M8AyGzfjrOlVA7Wgd8ZRbbCMbGt2AnvolhpvmS3sQIjUGqWQAt2sis8nE
+# G5c5UI0+rB+gfivIl9G4fIQTaCD739VakC+w2Q/ge7I+V9GLrZIWxZkMCfDktbk3
+# u5ug9fV5myoAL+ccwZHhUxSjO4stZG5qZBrInV54lVexO3M371ommt4efpummyts
+# vXa1mduyRQXV17CyPRCD3ErHIX5ANHnj6WlVVnOszsUmFwxR5oAn4otJfzqDoeq/
+# Ui5qIg6QgKRQuKVw+tFpH/o75y4O6JqFRc0UHLAsZdrLAifA+O23P7F1y0cSKXE1
+# kxAUqVWtjEzjvnWP7/RLPbjkg8aovjBVfO5hPTnCJxnC7573QMVf2770+TIZY+YN
+# rF0s8lER6x8VLFe4sfbxdi7eWZflnxozAv5xGvMjKxyzREfB0bxvBDvEL14O7BZw
+# vOPuB8a5KpMzPZ6IkRsHUpErpAmAzjCqe7lc9HhzEtpA1EbyJoD/ztm/DeIG4ZTe
+# +VQQc8X94/3NLK40/RreyXAO8+Vtu292AiI3MmkQfth8PbQvI7M07DwFHWbNaH+u
+# D9BUpHrJjR/dAmyukDeGo/eNprd4DyUZ2PMYXrG078jWMbioL8Yg/JJTGZxARTVF
+# dwcuEpzM/YEgKKxaXjJaOWA=
 # SIG # End signature block
