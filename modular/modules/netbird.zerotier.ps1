@@ -1,14 +1,11 @@
 # netbird.zerotier.ps1
 # Module for ZeroTier to NetBird migration with automatic rollback
-# Version: 1.0.0
+# Version: 1.0.2
 # Dependencies: netbird.core.ps1, netbird.service.ps1, netbird.registration.ps1, netbird.diagnostics.ps1
 
 $script:ModuleName = "ZeroTier"
 
-# Import required modules (should be loaded by launcher)
-if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
-    throw "Core module not loaded - Write-Log function not available"
-}
+# Note: Core module should be loaded by launcher before this module
 
 # ============================================================================
 # ZeroTier Configuration and State Tracking
@@ -451,8 +448,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU69ZtG3+LSktHcK497NpQYDe7
-# pS6gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdp/GvbPZtGjiiOD+BiRz6zJR
+# GdKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -591,33 +588,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# SGCirIq9NVN+BpKXMMEjwQ6xiIEwDQYJKoZIhvcNAQEBBQAEggIAy3+W8N84BZVS
-# dbfc1XVFaWth64KF9r+DfMJMP+xFOF6rcPbtwA3nyxP7xQ0TeOSafeuVjcIjylRv
-# skmSAr+hKpfkIHwWrfdbqKXqmXFbgGsN8ks/Hg9s6Vvoxob7RLIlBkdEoj0qxPTG
-# LLtnwth8106KF8skzz/Z/Zhn2RSmlUMS9D2DeQVNP/kbfTquipD5pTQepCIqfYLz
-# 72p1qlKhbsvOlPAgXMR4Zx4xQ3jYna0Zf361FDcb5/q+O6iBFjgLT4Dta0Kh8KFd
-# Vy9Qk++++THp3HB87C6X27BXQHgEqhU8OCg3XPLo08cXcq6HKLjtvzYEIqCMkYq+
-# NgVjc6951G7Vu46HAoPC6pJSR7XcHs3tDxsOBYwR3jy0uIUF+RARRA+4aej0Oz3L
-# qd21DRirmMThTvkbkWhvhYWEySmQ3U+a352PeFilzGOIPsfmEA07HRWCYDIv1uZ8
-# D9iOrHJe+i/fmqXx80mpSSfPn0+/XD+LeXJCSRYnrkez67I2M/2A9v4DCQbRcgCH
-# 0c44HZbGaMstWG3DteRTdHBDznSCMxUkuo35Q8ljFhCENMRBCcIX/vSIFE5tyKOQ
-# BRuKxBcJ0ZKe2q1uZcnlgL0i5lqr9Ow+A7kYz6wAERtYkyW04lwVbBEzhVrCX4Jq
-# 1KFUyiOFSI1KtkDzfins5kl6OnoR5puhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# GNSutBKklCI+yB+tQpXQ68QabK8wDQYJKoZIhvcNAQEBBQAEggIAgxb1paFbywjH
+# 8013if6QooQaxxB4OvqgEeLNaOVtvWqtbgTuK8seSAGNA9wSPDTkgFoeEQzQ4ngW
+# 6WRYB8ftjqlf5PMikA26ylubqzKzwrQ3EWjy5VdN/sMiYdSe56whKJi52JbO5WLE
+# xZ9gJWot0KFs5oTJAqEkDcAthgfBpssBuTg+JTj62ty1lPZ6mj077ytSC/Iz0OwH
+# 9q0WEjylmZuzqQ5aXWEjnQkCQr/VwONWCaoJfpPn4YJroUjtyL63Gos1tsFjynxb
+# 2QgpW6wwjp3eGLO6RPC2FG+Yj3h0A49OFMC0Xfg7Ksfkb7S3akba0GrSuDkWOwGC
+# 37rjD5V4pqp93212t4+kzrtlFsknqAtKZGdg69ubY9t20Bg1rGS4MJ+rJbLKsSM7
+# KkSQ5rKw9U30rfQHSiQihwxKTw+Q5GgiQcoeEUJRURngKPvtH29mO8+kjIQG/F5z
+# gyp01q1a3x/tRbXjcaXWJWY2jllWWZOYK3FcaGMknBlfs98JwEFNiaOtJBQqwzXY
+# K6aNNtKLTp8d51s02k1PfQflLRabuJSG04mFoenSvHk52Qtewm9kZxEmQFmoYUv0
+# V9SkvBPCLCivLFKZaDRm1hDXzVwTjAyQ3YN8DDNrhQxzk24nkljjVnRTuRMiQHWb
+# 4Jxr1KQHbbBZc5e4VfHPIGMUYcPtaf2hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAxNTMxWjAvBgkqhkiG9w0BCQQxIgQgvpuqNXqy2G1itbnwBeAV6aCL
-# IVxaeWexEYYTd2uBkOwwDQYJKoZIhvcNAQEBBQAEggIAGk2TgYdpWHCjFslsMiNv
-# Kx79NSYGOqjvu3qwnenk9d0RQMUuMC5ydAKWEtT2LlPQLebjdp3yIbI7FTtGBjUr
-# jwh9f7xqb7q9dcR+CmXq56hucQ61S71CfQWjVpn/heYCLdZ2X6kd9W3vkCt9yDdO
-# bB/fe6ihU6m6I823ROeJK4XE/iB3Hrel/66y/9pLbLrm+XAqNIcPSffl70nArgTh
-# h4p20csjTuZpyLlexn06Roz0Ta5EHKkIqedA58t4ijhcss5QJ/aG7i9Ac4kf+nPS
-# PdFWsxVYhrNHm9hRZyJKiAd8Y2wxRjkv7X37DAyg6zC2rNLtVbb2p2sehel1HsIE
-# iZJ8lpI0BwfiHXjpy5lPOoxSMiqIfruNuW/JUxAU41aximpLyXcMzShK0QJyM7OK
-# dFD5s1zofv4RR3ezTCtd7hXBnsLlS7DsMf5bfby9MAJEhBNsAtAruV5pTh36TcSS
-# bBThRM7xNWLl8IQW8qx+/am31FlG0+/rj2JCFoXjLJrY3cPiuaMjUH4Iq+sbcvKf
-# egWJoUxTDi5R0FOHCmFkrnVLrr9JzDRe/iQjHYHp62VGo3CrJzZMtA6qj6CubYBD
-# hAM8hsd7NdaUR/LQkxITMEdvV1tyWVAc7lY4/1lNSJxmg9st+4QQvD0WA86nLNNE
-# SjOdaTUsF+3Qbs8jHI1Yufs=
+# MjUxMjE4MjAyMTM3WjAvBgkqhkiG9w0BCQQxIgQgolJFtsnP0Hl2Jd5lI2nnqSxz
+# ICO5JncDne69GBkkoCQwDQYJKoZIhvcNAQEBBQAEggIAGtbNg+yIpugs0Tpd16oT
+# IEO5erJ77uEtdg60gZmSUoL5Y9WvgdmZvzYlYbSDK5V1QUG8h2mN5HHlz+lgiX4J
+# MAgANyUDAv2ROkMKlIJ8SgIn0Wbwfo9vk3MW4r+zGBxY1QYqVnZRkDsSu9OwvfqS
+# GIQcmiuTZukK5o9NH8qeuut5iPfNSMzFvUea1M+Bb7mvl5fEG+Xr3U6Ve68b5kSW
+# 4/u5OCGf3TmkK38an+5JCVJ1yE8gRUYUnCoyjaFzKEnbVUa3pSxowY/rcu061rg5
+# cx4t39Qf9nH1zhybkIQfahFpSqIF+qeWglJqq7GqQV03Qyrw1X2WQqnCjFujw8+t
+# CExT4nTng8xLVRNpuU/jWbIabAqkbQ7JiuWbrG7EctAF5vk8A7/QfxNrtu6MiYYQ
+# 7wpv5KhMYU1UANlZXyvD0V4l9zUuQ67YzCws4GhpZGGqwD1TRQGFq4jFDcIUzYpL
+# tmn+zDiZNO8Nt2yxMG0X5xAkh0PDsF1PQ3Tv63rwc7bpnyYwo6K6I4dGO6xgG0ww
+# kumTixycJld3ib6JP//D4PYT+gTpUslW3i+2vJ1N3pzsxYLaarpMrEse4Ewp/oYg
+# YQNjjmcDtVQNJbIBCIF8OY9yX6KgIvsuvWlvTBsm8rMgACl7oSCw3ZEIO8kVRYne
+# dzy3jw39euhpzjbYIEDUPTo=
 # SIG # End signature block

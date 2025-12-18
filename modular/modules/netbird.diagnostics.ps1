@@ -1,14 +1,11 @@
 # netbird.diagnostics.ps1
 # Module for NetBird status checking and diagnostics
-# Version: 1.0.0
+# Version: 1.0.2
 # Dependencies: netbird.core.ps1
 
 $script:ModuleName = "Diagnostics"
 
-# Import required modules (should be loaded by launcher)
-if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
-    throw "Core module not loaded - Write-Log function not available"
-}
+# Note: Core module should be loaded by launcher before this module
 
 # ============================================================================
 # Status Command Wrapper (with retry logic)
@@ -302,8 +299,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUibgk58E4d6jAAocFJbnJGg70
-# QZOgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmgVCfKKBXwjFk5zSSMdStEsD
+# xYmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -442,33 +439,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# bgIdHvNdVsZNilWJ02zIiWOAJW4wDQYJKoZIhvcNAQEBBQAEggIAfi8XEj8KmiMJ
-# TkSh6Scs01Jk7Y3e5ge7rxlg2w8Pge+THzp8zrbRkTQR8ENrzGS81rncGuwsyGJk
-# RDVQG6FE6SHpw5m42WnJKa5VjsRe2IwMupAUaENPB+XygvyZz2LOC5xQtxg88Wn3
-# caF8/cIMvIbuOCPo4qHc9N92G4M+5R2JfAu+j8zkiqEyEjmA/0bO1RFImBO4YQ/E
-# njD3TGAX65h5aBWwgOSY4IO+w8TTj+bpeBFqoB4eudqYdjtEbtXscx1otkbVM2MO
-# TjpKmxrWNNN50qZv7RbYa76Z5e06mL3yu3lTnD9OezLuZx+cc1yFgQszGXZl4TmN
-# wWt0ihSMOF5cOTbiFS5qln2hX5UUhTz+twzqdB7rMrLQNjx3P96knvwvViI3aLt8
-# Hiy0DIwj+DXXKGNHnHjbrA9T41cVEPavvVBL7yWjb+PN9a/rWJZYIKSuTAb60kXz
-# rba6vOCoiYY9WPgimK7GaBZ484Oe48OQmzvzvEgg/WTkZJEKxZjW6/AdmgcyhRgx
-# S/r/Oj8gLownVTlrEt48pAK1frbN85Z8NL60dzrq2/V4J1qX5UUuTo1CgbY2obaX
-# eKzdlfqtugPg9YNjvAAKPHAev7U3GLMybCzF/lfSNzx9PPRlJLnfBlQ0X3mtiErj
-# N25OtRYhgNGxYrWdoh9KaswWxBaaZCuhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# cYxbwTiMCKA2QXnZ3U+rsazVJkUwDQYJKoZIhvcNAQEBBQAEggIAED1xruXM6yjy
+# RSrTP4Fo0vShZeFX2D6OQSzXuifhYE1/nLoON5xcsdZ+92RJptqbpQN5JrgOGbUS
+# SavtvBko06CKb0mzcDK4o2ilXAFIbLE7NW/w8Tu1yr4KEOepEBmLlo/8wVv0rvbM
+# MMe7SMnY1gDChOup7FKjaUBXFU0pBNKi2m/M9Sxfys6KfhYNmluTtDkSaAaPA/uT
+# Rh7LBYfR2NopOQD72qpCJLlAJ3+JAmHu4UsIUa0MSpOvjG+ulodjQf9Os114GlsE
+# Grb77oltc2ZWOsJyImUTTM+CP4PWg/0D1D8famr4K6hRbDkuuIOX3PXZUHNtGHft
+# Hzkb9u/P5arz3C4lKE0niWT3UhZpSq1rT3wYjCi+RKXiqXeoNIGaft2gQqstpYJt
+# RKC5q7Fhn4U63C3gyKtfToPEIJWMH4XiE9IPNLXnNwhpXHgxnsBJFCrmCgyT/IDG
+# hKe3tW31t+EQOrEhG37enogS34otZOvmiNXNc2j8CxPAqGPEkuceRQu2WaBoYCb2
+# 38UNK8SmjPwj7Vy9rFRhgwPDZGNQHh71DMKt1IScewRENtGK+Pn/84NBrkuFlRw0
+# WRSIw+Zo7Ez16hNocpV65tleaNg4JNOQMLGldZ7dGTgtwgaQVPVxKfjyT3LOkL39
+# 3HHuMsQgJj6wkRHmwHx6XKvwZgJvD36hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAxNTMwWjAvBgkqhkiG9w0BCQQxIgQgN85aAsvfiHUmt9lBUzhTGGcj
-# CyBiJxLO2oJYUuC2yD8wDQYJKoZIhvcNAQEBBQAEggIApf/ALIEaXuIgo6/k0eud
-# P4PTDiInu9sSnneicUJHmyrbp1F/M+43zyLk8VE1vxVJfH7Cdm4BpD1t2xgWkDZu
-# PQ7wRWj9RFF5jXTqfUsFa5SAblzfJz0oguQD0ZUjo3L1WvWPKDtEYB10DO5WsGo5
-# FJseO6RU8QK4EHS5lqb9UMkYXk4hzfYnRqsjaAjVyRMlf4rMu9bzlgIIoy+ph39f
-# kZ2ERb5r+xUJz+EB0yGgdphq7MMD6vcUIj+BngV67OMS/ZjVSvN1KZkFQpoQyP2a
-# 43P15x2g7O+5DYlQ6Mmo6yyIqIEnfGlAprS+1etxK9fKRTgXmlQ9wSSLWOSShYdN
-# cAb8TIiPst1++P4QqMoVC6kwFWK38+uzXpXKCFm94sFkL8MHmODWWAnjnbiGeuat
-# hL6RMO5rUZqGAAdDgLzWOIKDywJTl3Frg0AAb6tF1TpQrk43gWKtxaR1yIXayFLG
-# 0o0iURLOWptEiRY7MtGo/pDY4G136A0i4Rphjf+NUUw9Ylolvwhx51C+kP6u8YoW
-# CR5QsD5iZ8jk/De2tcAiOtZDvNM0dTMrhgKrCkOgxEiza5w1JYVMj+PC+kYEL0Rc
-# nHkcyHRB1ioGtvFsNG9OX7aNeMIYaOzf2uU/XvcCVvgTnBg2FGp4VVS3LPXA0T0w
-# G9MeY5KoQLhjrIhDTLaiZvo=
+# MjUxMjE4MjAyMTM2WjAvBgkqhkiG9w0BCQQxIgQge1iQ1V1KnwZLYU4EYDALSND3
+# K/u8NXLIgoyVH+ZEWOcwDQYJKoZIhvcNAQEBBQAEggIAtMFv9LENJIlRCzYZj8Tj
+# X2fPNQQn7f6Hw0dJCva4a+DD6iAGZxzKdZ80mj1TNtl1J6yAojIsALWzwvQhyhuz
+# TpFiEurUws9kuWmi7UGzfXzDXyB/3symfiI7bckzh7uAfQ5x1mqwmFSjeFmbvL9V
+# PcjcDIAbwpZ85nMcGjBYfvhg3/f3dxs8ziRdCda9A8+g50HnP6fW9AUlygecxQSl
+# 7BRSmzNFeD8xcnOQAcCU6b5Cq4p+BPtr5A3PfCLNT0mQMKDRejh3A0LJg6QVRiHr
+# fuxHNQTHqlwW7DRnik8nodSEiAL5cLeNVHU7WCQLJdaqrPg0GydWUmU/i4Sp4Vl+
+# aFfGiV0Z58AEXuCsFkevjQHmtQDmuA0r218+pTGpMmWsodrmj5mOv0v7M8qLiugz
+# HbfMyIKA8lkF6/Kx4evDlj0riNtfzKevBkhzp1t9Jke2uvxnDVfjtExYgkuw9PWe
+# U0aoWFzMOLO5Z/QIhuPei+BZuhywBvEko3KGjYtquUJCTk3zkauTIHHe6fqzCXEA
+# T6ccH4yq4+wPQAL6fypJ0GsppLd0UMPNpMrrpot1t4LO/cCP7jdap6PUPkla9boI
+# jOaunDFnjHkQsSCk553Usv1O34ZVi165jmFHZFXItU60MM9nL4ux08gbgQXoCPzU
+# PMq7WmadY7/OfHw9Opu8uhE=
 # SIG # End signature block

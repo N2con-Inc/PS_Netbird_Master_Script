@@ -1,5 +1,5 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
     "version": "1.2.7",
@@ -27,25 +27,25 @@
     },
     "registration": {
       "file": "netbird.registration.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": ["core", "service"],
       "description": "Enhanced registration system"
     },
     "diagnostics": {
       "file": "netbird.diagnostics.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": ["core", "service"],
       "description": "Status and diagnostics"
     },
     "oobe": {
       "file": "netbird.oobe.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": ["core", "service", "registration"],
       "description": "OOBE deployment logic"
     },
     "zerotier": {
       "file": "netbird.zerotier.ps1",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": ["core", "service", "registration"],
       "description": "ZeroTier migration"
     }
