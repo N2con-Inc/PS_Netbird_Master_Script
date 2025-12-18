@@ -1,6 +1,6 @@
 # netbird.diagnostics.ps1
 # Module for NetBird status checking and diagnostics
-# Version: 1.0.3
+# Version: 1.0.4
 # Dependencies: netbird.core.ps1
 
 $script:ModuleName = "Diagnostics"
@@ -168,18 +168,22 @@ function Check-NetBirdStatus {
     # Try JSON format first for more reliable parsing
     $statusJSON = Get-NetBirdStatusJSON
     if ($statusJSON) {
-        # Use JSON parsing if available
-        $managementConnected = ($statusJSON.managementState -eq "Connected")
-        $signalConnected = ($statusJSON.signalState -eq "Connected")
-        $hasIP = ($null -ne $statusJSON.netbirdIP -and $statusJSON.netbirdIP -ne "")
+        # Use JSON parsing if available (be tolerant to variants like "Connected (relay)" and whitespace)
+        $mgmtState = if ($null -ne $statusJSON.managementState) { $statusJSON.managementState.ToString().Trim() } else { "" }
+        $sigState  = if ($null -ne $statusJSON.signalState) { $statusJSON.signalState.ToString().Trim() } else { "" }
+        $ipValue   = if ($null -ne $statusJSON.netbirdIP) { $statusJSON.netbirdIP.ToString().Trim() } else { "" }
+
+        $managementConnected = ($mgmtState -like "Connected*")
+        $signalConnected = ($sigState -like "Connected*")
+        $hasIP = (-not [string]::IsNullOrEmpty($ipValue))
 
         if ($managementConnected -and $signalConnected -and $hasIP) {
-            Write-Log "[OK] NetBird is fully connected (JSON): Management: Connected, Signal: Connected, IP: $($statusJSON.netbirdIP)" -ModuleName $script:ModuleName
+            Write-Log "[OK] NetBird is fully connected (JSON): Management=$mgmtState, Signal=$sigState, IP=$ipValue" -ModuleName $script:ModuleName
             return $true
         }
 
-        Write-Log "NetBird not fully connected (JSON): Management=$managementConnected, Signal=$signalConnected, IP=$hasIP" -ModuleName $script:ModuleName
-        return $false
+        # Don't immediately return false on JSON mismatch; fall back to text parsing (JSON fields can vary by version)
+        Write-Log "NetBird not fully connected (JSON): Management=$mgmtState, Signal=$sigState, IP=$ipValue" -ModuleName $script:ModuleName
     }
 
     # Fallback to text parsing with retry logic
@@ -192,15 +196,16 @@ function Check-NetBirdStatus {
     }
 
     $output = $result.Output
-    Write-Log "Status output: $output" -ModuleName $script:ModuleName
+    $outputText = ($output | Out-String)
+    Write-Log "Status output: $outputText" -ModuleName $script:ModuleName
 
     # Strict validation: Check for BOTH Management AND Signal connected
     # These must appear as standalone lines in the status output (not in peer details)
-    $hasManagementConnected = ($output -match "(?m)^Management:\s+Connected")
-    $hasSignalConnected = ($output -match "(?m)^Signal:\s+Connected")
+    $hasManagementConnected = ($outputText -match "(?m)^Management:\s+Connected")
+    $hasSignalConnected = ($outputText -match "(?m)^Signal:\s+Connected")
 
     # Additional check: Look for NetBird IP assignment (proves registration succeeded)
-    $hasNetBirdIP = ($output -match "(?m)^NetBird IP:\s+\d+\.\d+\.\d+\.\d+")
+    $hasNetBirdIP = ($outputText -match "(?m)^NetBird IP:\s+\d+\.\d+\.\d+\.\d+")
 
     if ($hasManagementConnected -and $hasSignalConnected) {
         if ($hasNetBirdIP) {
@@ -213,15 +218,15 @@ function Check-NetBirdStatus {
     }
 
     # Check for error states
-    if ($output -match "(?m)^Management:\\s+(Disconnected|Failed|Error|Connecting)") {
+    if ($outputText -match "(?m)^Management:\\s+(Disconnected|Failed|Error|Connecting)") {
         Write-Log "[WARN] Management server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
     }
-    if ($output -match "(?m)^Signal:\\s+(Disconnected|Failed|Error|Connecting)") {
+    if ($outputText -match "(?m)^Signal:\\s+(Disconnected|Failed|Error|Connecting)") {
         Write-Log "[WARN] Signal server not connected" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
     }
 
     # Check for login requirement
-    if ($output -match "NeedsLogin|not logged in|login required") {
+    if ($outputText -match "NeedsLogin|not logged in|login required") {
         Write-Log "[WARN] NetBird requires login/registration" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
         return $false
     }
@@ -253,8 +258,9 @@ function Log-NetBirdStatusDetailed {
         Write-Log "Final detailed NetBird status using: $executablePath" -ModuleName $script:ModuleName
         $detailArgs = @("status", "--detail")
         $detailOutput = & $executablePath $detailArgs 2>&1
+        $detailText = ($detailOutput | Out-String)
         Write-Log "Detailed status output:" -ModuleName $script:ModuleName
-        Write-Log $detailOutput -ModuleName $script:ModuleName
+        Write-Log $detailText -ModuleName $script:ModuleName
     }
     catch {
         Write-Log "Failed to get detailed NetBird status: $($_.Exception.Message)" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
@@ -299,8 +305,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDF5Zwn5HS1cx5rejj0tOHXsu
-# fJugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEH0QZcO35q+Vk+0WnlX9ge9O
+# m6ygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -439,33 +445,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# rw1sw0jsjK07xyj2wMwxObr7ix0wDQYJKoZIhvcNAQEBBQAEggIAT7Gay0li2981
-# 4159Uw5vuGA5fS1DYrylinY6tu++S/dCN34uVXLdm0idTLhd+gO/iwjUhhzB7Gi2
-# Cwa170owWcGJ51Ayn6KpaqwUCdPSb3pRSo+yA5Ckov3/qNwW9LGFnymnj0K07w3B
-# BmpCmV/PRXcavtwpA5XylSCfcTir/idmRBht9j9cHIlnQYuCdz1qoOIHuEq7HNOm
-# e/eWOPAlCkcN8xpSyHzlek9pGR3Q0pWMHjBHS4x7gdiuByZZfOHGvVP8EcyrgVEk
-# gKzrXy01x0OqXw0kBJieLqbZzdnHKNbeffF00PtI9IU3jZE+9ON0PBQKP+dULxzv
-# w7i3abuxU4x5+sQDTm9B/3j6JwjUrq3nXKSoSqjApOxY72biIkjmKRW+aIoajq/v
-# P4XmNKHzC9YwLD9ZnniEZyRhPveHcdEOi3cZpFPkTo72Ca5b+09xVhOuEcWWgEBT
-# NjrAD4T4Rhj76CsdTvc8GOFwWTb3S37rUZWKeQL3/x23fcxI6HO02lFctjpWaSGD
-# /pSXfQQxTtCO5vOlZeDGnzMo3WlI1NRSOtVTWXOxpKqrp7bA/t01dZy84RsqIlG9
-# 7HeXuBBIu0tfMM+hiDB3RiDbPYRPZYgyOILtvUiwbFWiAb5M8zwsblIhJ2/PO5al
-# Ahmj5gqKQYW2b762qAZbSVY4L8urR2uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# oizQnKcrXw821aDRRaTRmlk7XVcwDQYJKoZIhvcNAQEBBQAEggIAMXI6iTDct7gJ
+# OSGNjmnHNe/qCyoB9AJ5UcLo+ku2A6wcewpEyNSGRa1LFlxtlnUIhUVUSFPZi5Gr
+# RC6sVDR4GuPs9WU9nKRb/eQqCWS3JeDlRfSb2cvqxWJsOtj5wNFHLXLvd/wGkNwo
+# Hx33IUFt3mgIX31+s2wcaWBGDz5MvcayFeYpswS6Lj+JmaEluOKV3yGx2+ENdHaY
+# HDisVLCtwP4dc1Gn+TAp2XR5Z8kM1zjB4A5fYby20wovuSCWIXNiB0XCYuyuqF6a
+# iIgld3G3/bsQjmrEl2slaJGtChUCBLAfFSXEJfDvOwciNqanr3lrz4wLLLHfirG8
+# DM6hDzgcmeTwkFAAWE9/BAC7s9i5YRVxOVBb7pgp6/QK/REWK48O8COox4K4292L
+# ztwpy29g2PrynNAEL9Yiv9usTM9uCOuoEHrwNhPKinI40vm0ixZXYrYPz08TQUV6
+# uHF5hIPsO22gkFlwrL88D2Wg8I7DlJJ1FaYywQXcNNoSEetme9lYyCS9ZE+ImdIQ
+# StLuU+ce3NSm3MutmQH/g2X7x0c4zizc0TPFYvoaAI87yFIVlc4NSYSyExoiY1Ly
+# 8BGAAHov94TnABJeiWNhz9V0xRiXf+t112vVUfMfYUjcARovHW+q43LjBV8jrLDB
+# 1t/Wf9CbEs1U0WR8tBsXSuBNW1RlHuuhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEyNjM0WjAvBgkqhkiG9w0BCQQxIgQg0Q7XIzjttwZrkcC8WSlDu7LI
-# WEM8H3orWg0Ls4J2JSQwDQYJKoZIhvcNAQEBBQAEggIAxcsC5txqv0tmldgCUb2S
-# pp38qdDnShFFdeRVrSS/8vHRNX6WHaMt6dcIJIVuOQ0m6XEdzoPXdEUQwplwQsF/
-# xV7u3eCIBVSivJT9j6Xu/yud9OuSlZgNu36bxAZDnPspDmCCkgkaEO2Q4FOGXzJ+
-# 6TCGBxaaBsY60/IY7tjNiR0jSR6LL+O7chNxOj10K28E3tz25ydb3Ut5rz+kbTNW
-# t1/1Wa9awRps2CvE6cFE3/sbi2A66qZBNdr9Iloir/opIaSuFQCcDFKTrRO5Zgfd
-# 5SeoJSyfagQN6jA41thYu9SyDWMlXA/XL5IkZpq4+8L4tsqlwI811gGQmfef8lOa
-# 4PPjAHkdJHB5e6ekWWfATfljrYBnMcLq5rEHhmN9tFP8ea1TaBWbLGBdzYaok6JF
-# 58mc88tDPlj2uL0GPT+h1MigDVsFdI82wjNH0emQ4vThMtGPV/zWQseuq4NHxs0n
-# kXqM0qfhoFfk7aFqJC4G/t2QfvWdp9LDNiebWTRN2LrE5lSmnJL8T20mPGC3VLLV
-# y9yo+rcYWD4j6nz3D5aGPozMRKuOflK8gokAqq2FfFBTIppOI2i0MNJRwDpNe+jG
-# yo1G767s38I9lRya7JHt00ZU7eUbTebTDk/j5+WUsico6cXvquNOvu6m2qlbkWfj
-# tVjpUgIH7UgGLjXkWUoONi4=
+# MjUxMjE4MjEyODE5WjAvBgkqhkiG9w0BCQQxIgQgcIRDrhllcBFHX+m01d78LsAB
+# S99IwBYKcpy6Z13sCpkwDQYJKoZIhvcNAQEBBQAEggIAZvOaUXrfNADSxtvPjo18
+# +4IAQe7OlY4+l9FHHGOg/WktnxfEXermH3fAjnKUerqSUswvUGreC2rxeBGspOt0
+# 3wBlr0czlj7JzLD0m0AXpbqojMHkn8ylQ8vXzEG6NRziTa4O3A+hwr6gcVfcOHZk
+# oqa1kLRIwDoPONwj49tNOE3Iu21DfSGrQcLKSnBb1UD7jEP1WGnAa1r8loyMDyns
+# OoSQP0aku21SbVOpbGgUPsR8UFImmM3Wws017IsLYuxdterTy+9FjQxFkMb8Qzse
+# LLX5yHq0NkcfXDdk6gq2HC1GNtq6oGFDh9sNZJQbS9YmumBVr4H06X/oENRGuE6l
+# Ap7Yf1m3c94J0qGslTJdp7Gm/RfY2IMUEewYkLZLceh1zJTzy0cahUGkS1uZIK5y
+# +S8YEmA5r2s1PLTRiF5Sl3M9x7aRhpejKVZj5Eoi7YwbBPJKjn9VLVmWRcPukbsj
+# /bvWXKsBm021BjJzrJzSnSPT4n29KoI7k6BfOzgtXrV6P7MTlIj6oe3VxyPdb8/N
+# xQf4d+mGKr7pF1Q3pmPMcZp6TxOpQgJG12DiO5lrN2xvQE9L5eBEiDnYHFpGaYHU
+# hqBxpuOT9V8utOztojDYZOgN8pjEOVC8jO9m5ifpVZX3ggPb/8cjyjFMvL5IT7ZY
+# PE2ks/sAm6q9xbH44wgGt9k=
 # SIG # End signature block

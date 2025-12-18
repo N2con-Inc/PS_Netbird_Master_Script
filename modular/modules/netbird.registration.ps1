@@ -108,7 +108,7 @@ function Test-NetworkPrerequisites {
         $dnsTest = Resolve-DnsName "api.netbird.io" -ErrorAction Stop
         $networkChecks.DNSResolution = $true
         $resolvedIP = ($dnsTest | Where-Object { $_.Type -eq "A" } | Select-Object -First 1).IPAddress
-        Write-Log "[OK] DNS resolution functional (api.netbird.io → $resolvedIP)" -ModuleName $script:ModuleName
+        Write-Log "[OK] DNS resolution functional (api.netbird.io -> $resolvedIP)" -ModuleName $script:ModuleName
 
         if (-not $networkChecks.DNSServersConfigured) {
             $networkChecks.DNSServersConfigured = $true
@@ -912,8 +912,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUx7BEPYpbm5uiyfq7LD3C4zG
-# kzigghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURey9sI8Iqo2xUzfBl1SpQrcc
+# qz+gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1052,33 +1052,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# xfTwCWzOXHG4cQeNbefyf0vJn1cwDQYJKoZIhvcNAQEBBQAEggIANuWk5bYxlwDy
-# QfUX4o8ucZXXaCSxlvKe3nfFfIsaAXZC/iVOoifhFE4Ojv5+mNVxXRdvdT4Jr6D4
-# ukfglcEN4zBgGnnFeG3SKGVyBOZ3z7TR16KK6EQ9oluF3YXsj3H+2t4H9AydHOKT
-# 9jZ1gufrogNs0XnlZ7xCLmHu7NfjEjwKZuSlYkfhFZde7B+F+MdlGqHbviHPmGso
-# 5QN6+tSu+0gTGsduIhbs0zuzlqCaSIKWiPMR/61C1mt9+dPWrlE+IfVYoL7DECx7
-# I5ucwnoxsGQr+gv9uuOj9mw3Wc/PC5hBCEX/vyH6yOWs+xmNyFDPs0AFfS620Rtt
-# 2VnOtcFlzkuc9QuueQwVrmVAaqFefIg8iv8MVEwjsBg//G0zrmLg0U5TZCffZfyz
-# JxsYyhW7tNSB5NNXimwvE8pFJ5ZKjygWKrHkK4qYN8J+2Y0FXczcYV4DBsBgUu6n
-# RT3AupGlxq1F1ju6fXH5e/4IOUnkdwoAnPcaFJ8fFMGmm2kO7uXFLHAOv2/6Tn8b
-# JJI1fQ2fOosVw4RVzPHLPuQjwMbEnBHTZP9EFMLZcBZvHcK+giKfRJs43Di86Arr
-# 529Z07Fx0LqnrKjs+SJjuCJ3a/UiCkR8BkkhzPIyNhNnBO2F8CdPftR5jdk7fiUU
-# eVCKTR1TaUBCKkTcbER8ut/G+wG5yaChggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# qIoMgNRT9EksiVZTNyJYvIFcKgEwDQYJKoZIhvcNAQEBBQAEggIAZ2B1tP7opbig
+# 6lvq1vUuqvH/pHagYUOvy9j2hqyxZiT7fvXeiCqYn+DaFcZvNsnTFdA9a36m2JRB
+# kQMu4h2C0BAZ3B6AdqKFp6brGltmgoPP3Vau0kP6cRCkuM+DqZzjpKP40CRKB47k
+# E9939x8KDg1Lw8HGLtvnBLXCF8+kH2miPBnhVrLwHk5ZGcOM0HZ4TTIysS3Kpw8y
+# avwCOC9KIFxkyR9H88fDUvpJHiuKDorwewPTPvOmj+/aTCz06Vf1rlGNYyVgYrw7
+# BoDBKjIKzuRx0TaenPSz3WTBupkC9lcSyQSqva6/M/h38/ab8TNqUHKUDcumv4sr
+# mL81qjbF796QxVkhW2diyav/2ICZodCxgTuhcKO/SOiigJmjeC5BNMpvUhK+300P
+# TZh7iWgFyewxv44WsCaR9T9bsZUXafLBl02mhGerYUOosu9EW2bpXM9c6qPmeWaC
+# XXqz3Z909gQDtFJV7z/xfCDDte0VMR3xckElBGGyC+Boah/rm1j9rpz13T9+60Mm
+# n7Egw5p0/ibeoLhDWDCranKPe+OaMG4UPNEWQd/SstHM5N9Q2bQ/prp4uyxyegze
+# pVn4Vjy7kkWZy2pY6xfZ6+ImYXeWVvhB8idFeSBVMKttoLKPI7cS/0fk5zV82V4I
+# tfCFDxfH6wHTPadVDtZBIanCA64TceehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEyNjM0WjAvBgkqhkiG9w0BCQQxIgQgTNBpQoi1VTpZH/ptq4FqiaLy
-# aWwmVOCgTGstaWoM/UIwDQYJKoZIhvcNAQEBBQAEggIAeRu0l96PiDenFHfTgtJr
-# 6tCCEoT4of974x+zfolCFleslkfyJqRojqJNhl3P3v6EVc61L2/B2wO7+/P50ENq
-# DK16foZKfSxBoa4JSuehbaD1FDkSCjI8lXprh8TGQufm2GTEqwojWkQ+rz8ZAe21
-# BcfsU9mlLCF011jZuiCJXX9ipIXiDWLFtPtbNrH4fr7DbulgCxmzx8hvlZGfuRta
-# WVQ0YPTbTAsXpYFMfGVAGhDdpInVJTV+B7M5xz4z8W0XTUoJLVq3ZcDbODuU6piS
-# KYg+oN0AWIbqkVLoBG21YPiBaPK1g9cl0VLMaGyBUZrLra3DU8cQ733OMUHIzaw7
-# +kPTixZQ/Yb8yK0Cq43dcq7LVUSjW59m94fM18w+/44xm17oh+tyrVKkFKiECVHE
-# V7fOghddZX72hhofdE9s57Lmr5l0tVGRCy4O5tXoYrssZU69MR9aVkZ7V9+kCOIS
-# jO9wDtK+pYRjxJJHO56ezmw9dneL5mcRkQ18XRvhY0IWi/QTo4aCz3/3/WvekV5E
-# B6E1r1lU/ggzO8o3rAYIxyjraiUvmotpCaCsvhe/d4h7sQx5QvLoH/4q8PSoTttg
-# umOEiIoV/lYHMhrNpXo0ro4gqB2iC/kA1Z3k9UeeD47ZtF2DCYUclhlLwLdqHGfm
-# HEPxXbKeZb0YMfuTMV4lLmo=
+# MjUxMjE4MjEyODE5WjAvBgkqhkiG9w0BCQQxIgQgA9f1CnlpfhwZtAx/H40kQULB
+# o7hy5laO6V27LU/lEhYwDQYJKoZIhvcNAQEBBQAEggIAHIqVBBTyV8Tj2QRe0pnz
+# ofsta+y5FTjr7KJrvZWpDV6PZvu+D7UyyZSEITl34yu7cE6I9ZZ2Nhyu3uIFqjlF
+# OnerRFXz7/7jiWapjcOrKl8tcmqLJImX5Q5npyJxq/WXRXqpz9AwT75ef1+1AOWw
+# 0jNuBDff9slp3H5bsSEcfEmN8A11aiaVtC0ARsdk6szdPnJALb211/EZTkJ3+/Q+
+# HTEycN7x3NcP34AV4XcCN1dwTRbNIsNc5v38AcIlrt65oP5LAaQ4minaAzx/u0xQ
+# 02hcTPgN5Nnep5x+qGyOP9phpO/jXJvh3VgY571jrN9WowXk3qzsECE8TP9YYPy3
+# TAqbD2E99ctyO64lILS5U4o07je6dkAy+LrQS74kKY9Jg9rlIuXIIelHZgASpdWs
+# soU7X3iencP7RaAHeWwvrOHYPrkyQlYG3QWmAHpSved3ZYvclnwrjvkCUhFAJZ8d
+# zpT++1h9Pdkwol3K0ldWfVOblJIxquClSvhvtcEiBPGubg2NhLsqvYZU3PuKufzY
+# 7iTglCjYI8XPVVE08hFj8JCBKwT16NeljqAWTMgoQaiQwaK2BiRukgNRil56UbNd
+# tWVPKlAMZQjXbDPw6pt6PbFqMJuEPfB6JKTAPfeBQWyVJQql/cEL3q1YVE/ySIwt
+# dMy0BRkvPJe+R0yOrS3nF2U=
 # SIG # End signature block
