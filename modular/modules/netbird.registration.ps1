@@ -1,6 +1,6 @@
 # netbird.registration.ps1
 # Module for NetBird registration with enhanced recovery and validation
-# Version: 1.0.4
+# Version: 1.0.5
 # Dependencies: netbird.core.ps1, netbird.service.ps1
 
 $script:ModuleName = "Registration"
@@ -492,9 +492,15 @@ function Confirm-RegistrationSuccess {
             $result = Invoke-NetBirdStatusCommand -Detailed -MaxAttempts 2 -RetryDelay 3 -NetBirdExe $NetBirdExe
 
             if ($result.Success) {
-                $statusOutput = $result.Output
+                # Normalize status output to a single string (Invoke-NetBirdStatusCommand can return arrays)
+                $statusText = if ($result.Output -is [array]) {
+                    ($result.Output | Out-String)
+                } else {
+                    ($result.Output | Out-String)
+                }
+
                 Write-Log "Status command successful, analyzing output..." -ModuleName $script:ModuleName
-                
+
                 # 6-factor validation
                 $validationChecks = @{
                     ManagementConnected = $false
@@ -504,34 +510,37 @@ function Confirm-RegistrationSuccess {
                     HasActiveInterface = $false
                     NoErrorMessages = $false
                 }
-                
+
                 # Check Management connection
-                if ($statusOutput -match "(?m)^Management:\s+Connected") {
+                if ($statusText -match "(?m)^Management:\s+Connected") {
                     $validationChecks.ManagementConnected = $true
                     Write-Log "[OK] Management server connected" -ModuleName $script:ModuleName
-                } elseif ($statusOutput -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
+                } elseif ($statusText -match "(?m)^Management:\s+(Disconnected|Failed|Error|Connecting)") {
                     Write-Log "[FAIL] Management server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check Signal connection
-                if ($statusOutput -match "(?m)^Signal:\s+Connected") {
+                if ($statusText -match "(?m)^Signal:\s+Connected") {
                     $validationChecks.SignalConnected = $true
                     Write-Log "[OK] Signal server connected" -ModuleName $script:ModuleName
-                } elseif ($statusOutput -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
+                } elseif ($statusText -match "(?m)^Signal:\s+(Disconnected|Failed|Error|Connecting)") {
                     Write-Log "[FAIL] Signal server connection failed or connecting" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check NetBird IP
-                if ($statusOutput -match "(?m)^NetBird IP:\s+(\d+\.\d+\.\d+\.\d+)(/\d+)?") {
-                    $assignedIP = $matches[1]
-                    $validationChecks.HasNetBirdIP = $true
-                    Write-Log "[OK] NetBird IP assigned: $assignedIP" -ModuleName $script:ModuleName
+                $ipMatch = [regex]::Match($statusText, "(?m)^NetBird IP:\s+(\d+\.\d+\.\d+\.\d+)(/\d+)?")
+                if ($ipMatch.Success -and $ipMatch.Groups.Count -ge 2) {
+                    $assignedIP = $ipMatch.Groups[1].Value
+                    if (-not [string]::IsNullOrEmpty($assignedIP)) {
+                        $validationChecks.HasNetBirdIP = $true
+                        Write-Log "[OK] NetBird IP assigned: $assignedIP" -ModuleName $script:ModuleName
+                    }
                 } else {
                     Write-Log "[FAIL] No NetBird IP assigned" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
 
                 # Check daemon version
-                if ($statusOutput -match "(?m)^Daemon version:\s+[\d\.]+") {
+                if ($statusText -match "(?m)^Daemon version:\s+[\d\.]+") {
                     $validationChecks.DaemonUp = $true
                     Write-Log "[OK] Daemon is responding" -ModuleName $script:ModuleName
                 } else {
@@ -539,10 +548,13 @@ function Confirm-RegistrationSuccess {
                 }
 
                 # Check interface type
-                if ($statusOutput -match "(?m)^Interface type:\s+(\w+)") {
-                    $interfaceType = $matches[1]
-                    $validationChecks.HasActiveInterface = $true
-                    Write-Log "[OK] Network interface active: $interfaceType" -ModuleName $script:ModuleName
+                $ifaceMatch = [regex]::Match($statusText, "(?m)^Interface type:\s+(\w+)")
+                if ($ifaceMatch.Success -and $ifaceMatch.Groups.Count -ge 2) {
+                    $interfaceType = $ifaceMatch.Groups[1].Value
+                    if (-not [string]::IsNullOrEmpty($interfaceType)) {
+                        $validationChecks.HasActiveInterface = $true
+                        Write-Log "[OK] Network interface active: $interfaceType" -ModuleName $script:ModuleName
+                    }
                 } else {
                     Write-Log "[FAIL] No network interface type found" "WARN" -Source "NETBIRD" -ModuleName $script:ModuleName
                 }
@@ -900,8 +912,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoJLiwVke9sDjvCjBS7jKzOw2
-# A+qgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUx7BEPYpbm5uiyfq7LD3C4zG
+# kzigghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1040,33 +1052,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 86E024cDwn4p+ZGWgRCnsmWRQ9cwDQYJKoZIhvcNAQEBBQAEggIAVcDM4UBZS/6d
-# 6SqHCCo9h93GIKZ6gpR+RWoyFElKPj0PXpP4EIfnBcffHS3sbi4a6QZYB8Cb75cp
-# YFX5DoVma9I6DyRnzlRMXqXq2gkELp03xy+snjaNc6dzFLNtFYygLHnC0mJSloHU
-# w6lRG9dGhgYNJPQxtSDKBkF0s9V/wz4WYhlrFGGgEhkHiDNxwuAbemazii7KoC7c
-# g8YuHASfDR6qa3o0RAJhgXWx+HAI5Fmg6n6clQlZRZSVdKsuVUSVHrBlac/zbzzJ
-# +XMQkmAKlXpXuQMSx4iOQYZq70mzwRN1esYVWK0GUlOHtCCvT97BB70ilzI9lO33
-# GBaFkPjgSCLtVYaVTKx22mbjO7eaeZjDY9mbMm4D9jETTV7PMlD1EKp6tUkoExyY
-# z8atJB15Yzv2tPbTgCXkeXxYPHfQruwHOfiYuM6YwuczA1wWXEoP6eDU1vmDRXt1
-# 5JoOXb0+Sh+h1bVa1bpvf6W6QMi3/QSxWTyLrmRvloMM+E152J7O3K9SuUcjp9ts
-# OcvsAZzcKDQmDwhjVd/PDEz9m+nhGf6UT+4eL75oKhk9qwfAfX6WUlacF0EzerdQ
-# fXC52qHnpalJVI5qMHfMNRBiHy72p9KS8lyp74+QG88k+PQmgH+pNUN/8VAZrknk
-# BKbFhdA8YCjsavpOsN819uXBM38Xj0yhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# xfTwCWzOXHG4cQeNbefyf0vJn1cwDQYJKoZIhvcNAQEBBQAEggIANuWk5bYxlwDy
+# QfUX4o8ucZXXaCSxlvKe3nfFfIsaAXZC/iVOoifhFE4Ojv5+mNVxXRdvdT4Jr6D4
+# ukfglcEN4zBgGnnFeG3SKGVyBOZ3z7TR16KK6EQ9oluF3YXsj3H+2t4H9AydHOKT
+# 9jZ1gufrogNs0XnlZ7xCLmHu7NfjEjwKZuSlYkfhFZde7B+F+MdlGqHbviHPmGso
+# 5QN6+tSu+0gTGsduIhbs0zuzlqCaSIKWiPMR/61C1mt9+dPWrlE+IfVYoL7DECx7
+# I5ucwnoxsGQr+gv9uuOj9mw3Wc/PC5hBCEX/vyH6yOWs+xmNyFDPs0AFfS620Rtt
+# 2VnOtcFlzkuc9QuueQwVrmVAaqFefIg8iv8MVEwjsBg//G0zrmLg0U5TZCffZfyz
+# JxsYyhW7tNSB5NNXimwvE8pFJ5ZKjygWKrHkK4qYN8J+2Y0FXczcYV4DBsBgUu6n
+# RT3AupGlxq1F1ju6fXH5e/4IOUnkdwoAnPcaFJ8fFMGmm2kO7uXFLHAOv2/6Tn8b
+# JJI1fQ2fOosVw4RVzPHLPuQjwMbEnBHTZP9EFMLZcBZvHcK+giKfRJs43Di86Arr
+# 529Z07Fx0LqnrKjs+SJjuCJ3a/UiCkR8BkkhzPIyNhNnBO2F8CdPftR5jdk7fiUU
+# eVCKTR1TaUBCKkTcbER8ut/G+wG5yaChggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjExOTIxWjAvBgkqhkiG9w0BCQQxIgQgU6R1de3zOsEV1uy2sWiD7dl6
-# ZCUraH0jca2WcgujabcwDQYJKoZIhvcNAQEBBQAEggIAZn2QcRPYenpGYz+vj2q5
-# 7ylwTFqLi8MXeELzzGcSZ6k1+VLXInZdg9NlAZK1Brc5coRc/Ow0TgjXJq0BwpNI
-# 4dyNMyS0nknuFbPB1TSwHa+VQuzOVrWWIH3x6m2PC8fGnmka1JAwoDBWBbn0jSfx
-# agKBSR0gf9oqRFvK0f3bdzqM9UgIVDbWrM5278xrdcYDW/rkyFS4Op1hcN7q+HBy
-# inihFyGtinhTuDHdHkOD7KOZ+MJ0xv6ZYOJXjqrir2kNYdNf1AgTFjLo1moURfjC
-# 8gWB2hxhSUmaLau/d4fKLXJlY59iIcJkCEfrPSJrWJxwJrAbFjEjJOMn848eDSFk
-# 8ciCdyue77QvKWfKY/l2tzZMpAY7euOAV5bYHs8QvKbLw5fYLI5b8BM9jlceLcKZ
-# ulmdu4/JSXrsCW9/OpnGL4juFI6gsWEXjwuunkulg0az0vBpE1G+/n8l4UxlMo72
-# zCBnI9VAMkz5zdOf7lZ5j92Y5UqfREWd0hrsbSK2NcJIDcyUnrnNLhe7qn2lE+XH
-# Ags7Urg9b9ZaAck/zrJ7PbwHYCrFl1bx0yf8IN8JBGoorHFMNx0qZWbwLhTviwWn
-# sMW7N66xG5+ZX9/nB1uXi0Dua6s6oB5Vi7oZZRQTs1wBvHTjQ9xHaqErQGrhk+lK
-# X56yLkCMB5LXEBIVDa9xgaU=
+# MjUxMjE4MjEyNjM0WjAvBgkqhkiG9w0BCQQxIgQgTNBpQoi1VTpZH/ptq4FqiaLy
+# aWwmVOCgTGstaWoM/UIwDQYJKoZIhvcNAQEBBQAEggIAeRu0l96PiDenFHfTgtJr
+# 6tCCEoT4of974x+zfolCFleslkfyJqRojqJNhl3P3v6EVc61L2/B2wO7+/P50ENq
+# DK16foZKfSxBoa4JSuehbaD1FDkSCjI8lXprh8TGQufm2GTEqwojWkQ+rz8ZAe21
+# BcfsU9mlLCF011jZuiCJXX9ipIXiDWLFtPtbNrH4fr7DbulgCxmzx8hvlZGfuRta
+# WVQ0YPTbTAsXpYFMfGVAGhDdpInVJTV+B7M5xz4z8W0XTUoJLVq3ZcDbODuU6piS
+# KYg+oN0AWIbqkVLoBG21YPiBaPK1g9cl0VLMaGyBUZrLra3DU8cQ733OMUHIzaw7
+# +kPTixZQ/Yb8yK0Cq43dcq7LVUSjW59m94fM18w+/44xm17oh+tyrVKkFKiECVHE
+# V7fOghddZX72hhofdE9s57Lmr5l0tVGRCy4O5tXoYrssZU69MR9aVkZ7V9+kCOIS
+# jO9wDtK+pYRjxJJHO56ezmw9dneL5mcRkQ18XRvhY0IWi/QTo4aCz3/3/WvekV5E
+# B6E1r1lU/ggzO8o3rAYIxyjraiUvmotpCaCsvhe/d4h7sQx5QvLoH/4q8PSoTttg
+# umOEiIoV/lYHMhrNpXo0ro4gqB2iC/kA1Z3k9UeeD47ZtF2DCYUclhlLwLdqHGfm
+# HEPxXbKeZb0YMfuTMV4lLmo=
 # SIG # End signature block

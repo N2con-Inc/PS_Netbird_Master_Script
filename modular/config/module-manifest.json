@@ -1,5 +1,5 @@
 {
-  "version": "1.2.4",
+  "version": "1.2.5",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
     "version": "1.4.1",
@@ -27,7 +27,7 @@
     },
     "registration": {
       "file": "netbird.registration.ps1",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "dependencies": ["core", "service", "diagnostics"],
       "description": "Enhanced registration system"
     },
