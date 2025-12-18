@@ -1,102 +1,17 @@
-<#
-.SYNOPSIS
-Validates all modular PowerShell scripts for syntax errors
+$file = "C:\Users\EdBrownlee\OneDrive - N2CON Inc\Documents\GitHub\PS_Netbird_Master_Script\modular\modules\netbird.version.ps1"
+$content = Get-Content $file -Raw
 
-.DESCRIPTION
-Runs PowerShell parser validation on all scripts in the modular directory.
-Must be run on Windows with PowerShell 5.1 or later.
+# Replace standalone Write-Log lines
+$content = $content -replace '(\s+)(Write-Log\s+[^\r\n]+)', '$1if (Get-Command Write-Log -ErrorAction SilentlyContinue) { $2 }'
 
-.EXAMPLE
-.\Validate-Scripts.ps1
-#>
-
-[CmdletBinding()]
-param()
-
-$ErrorActionPreference = 'Continue'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "PowerShell Script Syntax Validator" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
-
-# Get all PowerShell files
-$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | 
-    Where-Object { $_.Name -ne "Validate-Scripts.ps1" }
-
-Write-Host "Found $($files.Count) PowerShell files to validate`n" -ForegroundColor Cyan
-
-$passed = 0
-$failed = 0
-$errors = @()
-
-foreach ($file in $files) {
-    $relativePath = $file.FullName.Replace($scriptRoot, ".")
-    Write-Host "Validating: $relativePath" -NoNewline
-    
-    try {
-        # Read file content
-        $content = Get-Content $file.FullName | Out-String
-        
-        # Parse with PowerShell parser
-        $parseErrors = $null
-        $null = [System.Management.Automation.PSParser]::Tokenize($content, [ref]$parseErrors)
-        
-        if ($parseErrors -and $parseErrors.Count -gt 0) {
-            Write-Host " [FAIL]" -ForegroundColor Red
-            $failed++
-            foreach ($err in $parseErrors) {
-                $errors += @{
-                    File = $relativePath
-                    Line = $err.Token.StartLine
-                    Column = $err.Token.StartColumn
-                    Message = $err.Message
-                }
-                Write-Host "  Line $($err.Token.StartLine): $($err.Message)" -ForegroundColor Red
-            }
-        } else {
-            Write-Host " [OK]" -ForegroundColor Green
-            $passed++
-        }
-    }
-    catch {
-        Write-Host " [ERROR]" -ForegroundColor Red
-        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-        $failed++
-        $errors += @{
-            File = $relativePath
-            Line = "N/A"
-            Column = "N/A"
-            Message = $_.Exception.Message
-        }
-    }
-}
-
-Write-Host "`n======================================" -ForegroundColor Cyan
-Write-Host "Validation Summary:" -ForegroundColor Cyan
-Write-Host "  Total files: $($files.Count)"
-Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
-Write-Host "======================================" -ForegroundColor Cyan
-
-if ($errors.Count -gt 0) {
-    Write-Host "`nErrors Found:" -ForegroundColor Red
-    foreach ($err in $errors) {
-        Write-Host "`n$($err.File)" -ForegroundColor Yellow
-        Write-Host "  Line $($err.Line), Column $($err.Column)" -ForegroundColor Gray
-        Write-Host "  $($err.Message)" -ForegroundColor Red
-    }
-    exit 1
-} else {
-    Write-Host "`n[SUCCESS] All scripts validated successfully!" -ForegroundColor Green
-    exit 0
-}
+$content | Set-Content $file -NoNewline
+Write-Host "Wrapped Write-Log calls in netbird.version.ps1"
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr08VWxQxf5UWXF2fwFVv6tyy
-# jxugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIDT5BqWMR+e+DUEnlFYJM043
+# SUWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -235,33 +150,33 @@ if ($errors.Count -gt 0) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Zy9NWeyr6mRRYy5n2lFe11iyphQwDQYJKoZIhvcNAQEBBQAEggIARPzYSWCvtS8i
-# PyKST5x9ReA0oK+BnLRL/wn4If8zHWW+JgRE49O8mPNfj77WW/2RcO83a8QHo/oq
-# rPwWyEuRMxIvpvqUU9645rHZTchKaZWIDL1Q4Ojsv//YFOUuZB/Q4i0PKdUjWOLs
-# aprFLO4LaFr2gKcsFQ0ciRRkcbha6YLCZII8ev3MFBxoXFqcniqiL9VDajSxaPTk
-# S1Gm9tGCCsgAD+JDPLcbFtQZk/hrn8y8EUJcyH6A6008442rnurZuzZDWOITf/by
-# lNqzOwpmEALOo+/MYTA7qQ2EfPfqySctizt8hOqmx1GwnXxFCe6VQxD1kRRJXHEa
-# S9g6sEoFu6qIOQPrTtxQTvcccH20940Cx7EUmpCYyaBY8qlVcZPitL9P6vmar3I/
-# Pd/wfWabyD9FHlIqzTxWrsmnTZoBTxKzURItPIlAxb+S1y72VS9fZc0/8iru5uH/
-# 54ozUCfLwwTmAbE2rOp/3eVgTrRuSuzB3gZBVO01ydVvlQiazVBrnUVj3TNSk4TA
-# 6QqLoYtupZd8dR8AHjtjCC5mvNsXBJ2/gVQWLvG2OMedtrTCJ4u3rTi1d84wUZiq
-# WSFxHh3Zi3Bf8EbZEnJ3IN/pDNq65zvvX0WscaIZOCbUeAcLUdwja/yJMvoDP6+K
-# DRXhwPveTPMsbh1V8IpcSHCDoePA/lGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# U+FiVR1WlM5gO7G8Xch71q5cBgowDQYJKoZIhvcNAQEBBQAEggIANKyWs0jzCf1f
+# dXa1MYjg6VHG4HUiIMwuUkjJZalZr/LiXZotS7z5rC8UfkoHshWjsZlfGgm9QHek
+# dH8XTsO2kRpVwy1YRH6AIUL4KgslpjhGqp77juGcFrpbpTAo2OPpc4FsX8jzB/nt
+# +FtPY/HfoneI0FhibzqWs3zYBIUzbt6UwYRbgx9GKrRllbq/xjfRxwbKPMFYdmFs
+# B7yhJzZB4epE8a8AMPoVWU9kS9cD4cFJPRKcMYQKPW3YBxG25O/uXKvH4PN2XD0R
+# O6HGeAlZsHPAEmka/3rF0Yb+0DyO8ngskWxErUppDl5zfJgAM/qN3edQJ7vamivj
+# CwFl4vXN1we6T6kU4hdZvPH0nA1B7ilMhePZCCDnOzpCUVqJKVt/JNOX11M5N/VR
+# NlN3G7ZNXpySRS1ydmfKWOdTdJDKniFxtOFVTgnMhpJK/M6c3pJS4Yix5kuAQAdL
+# 0i1yDBiFSWgB0L1VQysB2CHVP/QKyKfNY0nqYV+C816n5zeLlXtezyWBhzuuOOEp
+# XHYxRAk0hxP/HSV0ygtxhfOSy8DI/ubsam1QkTdtsHbGdhq/MkfRQIpNJ4VIz9jD
+# nzZMFmh35rQ70zgZpu+6gUBHbenXqcIQEpC8X8/KjskIHs8lwnYlHtjpCMoslPyI
+# Q2ub5H93bmoFl4ji32ewa+n20N41RVuhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAzNTAzWjAvBgkqhkiG9w0BCQQxIgQgVCbsiLoL9p0z2Rt3a9z8/qMf
-# +dYTcY6CwK5qiNES9qkwDQYJKoZIhvcNAQEBBQAEggIAlSHjFDo2mSaO+VAjIRCM
-# 0W3K+UqC7ZNRA0ozZInklxNPwIG6oXyK36+r1ehNTUDaOikMzkph+nd9zPh/mVw4
-# Wedu4DtLOVQ/4nEs+Iml0XhqdNJh5NmQMMtgi+UlHg/Pf7LQFrvb7lcL7y5cOg9p
-# k1+KIovKXEo38aYT5yi0hn63wdlXsvCMSdUtcgFmsZjZZqelwxoFlxLl5OTIsdtl
-# PI/lqCHnpNjlj4yo3NZlOaZqJtmGgLU0a2j/MkIRwJMcP0hxI4+7y6iM+LRY+sc0
-# 0DiefGTwzcfQqm9Ij8ZOk3jokaDCjkCAPUT/B35KutX3zwAikuHeW5gCCEjJSvMS
-# MWVS91nMLKxonWDsOSf+9RvEO38T5c7D0yejxiiP03Lnga+c2S/OmnheD6EhqEWN
-# vJwgcDEoO9sCeA89SCRMXfnZjoTJ5LT89Hq7LgflM6H+s3rqGJ5XN38UlpqV8HwF
-# 3Jb6z2972PEhnKX9Xggao0CLhBcjLDz4T9VFzRmiaXwH5L33tRkcoKb9rYpoiFTY
-# Z6omlJioVdGceU5Pj02RGOGtfYCNXDoMUl+4NQwbymTrNQ/fWx9omNxLIaIE9Il3
-# EGvt/4ezBh9/WXEjjUopklDR3iZ+sAJJyBpnknw07Mu4lngQIPYBEfzeirNhfkR6
-# kAXgOoZL7De7v7VcxDxHPpc=
+# MjUxMjE4MjAzNTAzWjAvBgkqhkiG9w0BCQQxIgQgRPP6IstyJrAKJZc8Ut/RBhef
+# RBC5NdaoasmJ/hI2O80wDQYJKoZIhvcNAQEBBQAEggIAcKZaWHab5pUej0H0v75V
+# Z8jeXh+zX22a8LcrhBySuH4iKtoSX3wlOwsTEthGBaj/1jDqnUtDVJ9rqA4plCo6
+# 9QAYDZc3Twn0twA+q8iyMm4Yy5CVhyg0LzMyQ87yQAgl7kNrZAv7CkN9vLOhjyV9
+# CE4g0s0ifWTgFwJIC5EMx8bp7x5CLwp3nmqqBb92D0THq7VrbUjUt9U12L8uyogd
+# lmVMNrjfIm/uuCDRtjGSbRqohFI6VKVo8Fw9gkV7ipcDFjN4MzaE23MGPE4ow8w7
+# BIfMNxQnHrBHGy4wNh77Y1ai5qLkDGb9BaP3qYUTS7xhmk51tbzRQ+nx5OLEFbDf
+# aIHtFW0J0pvDdjqfBOyppID12WAULqQBaEKe4R7ERV2gJ/KIL6IWNTxIlJezU5bz
+# bBKG0OgPyGRieVVvBgO5IRZ26VeBoZZDb7eTdLbfSvhGK21G3NfI6sfgE57PlZW0
+# L5ZeMVIf/3x/Nidp+jLaHzI+Z+fzSQpNEs0T1h/9Tg9aUNqXRGBkIvWOmHv7lKMm
+# 3XiwD5DC4DFnK3RaKWGvntQZSCWdYwJkzdqLKw5miUyqEmWWXrDqJnbuADTn088V
+# HelEFw9D4N2OmqNWGeifMrbF4ynsCMUqAfxWiOZ529PaAjQtEr9WFBgpb/BhfoQ0
+# owZ9l8AjZ1HRm8qR0CxCMp4=
 # SIG # End signature block

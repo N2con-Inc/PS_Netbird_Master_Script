@@ -12,7 +12,7 @@ Provides version-related functionality:
 Dependencies: netbird.core.ps1 (for logging)
 
 .NOTES
-Module Version: 1.1.1
+Module Version: 1.1.2
 Part of experimental modular NetBird deployment system
 
 Changes:
@@ -27,6 +27,11 @@ $script:LogFile = "$env:TEMP\NetBird-Modular-Version.log"
 $script:NetBirdPath = "$env:ProgramFiles\NetBird"
 $script:NetBirdExe = "$script:NetBirdPath\netbird.exe"
 $script:ServiceName = "NetBird"
+
+# Fallback Write-Log if core module not loaded (should never happen, but defensive)
+if (-not (Get-Command Write-Log -ErrorAction SilentlyContinue)) {
+    function Write-Log { param($Message, $Level, $Source) }
+}
 
 #region GitHub API Functions
 
@@ -277,8 +282,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZ6+Kl+B5gT0XRpaZ+JjZt0ZO
-# Wjqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK6rDGztSQb6/1vmf3c8Iwd+X
+# aVegghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -417,33 +422,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# aWfP988gqNA5V5ueNGJ5/NFPNQ4wDQYJKoZIhvcNAQEBBQAEggIAGHIUqc0dZtRg
-# zuqUPTUmjgwj2OTd3uifDIBYTcrkluO+VzN20YVwmcKGJTFO6uBdS7wN9kX+3Zmc
-# Sj1daNlwQaS4F5oTTeWk3xmzI1NWCKSNgmns+hgp7nV2wbGmHt4CVBkWaViVAMux
-# MdYDukHLpf1sfDAYKToLVGVHJTDTJL6FegnJ1Nqtx8wI7yXAFx3KDW+4vuJNjewc
-# WaPXcfDPgyDCPTbJO3oc3lSCqrbXZ2yZyj0twGMazpwN+h1TKMnPo5NLZ7d8Uo3B
-# iScrvBvSoDOoUHX18RWKsGETyLpPpjZD2F5/X5Y4jeHIa8pGBV4ENJKV3ak9qEgJ
-# FjIiiLBs9wI67XlK/aXxtrvoRfLSKBoafj/uCQB+FG7HacigqIux1gfwZdJd+xkM
-# 1fypmo3PbDH1ZGI+PIk1hB04vE6/N6RxVUUtFgWXfJTm9OR1HDrMexeC+fXlhmbc
-# wNdiCsiXQu09BfWp1pZB4QiU25zZZvngO8W11Oe9hTT5PYS9BGIIyFzk5z36QDa6
-# A0Gn62HjbvHE3qjXdlhGfwQIHUdG7nDaqtoN9e0fx5pEOo2pmAYhwDdjoUIx56uo
-# A27BWk+UEy7B2/ZHWtI0fx8LQPmUj1x37P1WxG/aNX/14cJNAf2lZdz4kYRcIKE9
-# 3KibrIjrz2XIVsbjuDW0S4biS7ECecyhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# lL/rWQ9UlLuXzeOeNNSOp3cBdyMwDQYJKoZIhvcNAQEBBQAEggIAgfoa9mWQ4VIN
+# vDduyhpGxWnqHozQXPcl+aIH/a6AfFKm3bkrGY2BokAV1vm4Y0AvzqNL0Ga82yVr
+# Ai/MbJvSdQdRl0hYATzAx0kEl3yNXu4Ig4nFm5NzNbWcwAujIPyJi7G4M4+5GABx
+# T2P3Qu5jzILcI0AB8MW2bAvCx/vO5FurWKF5C0Ke9xQi94sjFu3u/elxAgZdkmES
+# rn5Yd3IfRmU6lxX6vcAGd4t2aoNdwCKq8yqKwNxUo0SeQ1Yh+ecMbPm4bx9RjJVB
+# bOyy/9M0Zha/nRglRjObGzLm+BDtP6LjGAnyx5Lu7+rYtV8aYJUsVmjGNgwjdRBC
+# kXDDePim3sf2+jdQEwgzaSQCxzf3VDyK6aZEV4H+NypV/Z4BTjZkGbAIhlDU6TWu
+# cSdPsB4qWMDmqEhaMCXiNv3lmq7Mtds+V8grjGfiRw3K1DIVwC2bkB9GdDAUhLOH
+# HFnPnaF9SGN3B0dxURWj+VDux8DphXrt00APi/d/cJwDo2cIyWecGchWmFoBO05Z
+# lrOr7o2GuS+SmcXNCf1YNFq1xIKrp+g953R4VorTc1dKqGyYrOts7f3FpBJP0m1/
+# s3nP+7/44Bqqb9nQDdFT+NFLIytzRWODnIzTMFRkq2vmad6DkAhxLwPGySAjIwpJ
+# Cb7HCxNCSVVCxAgdJZn2sWMK3wTiVfehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAyNzIzWjAvBgkqhkiG9w0BCQQxIgQgmMdihVc569kxu9+eFpf84jID
-# rMlrNuPB1gR2y0yhvWkwDQYJKoZIhvcNAQEBBQAEggIAdbMgRZ3dIJ+ZTu/OKYyQ
-# /+Q8tDB0rpmVLqxXbuaCx8Lksp8z37skaHZiMgws0VPJMar6JERijMxm04RpygY+
-# UfCjOjSRiO9ia5oQx69+z4XDJI4NZVwRQlG8JYGZuHH5OgvJ2oufiOGSQaULOLfE
-# iDYpVY6QuMzop5xK+IYrcN7HAxiKT/OCS1V+O0AgpE2AopkfCwdIUZSCSpOaXqH6
-# IoF021aG26STwH450qg9vKdjw8UEGuLHgoZ5oF9HSPBTHTgsc1gSrdAjyPq2GhO0
-# xhHrFN31uDAEpO1ZS/ig0FWRHVSVfEAyRxNH4Py3j7ZhIwTv8UL+sxcmVrHzflYV
-# ON/gRKAQVGuEtZtIOoVoupYdoXpcDqYIa8M0bUcj9h+P4xm8PXK+ZnbawEWAQKl2
-# yzZgDWrUTDuyrq0bUdTl92wnJYhFoUn+mfaQKjcepndRIqeAkVvuZA2tMGTVEDkL
-# iSCXApoi6NfOlJl8N8NyFP5MfheEBtHTUvOjI6HB306ZINQoTMGvENI4xYm5L3r7
-# bHjqu02GRbZELd1zafEIBd1xMed7gJFtAvWBY1Nv2RvEVYOvOeVvSmF4nL9bh2ne
-# RpZi9UDo14KlNX6pIqXOoffRKrbaM/tbLzsiCwwyQeFrF4P7OUpGDVsj+dXsmxDc
-# HDOQA6ib9+PzsA/oSc5paQ8=
+# MjUxMjE4MjAzNTAyWjAvBgkqhkiG9w0BCQQxIgQgHHob1x3qkMvUtbFyJ3x0xLdx
+# PM9TwCelVCke+bk3pRswDQYJKoZIhvcNAQEBBQAEggIAPlc1xq73/SnGBr37uiaN
+# Nm8MbVU/qJ51M/yzFLwQO14wtAZ5Rz+noTD7AnZkPS+uELm6Ri8c/UbsLxkY87RD
+# gT/O4SBasUPN/jaWVAmGGR3o8UzzXZ16QXtSVU5nrjITXF7m0YnFBb84uWfH/G7B
+# v8JnLGM8Sp7l405cFlWDJQutjNRC/1dUjvfzkIhuQVFc0CXaDHCEic7hIDN5pnYB
+# 7awbCDTrZi2p2mgposJRw63Cy6Ns+KHI+l1u1bPABqy32z3sy4lj+OmoWyNpKJ8B
+# 0JVYoaZ74MPCqOPbTXYDoh6KbleB2GQ65JiixOamMXhVm/ac8yUkCSfeHzP9Y5pH
+# 7pfXe2Im8gS4/fbaCqb0jG5sXu74K1tqSw95GdYdJsF2X+SkAEDumSE26gpuieEA
+# pAnLSfllxoCT5qL5AvPlSDrVOdF0swp6w552nGLyvhJn7eY3oBYe/S9I6TB4IBbq
+# 6VNyx1WF38gcAanwRSfW3Im0b41xT7NhdaO+AOP5LKlcnlyWI9BaqtJP57M9i89m
+# Lf5vLVVEmJYEk/z6P3nmjn9s28MHbDOpW9Eggft1ngh+9EaRfLPy+lgcLxnzGTHw
+# HAbjzg5ouamKGUb43LLbzDzbod3H/kr3n12ecIqI4nokD1ALok8OHVao8JF3oAdS
+# 0XwPS5bRZL2DSjsg3VRI16A=
 # SIG # End signature block
