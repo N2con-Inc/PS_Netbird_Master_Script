@@ -502,7 +502,7 @@ function Invoke-StandardWorkflow {
     if (-not $installedVersion -and -not $hasSetupKey) {
         Write-LauncherLog "=== SCENARIO 1: Fresh installation without setup key ==="
         
-        if (Install-NetBird -DownloadUrl $downloadUrl) {
+        if (Install-NetBird -DownloadUrl $downloadUrl -Confirm:$false) {
             Write-LauncherLog "Installation successful"
             $script:JustInstalled = $true
             
@@ -531,7 +531,7 @@ function Invoke-StandardWorkflow {
         if (Compare-Versions $installedVersion $targetVersion) {
             Write-LauncherLog "Newer version available - proceeding with upgrade (current: $installedVersion, target: $targetVersion)"
             
-            if (Install-NetBird -DownloadUrl $downloadUrl) {
+            if (Install-NetBird -DownloadUrl $downloadUrl -Confirm:$false) {
                 Write-LauncherLog "Upgrade successful"
                 $script:JustInstalled = $true
                 
@@ -563,7 +563,7 @@ function Invoke-StandardWorkflow {
     if (-not $installedVersion -and $hasSetupKey) {
         Write-LauncherLog "=== SCENARIO 3: Fresh installation with setup key ==="
         
-        if (Install-NetBird -DownloadUrl $downloadUrl) {
+        if (Install-NetBird -DownloadUrl $downloadUrl -Confirm:$false) {
             Write-LauncherLog "Installation successful"
             $script:JustInstalled = $true
             
@@ -635,7 +635,7 @@ function Invoke-StandardWorkflow {
         if (Compare-Versions $installedVersion $targetVersion) {
             Write-LauncherLog "Newer version available - proceeding with upgrade (current: $installedVersion, target: $targetVersion)"
             
-            if (Install-NetBird -DownloadUrl $downloadUrl) {
+            if (Install-NetBird -DownloadUrl $downloadUrl -Confirm:$false) {
                 Write-LauncherLog "Upgrade successful"
                 $script:JustInstalled = $true
                 
@@ -871,8 +871,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUY+imxvKo5bCbtbYzyA2FDvcR
-# rLSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUaHEZOS0VD43WewvyDxA9C+6Z
+# yGugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1011,33 +1011,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# er4ne0qWQdb5fCzcrRszmyW9la8wDQYJKoZIhvcNAQEBBQAEggIAb2fuoWMM5A1G
-# 4QQNXe/itNi5UcsaHv2aR9F3FdfqmESqMC4R6Am3j9MKoqpB7xAp9cCfVVo6lxVv
-# Luxswifb7mMHpMQ4UQjFUabFRpHIvnJpXyZ93tTZQqjHpFb0zyZqXhMBElXY7Btp
-# uLen8SpkPTflYaBlLhjH30AomzMVvfg5vekgOBQQ9I3HpRXbPI+ZBacSePCxBQRy
-# ecia08sm8O77zuHMQAFAGIopT05rZGI+qDMx3/xIPZelWJRinjMTo49oCvKlMb2B
-# F5bdZ36b32mpKD3nkd3bHILhbqa6A3e77CVi9euePYEZvtyTP5RtmFOQUoWdejsF
-# eySa0Z/WWUbZzZ1+uLmBTfxd15Y9TbQSkJXrABQ7IIbUxnlgqweTyPqe8lVmIDd2
-# NqysQP3YQrm2Gn04w6HhakKPYKagu3B/U97eqH6gusz4xi9I9cB+ByDTdagHMn/c
-# ePysilAtPuzfRMwVACKKVUiYpPPQslhjDY0qaazA52V5ARUlCD5aKNlHeHw87dfG
-# SfIASBAlwEF7Qki3BJQCegdgkcSEvBwDdhNR9hCIBg8dVFD5gk0uMSJPqx7iy+6u
-# DQYd8Swuxa3tOE9tRNgYLjlkMG4XFx7oHk8eL2iyvudTalxykV+3L6TYHGn4rnWY
-# DHQUfUdQAE5j/NimcjMBrpRGxUhd92GhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# kTUPzwhphhXeQhLbKbWdVOjdXjgwDQYJKoZIhvcNAQEBBQAEggIArqlueIeSuXzv
+# 8a17zTf42Mg6xFHrfzLQdOFLIkH9amQxnL40xJGu43Mdq3/PvgBbc76HdUQ6Zrf2
+# BWnHTmAJd4QCctwf+U7vzT9vIh8b8Z6u2xCTsNUuULTqW1V5qbF5GvrMa6DQ4QI8
+# iEX9xapN6PWyv2C2J21JT6tNLo8aKBnG6PVoo5J/h5ean6mxR/PQYMVkbf40XKbK
+# RxNwFnky4xUxTzNLV5K7jZq0tvnW3AiHzf92FZBt9maloOfW8Queg3vMUlkjybGJ
+# 4afPfnw+fyog+Ex/nTNd3vOH/UHnBh6XxxxNv/JrIHcHYz0RvFmfA/xsd/oVohUf
+# XJwI9YHo5SDJhgOoKhyUU2R3SXAhGN7hapeRyUKx/De4Wcq9xey0j//fKVdKtiSp
+# ZxVl1ed+7WtlVhgJt25ECDjV/Eur5yUYfS3XAbglKgoFPXO/hpNasifXWNmR5lfS
+# 6ovWHqIu++yXplmfrl6baRDvMRoyOEICf7oI3KBoRAK+yCTv8I8CY57uZKLQEqiL
+# gGQQTwd1DpA2RHylNxFPATVcvCH9qO3b4SnbqUUQS14FeAU2EPnBEaqrs/ChqTv9
+# PYGc+Dyk133cZAVosyZBDmplGgjovCJ0SO3Stadjqaffi1paa+XGOyTRS1HJSau7
+# OIX4bXlKK9JqDs7uDvm3uoh5Edk5nPqhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEwMzIyWjAvBgkqhkiG9w0BCQQxIgQgxD1SAc3sBrAcjjZqz/xf8ivU
-# IC5EXiTl1AUBp2VqwqkwDQYJKoZIhvcNAQEBBQAEggIAus1ZxoC1+Zzx++70q+PX
-# E5O6PxCFC42dEH8Y+n7fZXGrIYGUDuvlLK1og57BddumG11dIww2CmOlfTgaa3ak
-# ciPBexiF3fGxYqWiyojlgvcMd9AfpmQYs5c75osdpO+u/ob6r+jY9Gz+Vhcd0492
-# RJgTGURrDWY4nRzP2/XooWvZAw4vP1Ld3LjfeBTckqrPE3Juuo7piGsyuqrGNt9Q
-# FWVxrsKVPftytTYyDknpNVinqYrkEf95m+dLcZx9glA4JfUgMqRgtAJR41rASYPj
-# bCkaYNppJOgidViFfKUKRh2YcDph+lPoHOa/+oHHPe8FKuDEXErx4dVPEniRFZUY
-# ABadWIeTsRXqMr6HQKZYPGTEE5rquK4hb2BYATf77dGNIfTtVKB3J7lQofaaJwVd
-# Zuz0Nv8aLKU3oeZ8iYqBV9DDPUUB6KnI1gvbYe3jmd9sM6ZtiaY4tFYfNa1PARLz
-# VoExLCDB1+HnG6gRTfTlcSxRoEVHojADz01mqmFU7fN19NaRuiLbv5DjB5aOoVId
-# UjEccB5B+ilXh46jRqBaJjnrFzktLdImrqBPe9L9+Cnyyj2GhCWajTtppfMtL7eZ
-# qbuRhQ5fenXmnfFB7G+Z9NBqRcsxMu0tACyW+7j1Y8CCrJDe8r4/1or75/bfa29B
-# cFftKr8NreZi2YnqH65n1kA=
+# MjUxMjE4MjExMDI5WjAvBgkqhkiG9w0BCQQxIgQguhaGHV57flsKiR/4xedtw5ub
+# 5Jbh5KKEeyGKlTKV1rUwDQYJKoZIhvcNAQEBBQAEggIAmkhHMg/7tjVL51KMbxga
+# 0HF1klaT+0VxHazZxftAsrSmVAVlZbSHxhB/KE5aDJhnmJXseVo4iwBa8Fo6cW/S
+# y51oOFcKftSPR4SK41kttdXKpwr8+rzdYAmU237bSQN2iKPRTJ+iFf+yDvzsgOxC
+# k+aop4DEQPngkgVQBX/UQK9VBPVbK4uIMHNJTvcGgiZUNTvStcgt54sH65IO2M5X
+# RaYjShy0cTN8BsO9K1SnVsXaisUvqSwiYhW35kOBKi8qxriVxB60HAUBwDeR3M0q
+# NQP1HD1k5HiTms9PXk4j/b7DxJ/Avy1Dt4hjcJqr5Wd3U781RjywkopxL8hHPsRy
+# 1mKDOBQ4kUh2Fi0fABWncoVs2Ket1u/yAx3ilcULvwEFOn1Cr6rLZGLPOotiXq8d
+# Vuole4dDq8byWFkTJtSqQC8lfBJRuMWFQ81pLT729KPDdWsZT2sjApAzZQAldmsy
+# LTtx++b1qlByvFJsIE+ElZ1I5GGsKZPIddnF2vqbsyNnYocsrOMhaL1g7pNPkU2x
+# PzIudlG8IidfX+ajagNYFy5vb1JaEK/YHQ7xXCrHKv/5hghAMVnDWU1ZtOO89LH1
+# Fq6J9gfR6uewFvQEUXurC6DgGhCiO0oH2ExCqZnMagh2+vpW/iun5vYLCSf23isI
+# NRlCAnSg6P1N44rR/CBcURE=
 # SIG # End signature block
