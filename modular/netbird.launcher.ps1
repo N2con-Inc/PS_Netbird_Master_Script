@@ -56,7 +56,7 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.7 (Experimental)
+Version: 1.2.8 (Experimental)
 
 Changes:
 - v1.2.7: Simplified cache invalidation - use manifest version as cache directory, invalidates all modules when manifest updates
@@ -113,7 +113,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.7"
+$script:LauncherVersion = "1.2.8"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -350,9 +350,11 @@ function Import-NetBirdModule {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
         try {
             . $cachedModulePath
+            Write-LauncherLog "Cached module loaded: $ModuleName"
             return
         } catch {
-            Write-LauncherLog "Cached module failed to load, re-downloading..." "WARN"
+            Write-LauncherLog "Cached module failed to load: $($_.Exception.Message)" "WARN"
+            Write-LauncherLog "Stack trace: $($_.ScriptStackTrace)" "WARN"
             Remove-Item $cachedModulePath -Force -ErrorAction SilentlyContinue
         }
     }
@@ -369,6 +371,7 @@ function Import-NetBirdModule {
         }
         
         . $localModulePath
+        Write-LauncherLog "Local module loaded: $ModuleName"
     } else {
         # Download with retry logic
         $moduleUrl = "$ModuleSource/$moduleFile"
@@ -827,8 +830,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHpY470LFHTZUNLN89axCTQYJ
-# nA6gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGXg7SCJFb2IZjFBhAugKYZXn
+# CcKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -967,33 +970,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# N+TT7gmikrPYbmjoQC96lCzP+QgwDQYJKoZIhvcNAQEBBQAEggIARRA/IV5lA6OU
-# a68ab1AzZ4KA0uigtUut9d0LhogCYfuS6KB7+2D/cTe8ThIkn72dlhUzYojAEaXy
-# Qm3YZ6botaaoeBQv9IcdGSV/Fp2lj/aFmHF0cTeER5bY4KsZQPzq7A15oW+XVVb+
-# 4rycWvekL3ZulpJnbWbkmfmafd31b4nxpQs26wR5zytcLc/mkc8oYgP9zgcG6eop
-# 7RKYyIJwoUyNkIVfCiOXUCfbvMed7mq5V050lLwYOvEMQpnuTtHvEuXLg/7i9lOA
-# jDxKtRXbocNm7/dPS+we8kZJxynGbChfxk6Z3ga5WUzuoIvJJ51r8UOJUPJScklT
-# fgX2n8kjheUCH84GNByjDZqnaF6eEn6+qrsYSrOaf0jKDRmmnypwFaOUZRq+g+16
-# rawSGG6x1jyrh/k5FgUgqu2entro4C0vBTuIcf9ipwliqPV7DdhbYYmtbedUImdB
-# 7KOeXmjAc8udj/wguop+wIWsImp9ZL9ez54tjMpns7d/O5qqZF3cCnhB+o3aYVx6
-# nbl7n40OkbPOFJ272eBKTETvmlJ4sX/QeAN10U/jin0K5erNDLffwYbUvoKsriIQ
-# O/aNU32kOY9UO025jt/CfihnZPeg7kS4+J6L4XGRBO9iOb9q90ao4pfwftJLMq+w
-# BTxntA4sDcZBmqnprhkp0oyyHK2pA4ahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# QCP/nmhx8rReOzTOsGbCAOHUV0kwDQYJKoZIhvcNAQEBBQAEggIAN/n+rwKVrQC8
+# OcaSKmsO5j8Ypr+wHjmN6C+C997qiZIWp37uVfq8W0SMNyoYnhoKjtQuV+rEiG+A
+# naQMx8ieLZv+/hBl7T3IoqRy3tDRJImODKz/14XiajMRyAfqnCBjjCm6GPM3Kacj
+# 5RG3+7bKPk1Wgg9M/XhCL1PCzmSuF2ed26mKDg2Zz0me8NqodqIZDOg7tTHJ4xIF
+# yP7nbgVTBlTWKwdCMsOeKtQ3j7dwKNZUsc4iOUb04HPplBKEzBybYN6u5J749kFx
+# an/Ca0tWKjoiQz4s0R1OovwH/0Hk7Ghy629j+S8milGA+4lpE8xlSnZYlB6yUnHR
+# lfBi7fi5avToUEs8xfFNgcrBiKbx+/EXslmdtzFlMVXUowlyQPasqjrwYhTE1tgt
+# 3iBWaLzuxxy6QJt1kLDIS+diyVdAZ/sy5DqlgXmLwDkKG49YomhPlzsT5kvppKaX
+# 2AQnJRhjn08z91mA3j4wYoHYf+8MmtQq9ETlcLadroGb4n9mleMYTN7MlUPzZIxn
+# b4JIl8q2Q3BM1Qcjux5J4aMJ/NX482Pv7uGAp/9MzNfFfguT04gLmQu6YQBm5f+y
+# 2iwKE455owtNdsYt/81z521+E15aPX3F14SNDV1Dr5CWHEthHA7aimUoye3bQxmz
+# S5BsXjo4Iki0BAzYlcYgjy1EI5ZgP8uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAzNTAzWjAvBgkqhkiG9w0BCQQxIgQgUQ+rMfmke8lD73x6JNXyYNs0
-# e+jAfuwaVWmvKwJVo9cwDQYJKoZIhvcNAQEBBQAEggIAHU2xDV4rqxIUUqtQS0np
-# y5mTCYYTkbJUIXZjPGLeAyb2SglgNejH0HZRWlDq3tw/ZNMsnGyHXvI5SeJ2r2eq
-# rcxyV4G9zFiGoa7ZW+uqDvtIfqBtcsgV0awlvp8aAqv/HQ1D8P/AAIJ+1UoLQ/0H
-# Q+UGzapUuxLzs0s5w53pvkFJVNWXm0WUV6q3tekvJ81qxlunAUpwpLUeM8jWqUnJ
-# KNl4OLtDgSqgclqsH7vbSZTgOtCokKW0SaEebZjVbHoMebJF4VimafwXPWQnwgv1
-# Zw83kfBAgWfmVoAWcIa7CpZo0mL3ngPzylvvfAcaRDl9qIUrvcUxgfNU/EMFMZE2
-# S19JmgGlLLIp1ZUxT4J3f+cJ89a3pwWZ+cbYELjFiqBZsYj1S/kbq65Rkga86jwn
-# WWSUzyFsHi91dftHAo3UGeNUnSCN34ruHSCsWfpjB6Gqbhtf3QqIgFP6r9lWWP4L
-# lacLpFeAZQj11ajrzY2aVcWy61MIQ5g2rAszZOefJWvLKC2jGEzbqBQdAre2GvJI
-# ASA4OnMbGGgJ6mnoP0eyQwdhjt7bNcHhhdMqR8Rr8bt6HJUKbAxcmUboffGhTfLP
-# /t+9WRzgfuDHEsT1JdQ3VwaOZSi7rFroMivLb3uCkQkP0kBS4tBD/YUHFdyRHF5Y
-# EcL/mPgnmvRyRNwziWKd0jY=
+# MjUxMjE4MjAzODQ2WjAvBgkqhkiG9w0BCQQxIgQgr0FwgJwB2YMnYUa/8i+LE8g+
+# LfGu0jtqZp3nRlTJzBwwDQYJKoZIhvcNAQEBBQAEggIAWHAqggntHzorBT0PPh9g
+# YutaTuhViQ+ucCiugrjuFvTEDJSImSZc0zBNF6+7FfcFsx25eZydP0WyfVgZSyWR
+# 26d/xWKy0ignPvN/LCzBURw0leA/4hJcuc3jWoGowrc+bXG54z5/2V3Q6Xpdm7Cf
+# avS70shzSCQS2P00pxlvNS2a0j458813T2r8QZU+S5/kj7NqIQki/UIkVCPB3WQY
+# f4Y+nqx+GEjFLV7E9CDvUI6VYR2Mi8PcsxyQdS6RsdRDr4vNhDvqJ4pTVWNgu8/A
+# NJ5L2XSFyKfINohX9gFXA+PvfiKDEjvQ17eaz9Vonha0UP2oXmnHErEIeaWPPGdj
+# s6ya1kEb34fmQ3tBMja7zZtqInKHkCu5VlpOw5TqhLPtE9+qIWCVGxUD2TJXJIdZ
+# N7eIQTG+ng487L93LV+DJ5PgZsrjFAJ9BHXdqz6K8VOe+c2FlsXwLLIgXUufTR70
+# 3/Aou5UDWY29lc9N3eUcYlcNmXECXNUcq4c/vCc/cJzBVtLKQQ8cB47I8K/UD2ax
+# c9PrWnNH2WYP5M3J30u347XFkvC0iWpd0E8v6KnF6/vFv2AY/jSsLOSHIhOjIHvJ
+# GF98Cmx4vUzyNm1B7vEuFAMTt2fmUTjNbCPhI6ZZc656ok+URQjYAFnoPyf/v9jV
+# Pw/MGgD84GVloegvwCULjUo=
 # SIG # End signature block
