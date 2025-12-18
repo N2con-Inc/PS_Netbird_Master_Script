@@ -56,7 +56,7 @@ Automated standard installation
 OOBE deployment using local modules
 
 .NOTES
-Version: 1.2.8 (Experimental)
+Version: 1.3.0 (Experimental)
 
 Changes:
 - v1.2.7: Simplified cache invalidation - use manifest version as cache directory, invalidates all modules when manifest updates
@@ -113,7 +113,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.2.8"
+$script:LauncherVersion = "1.3.0"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -349,7 +349,11 @@ function Import-NetBirdModule {
     if ((Test-Path $cachedModulePath) -and -not $UseLocalModules) {
         Write-LauncherLog "Loading cached module: $ModuleName v$moduleVersion"
         try {
-            . $cachedModulePath
+            # CRITICAL: Dot-source into script scope using Invoke-Expression
+            # When dot-sourcing inside a function, functions only load into that function's scope
+            # Use Invoke-Expression to ensure they load into script scope
+            $script:__ModuleToLoad = $cachedModulePath
+            Invoke-Expression ". `$script:__ModuleToLoad"
             Write-LauncherLog "Cached module loaded: $ModuleName"
             return
         } catch {
@@ -370,7 +374,9 @@ function Import-NetBirdModule {
             throw "Module file not found: $moduleFile"
         }
         
-        . $localModulePath
+        # CRITICAL: Dot-source into script scope using Invoke-Expression
+        $script:__ModuleToLoad = $localModulePath
+        Invoke-Expression ". `$script:__ModuleToLoad"
         Write-LauncherLog "Local module loaded: $ModuleName"
     } else {
         # Download with retry logic
@@ -390,8 +396,9 @@ function Import-NetBirdModule {
                 # Download
                 Invoke-WebRequest -Uri $moduleUrl -OutFile $cachedModulePath -UseBasicParsing -ErrorAction Stop
                 
-                # Load into script scope
-                . $cachedModulePath
+                # CRITICAL: Dot-source into script scope using Invoke-Expression
+                $script:__ModuleToLoad = $cachedModulePath
+                Invoke-Expression ". `$script:__ModuleToLoad"
                 
                 Write-LauncherLog "Module downloaded and loaded: $ModuleName v$moduleVersion"
                 $downloadSuccess = $true
@@ -806,6 +813,17 @@ foreach ($moduleName in $requiredModules) {
     
     try {
         Import-NetBirdModule -ModuleName $moduleName -Manifest $manifest
+        
+        # Verify functions are available for version module
+        if ($moduleName -eq "version") {
+            if (Get-Command Get-LatestVersionAndDownloadUrl -ErrorAction SilentlyContinue) {
+                Write-LauncherLog "✓ Verified: Get-LatestVersionAndDownloadUrl is available"
+            } else {
+                Write-LauncherLog "✗ ERROR: Get-LatestVersionAndDownloadUrl NOT available after loading version module!" "ERROR"
+                Write-LauncherLog "Available commands: $(Get-Command -Module * | Where-Object { $_.Name -like '*Version*' -or $_.Name -like '*Latest*' } | Select-Object -ExpandProperty Name -First 5)" "ERROR"
+                exit 1
+            }
+        }
     } catch {
         Write-LauncherLog "Failed to import module $moduleName`: $_" "ERROR"
         exit 1
@@ -830,8 +848,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGXg7SCJFb2IZjFBhAugKYZXn
-# CcKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtRuR34Dx/tEad/kXtzC0Ur5q
+# XJmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -970,33 +988,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# QCP/nmhx8rReOzTOsGbCAOHUV0kwDQYJKoZIhvcNAQEBBQAEggIAN/n+rwKVrQC8
-# OcaSKmsO5j8Ypr+wHjmN6C+C997qiZIWp37uVfq8W0SMNyoYnhoKjtQuV+rEiG+A
-# naQMx8ieLZv+/hBl7T3IoqRy3tDRJImODKz/14XiajMRyAfqnCBjjCm6GPM3Kacj
-# 5RG3+7bKPk1Wgg9M/XhCL1PCzmSuF2ed26mKDg2Zz0me8NqodqIZDOg7tTHJ4xIF
-# yP7nbgVTBlTWKwdCMsOeKtQ3j7dwKNZUsc4iOUb04HPplBKEzBybYN6u5J749kFx
-# an/Ca0tWKjoiQz4s0R1OovwH/0Hk7Ghy629j+S8milGA+4lpE8xlSnZYlB6yUnHR
-# lfBi7fi5avToUEs8xfFNgcrBiKbx+/EXslmdtzFlMVXUowlyQPasqjrwYhTE1tgt
-# 3iBWaLzuxxy6QJt1kLDIS+diyVdAZ/sy5DqlgXmLwDkKG49YomhPlzsT5kvppKaX
-# 2AQnJRhjn08z91mA3j4wYoHYf+8MmtQq9ETlcLadroGb4n9mleMYTN7MlUPzZIxn
-# b4JIl8q2Q3BM1Qcjux5J4aMJ/NX482Pv7uGAp/9MzNfFfguT04gLmQu6YQBm5f+y
-# 2iwKE455owtNdsYt/81z521+E15aPX3F14SNDV1Dr5CWHEthHA7aimUoye3bQxmz
-# S5BsXjo4Iki0BAzYlcYgjy1EI5ZgP8uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# SXOS8SP+HlzcZPgyymJYNQCFHswwDQYJKoZIhvcNAQEBBQAEggIAhzUpo/r2tKYY
+# EYRjiizTFvLDEUN/4WKEDYYtB99cxBh6lkJaH/yM9YtN2Ztto0keALc+2MW8pyQA
+# +Wdxlhu6Q1wGlZGYPZHR/8Me6CkEYF8Y/fv2I/5Mh35Ka8ECKBeKIlHoXAkohzMW
+# I6qscQ6Eg9y91QOjc79TokTG9vXW13+PGvewkeOo8zvG5uNjh25WlhnYUfsxfmZc
+# xPOjFj/lcuEF48pnIpiIHCTaYW1sRoooX0o4WERPHDtHKvij395aF5tZBa76zvyO
+# HZOX8kpBe8PH9hz89huWUyNkBZKF9+q/3b2mTN1LXHNzzpEXDzl/yAbhPc3NauVX
+# PtSuGz3F1fJJV+aGf1XyximvGGxkMMrxG3CTZTzZN8Kvni7GCTKiFiBdlmY3RdZH
+# l8Hjzsl1yibOKPKfUkGHPGOYFZLaktXIy/WBW7yV7Q0z7tgEBwQlQQRizUDOIBVb
+# r1edQYh3qwsiq6QGcXoIiwmP+DZk+PJixBkhfrd6/WFUmBlW8QAggbMG3RMRLHZ3
+# s4GL8PVvpFvyo8Y9806mYD3Hq5u/R0tE3Ufvi3yM8C6thPNF+ljVXTU1baYONz7w
+# 0G4OnXpMQdnMMUGlCrhHFuL3OfwTodeQG0DqxFOFRzAxWU8MTzGVAUY3T8IqS6My
+# Smeb3OMkDVsMkOYIjLo8S5OK79y851uhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAzODQ2WjAvBgkqhkiG9w0BCQQxIgQgr0FwgJwB2YMnYUa/8i+LE8g+
-# LfGu0jtqZp3nRlTJzBwwDQYJKoZIhvcNAQEBBQAEggIAWHAqggntHzorBT0PPh9g
-# YutaTuhViQ+ucCiugrjuFvTEDJSImSZc0zBNF6+7FfcFsx25eZydP0WyfVgZSyWR
-# 26d/xWKy0ignPvN/LCzBURw0leA/4hJcuc3jWoGowrc+bXG54z5/2V3Q6Xpdm7Cf
-# avS70shzSCQS2P00pxlvNS2a0j458813T2r8QZU+S5/kj7NqIQki/UIkVCPB3WQY
-# f4Y+nqx+GEjFLV7E9CDvUI6VYR2Mi8PcsxyQdS6RsdRDr4vNhDvqJ4pTVWNgu8/A
-# NJ5L2XSFyKfINohX9gFXA+PvfiKDEjvQ17eaz9Vonha0UP2oXmnHErEIeaWPPGdj
-# s6ya1kEb34fmQ3tBMja7zZtqInKHkCu5VlpOw5TqhLPtE9+qIWCVGxUD2TJXJIdZ
-# N7eIQTG+ng487L93LV+DJ5PgZsrjFAJ9BHXdqz6K8VOe+c2FlsXwLLIgXUufTR70
-# 3/Aou5UDWY29lc9N3eUcYlcNmXECXNUcq4c/vCc/cJzBVtLKQQ8cB47I8K/UD2ax
-# c9PrWnNH2WYP5M3J30u347XFkvC0iWpd0E8v6KnF6/vFv2AY/jSsLOSHIhOjIHvJ
-# GF98Cmx4vUzyNm1B7vEuFAMTt2fmUTjNbCPhI6ZZc656ok+URQjYAFnoPyf/v9jV
-# Pw/MGgD84GVloegvwCULjUo=
+# MjUxMjE4MjA0NzA5WjAvBgkqhkiG9w0BCQQxIgQgJljg3Bktu+6mmwFDlsjFMkZ8
+# rijb5wuoufEe5U6UDcIwDQYJKoZIhvcNAQEBBQAEggIAWzvE6GokUgb+o/qH8XK4
+# iqRccY42tcT2pUU1kKQJZmZKeDPZ0iQFL0SDu4fYlI1XrOPvlpTumQMFs0eeK05/
+# nWFr1nRvpPbRr/PW64tlvamvWCwzjVnZDzVqGpirqOjkfkNNuPpT4dTTsfNKa5FD
+# 5IdwmYN52q2v43ZNqICH7dmbNDya5Yn1KPsWZzy6BmFJCy3gl+tNrwj4rHEts2RY
+# LrVoIARPwfjUW2R6fyRdfNog4z7Zhb68GbANEFcCbSifKJtbEApLbKXyLbURqXDj
+# Qnu+lgcMlQa++qC2miA/C7cpTCASAvykyaejjmpyC2KPaEI+hXAy/tV2f/escLRw
+# 25Xt/Fnlcyt6D54RwBUlcfP/THFDkpRwIUGhfdWlx0HjroJlxk9Btb2XP2QF0uqz
+# 4NxZJHfTcjQ3vrPYmb2yz12Na8um57RMu/snj0XzimblOQpSf+SVF5SRJp3h+c4d
+# rrk9vNwnvh3uwMgvRLOqWVwcIzn9f+pT5DCItytc8r8z8qu1FnIEBexEARqf7gFb
+# xmdLg59dZuM/YnvZ59AHfPriYT7vs92guEi0nTUVjH0V4phZqf+jE9Kol9uWO3rZ
+# GvmWwY9bZ95Nim0UIDVLQajZo/gU4Cd//MmbGAcsEyBkm6kCfDhpHGu8rbnteqPE
+# Dk18IvAeDK+GTxgXhXmQ5dk=
 # SIG # End signature block
