@@ -1,0 +1,3 @@
+# Preserve exact line endings for signed PowerShell scripts
+# Digital signatures are invalidated if line endings change
+*.ps1 -text
