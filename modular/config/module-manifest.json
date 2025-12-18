@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "baseUrl": "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
   "launcher": {
     "version": "1.2.7",
@@ -39,13 +39,13 @@
     },
     "oobe": {
       "file": "netbird.oobe.ps1",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "dependencies": ["core", "service", "registration"],
       "description": "OOBE deployment logic"
     },
     "zerotier": {
       "file": "netbird.zerotier.ps1",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "dependencies": ["core", "service", "registration"],
       "description": "ZeroTier migration"
     }

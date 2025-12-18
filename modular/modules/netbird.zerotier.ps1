@@ -1,6 +1,6 @@
 # netbird.zerotier.ps1
 # Module for ZeroTier to NetBird migration with automatic rollback
-# Version: 1.0.2
+# Version: 1.0.3
 # Dependencies: netbird.core.ps1, netbird.service.ps1, netbird.registration.ps1, netbird.diagnostics.ps1
 
 $script:ModuleName = "ZeroTier"
@@ -18,25 +18,33 @@ $script:ZeroTierNetworks = @()
 $script:ZeroTierServiceStatus = $null
 $script:ZeroTierWasInstalled = $false
 
-# Detect ZeroTier CLI path
-try {
-    $regPath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | 
-               Where-Object {$_.DisplayName -like "*ZeroTier*"} | 
-               Select-Object -First 1
+# Initialize ZeroTier CLI path detection (called by first function that needs it)
+function Initialize-ZeroTierCli {
+    if ($script:ZeroTierCli) { return }  # Already initialized
     
-    if ($regPath -and $regPath.InstallLocation) {
-        $script:ZeroTierCli = Join-Path $regPath.InstallLocation "zerotier-one_x64.exe"
-        if (Test-Path $script:ZeroTierCli) {
-            Write-Log "Found ZeroTier CLI via registry: $script:ZeroTierCli" -Source "ZEROTIER" -ModuleName $script:ModuleName
+    # Detect ZeroTier CLI path
+    try {
+        $regPath = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | 
+                   Where-Object {$_.DisplayName -like "*ZeroTier*"} | 
+                   Select-Object -First 1
+        
+        if ($regPath -and $regPath.InstallLocation) {
+            $script:ZeroTierCli = Join-Path $regPath.InstallLocation "zerotier-one_x64.exe"
+            if (Test-Path $script:ZeroTierCli) {
+                if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
+                    Write-Log "Found ZeroTier CLI via registry: $script:ZeroTierCli" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                }
+                return
+            }
         }
     }
-}
-catch {
-    Write-Log "Registry lookup failed, using default paths" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
-}
-
-# Fallback to standard paths
-if (-not $script:ZeroTierCli -or -not (Test-Path $script:ZeroTierCli)) {
+    catch {
+        if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
+            Write-Log "Registry lookup failed, using default paths" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
+        }
+    }
+    
+    # Fallback to standard paths
     $script:ZeroTierCli = "$env:ProgramFiles(x86)\ZeroTier\One\zerotier-one_x64.exe"
     if (-not (Test-Path $script:ZeroTierCli)) {
         $script:ZeroTierCli = "$env:ProgramFiles\ZeroTier\One\zerotier-one_x64.exe"
@@ -57,6 +65,7 @@ function Test-ZeroTierInstalled {
     [CmdletBinding()]
     param()
     
+    Initialize-ZeroTierCli
     Write-Log "Checking for ZeroTier installation..." -Source "ZEROTIER" -ModuleName $script:ModuleName
     
     $service = Get-Service -Name $script:ZeroTierService -ErrorAction SilentlyContinue
@@ -80,6 +89,7 @@ function Get-ZeroTierNetworks {
     [CmdletBinding()]
     param()
     
+    Initialize-ZeroTierCli
     Write-Log "Retrieving ZeroTier network connections..." -Source "ZEROTIER" -ModuleName $script:ModuleName
     
     if (-not (Test-Path $script:ZeroTierCli)) {
@@ -448,8 +458,8 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdp/GvbPZtGjiiOD+BiRz6zJR
-# GdKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUMN5OckGRH5hVWYmNXaAQlmiF
+# /HOgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -588,33 +598,33 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# GNSutBKklCI+yB+tQpXQ68QabK8wDQYJKoZIhvcNAQEBBQAEggIAgxb1paFbywjH
-# 8013if6QooQaxxB4OvqgEeLNaOVtvWqtbgTuK8seSAGNA9wSPDTkgFoeEQzQ4ngW
-# 6WRYB8ftjqlf5PMikA26ylubqzKzwrQ3EWjy5VdN/sMiYdSe56whKJi52JbO5WLE
-# xZ9gJWot0KFs5oTJAqEkDcAthgfBpssBuTg+JTj62ty1lPZ6mj077ytSC/Iz0OwH
-# 9q0WEjylmZuzqQ5aXWEjnQkCQr/VwONWCaoJfpPn4YJroUjtyL63Gos1tsFjynxb
-# 2QgpW6wwjp3eGLO6RPC2FG+Yj3h0A49OFMC0Xfg7Ksfkb7S3akba0GrSuDkWOwGC
-# 37rjD5V4pqp93212t4+kzrtlFsknqAtKZGdg69ubY9t20Bg1rGS4MJ+rJbLKsSM7
-# KkSQ5rKw9U30rfQHSiQihwxKTw+Q5GgiQcoeEUJRURngKPvtH29mO8+kjIQG/F5z
-# gyp01q1a3x/tRbXjcaXWJWY2jllWWZOYK3FcaGMknBlfs98JwEFNiaOtJBQqwzXY
-# K6aNNtKLTp8d51s02k1PfQflLRabuJSG04mFoenSvHk52Qtewm9kZxEmQFmoYUv0
-# V9SkvBPCLCivLFKZaDRm1hDXzVwTjAyQ3YN8DDNrhQxzk24nkljjVnRTuRMiQHWb
-# 4Jxr1KQHbbBZc5e4VfHPIGMUYcPtaf2hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# +SjwBiJWytNfQSOoyRcLw0iCmdcwDQYJKoZIhvcNAQEBBQAEggIAud9m6vQKsAME
+# pVafD8bD25XF4zDkjEX75AXJxuxvIJTtcEV7mmSa4JlQZF9WA7AdZR8qPo3MbLMv
+# gYwVEDe2Xy4KWkQuxlUY8mJTFu7VJmerlbWQgyRAu49My/SlH8T2LSbp3t2hEHoi
+# adF0zdAxYAxsbZMZJ/ALfwCC9khx5cgtEPlPnATxcfdlH8VI58/0Hvin/WphKxxd
+# vpZNlUCzG7ZWQgZgxMNklhD0gi9InXcnQ3z7C76WzRCBFXfCcnI5uywJm6sFUaG5
+# ggasJp/uXzpoUTJTyaQI0TxiohUWoyxnOOlw8jd8RxQHo2jPZf4nsRZbtn18S8K8
+# NUG+tNO7XQsvemL5dkBbhio0qMEsBXQ+p6xZzkolCmPu2lQsDHK9ds4CpyCjVihU
+# ey1oJg6I12KMTpphqEAHbSqEAag/CSoQ8udN+WHIPwR1kuDy4i/+PVwUk6sJNC7T
+# hd8rMWiBw9QSt1yebCPhm79paL6Qx22jKbhnnDIQw7Gmeeev8QAAaxb7VEF6i22u
+# UvVMsSv+DDpBFgMjG5equK0yYG53RsOfBDkZnuYs9hf1O5m9j3++hTAGt7OZWNFj
+# CMopq/aHh8VNodR3F6Jbv5gq6gyUtb6SHmaaL9Jsu/QcOKSYuwoWknrIPXOkDg+u
+# 9D89mb2I2yaSruIrntERICXlOeH+hTihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjAyNTMyWjAvBgkqhkiG9w0BCQQxIgQgolJFtsnP0Hl2Jd5lI2nnqSxz
-# ICO5JncDne69GBkkoCQwDQYJKoZIhvcNAQEBBQAEggIAC0OI24ee768gL0w8jvyw
-# BR5695o8UEI5xO3MxGU8Jh8L+xUjWGKpo557G9nFKqcvOvvVWVaT92UpFzZ5VAcX
-# eks8deIAsLZ7XkadbhP6pxuXkLm1DEmMbJTmUAdg7cs09jzPOznedA7TnZh+kHjP
-# Jov7FfAOvAoHrj30YZxnvfqBgtxf6EDxGrINRJpIHSbGO8PDKXwWM8A9nlHfMQ2Y
-# 8lKCdSsht6SBaZmjOlM75tHZGnpC+7wbNKZGleLb3fr16e94nY/xFBFMxOuRB07q
-# SA8fbrd/E7fNUhVR+4RTi0SLvTeZpklTRGHVzYuYPcP+J0bLmwsR3gYynbKLkSwh
-# ZHPVTI8QEtEZhz6wbiJhdsfNqNW6rAx/BE49lKqquBxvieQlzpeWege0rjO2s/Rq
-# n4F2F+3mlubvjmb0J1t55r430K/H4wKh7qKBVscuXojFj55Ww3MHo0fu2D2hjLLv
-# y9sYZ6XqRSYnfMqxxPj3kFxZTFABxG8GVug1fOYVKtfSvTyWLiSkzo8h88ABA+bn
-# gDgWjy9IteYXAcevU06+z2uWeGUpXVnVO6jDEt+ytTUpgsF4wRCYp6ET9hldcgkD
-# 2yXJtQ+muPQTdXd+a3X5nWbCw3FNREKtzK8Zzy6PqyegDZLTs80Kc0Li3k8FhiW2
-# CVzEgmIe+i2ru8fHL2wwYUA=
+# MjUxMjE4MjAyNzIzWjAvBgkqhkiG9w0BCQQxIgQg0JOHc4+kT+k1pc7b0dkd5eRf
+# 3dVxbP0zO2Nz/usCrO4wDQYJKoZIhvcNAQEBBQAEggIAZjLR3EKXwSvFuesFcd2f
+# HBMMXTjhwaW7Z5FrxXwFdZJ1DjcvYnk+KbQTbRmF3QpNvUStIR9kqS1LScv2Ms9Q
+# BmW5VfHt5gYV+gILhri86mpcwQt+tnOwnFMtinIDM8DjmSrg59UCgTAlJq59OsAI
+# WQUYBfjPsEQnf7KIbq8/0je2lqpaD1M/0D3T73zOO4nk2ooG5WNaoJZNksZCslYE
+# 2yrRgmzjcuc5vAb89ce7KzUvnoK73aVG1V67dudHorxg2PODvGHd97JhgG0B7LQm
+# j9TK5CjGDjk9fCIV6JB3C7DL5qu5beL2E4+VF93WKPThfM7Q9ClQp2Fde5+0G4AD
+# r6d94sW5LWj5ToEtrPrvV9JzArJYt1b72XxNZKep29H7k0K9tii+B1NTlkaqgrJp
+# WecP6ZgPoyefQ+G0DeJ67Zs1wAJyxdxTmH07MpoarvkavNqhaTf/1ISqwDUk8fgs
+# 3dZCjw/5zMreW0eODbw+jmOcOpQR71fl+khmGqZoeMNmqWnEhNsPLbg0QAyOMjQp
+# /bGUZvKgR0iyDVujmzn2Xpt+OzbRs1WbkfgdD2Ud6Ftr+WJqRWKB2dL5MS1XS5t2
+# kNRLwG1SzoXSmJ+CzBzOZP1kEdV+c07riWPpyZH2Nb2ZwkjfNZfIPid8ssQFOoUq
+# ax30NS90OFtaxIWwYSYBL4E=
 # SIG # End signature block
