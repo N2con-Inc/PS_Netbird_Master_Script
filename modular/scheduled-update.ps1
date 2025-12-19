@@ -1,14 +1,15 @@
 # NetBird Scheduled Update Script
 # This script is executed by the scheduled task
-# Version: 1.0.0
+# Version: 1.0.1
 
 # Set environment variable for version-controlled updates
 [System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process')
 
-# Execute bootstrap
+# Execute bootstrap with consistent method (matches Create-NetbirdUpdateTask.ps1)
 try {
-    $bootstrap = Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' -UseBasicParsing
-    Invoke-Expression $bootstrap.Content
+    $bootstrapUrl = 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1'
+    $script = Invoke-RestMethod -Uri $bootstrapUrl -UseBasicParsing
+    Invoke-Expression $script
 }
 catch {
     Write-Error "Update failed: $_"
@@ -18,8 +19,8 @@ catch {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbHDaSDrgyl8SwqqaHbsRxVFP
-# W3ygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbF5Dr5mY4gL5b88xc+Zumcfv
+# qhegghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -158,33 +159,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# stbHEivkNYjusZAJ/9bZur3x7TQwDQYJKoZIhvcNAQEBBQAEggIAyUkizbhi5GLn
-# vCv4hGOoVXp73lY4UUUGf/5bc980AfNVEiCarUb1SJtKK0k1arpCk+ESWaBucLng
-# hxpSqJy9F+FcNQClwXCOAzVpZfzaZ1TwrpWoj4wmIJMhmt4bDKhbliJnzfWYfPOU
-# /yfoZLK9aYXKvPABE3hZ3OF1E3+q1fFcOrU9nLXvikEagMu2qB7UDnG9VlAoezuu
-# cwYw8sRoaWS1g11TvnG51B11FWZvqRQHPsPIUrUfJJ0HTIOQk4P7J9pzVDH5LVIA
-# z7BdSyRCmTfW1Q6agYYhdYKvjuukQWSBP6Fj9lJIU/aeL4zxO0ALyhWRcR3oJgMS
-# 4sIcg0sYPVVwmAEAuC1xU3UycbQg9obwAkWougzRntPSwYsy8fz+dZdD2oKhhuIg
-# 2rL/W3dWcrpLLtiWJRtzQJ2oxbQnNPo28dMMz0u9LznTtHDjkCdnXV3ZfdZj4JjM
-# rkCDL6XqpB+ujcmKOxL+3/dX5QTeBrS+/kMjM6oxzsRiKOPuMRZ+cLebQD3/aKtn
-# LnjRk1+a0aj2GI7fNAz3/pfsYO6OTDN4W8R74MJ9z96sV+j6WpsoxHFfE7D2xDD/
-# CGhQdArT+sGlOHp8EIS06AIvCOIhnQBAnizZI0ewoi2fMFHZUcrsEzM/SgsKB9wT
-# FMCKYkfGYiYjGX4kqz92GIv2tJwnUPGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# QPkKNzQTij+yHa5ZXcNqTw0lTOUwDQYJKoZIhvcNAQEBBQAEggIAqdyz9reqL4gQ
+# usZHy6ATFFX3XYaWpHEcwRkdb361zTPN0H998N7IR972jWFmDe/tZa44mMKEbGOD
+# mdPc2rMVEPLES6ZEg5JZB/VzY22I2IN5l7XbLJUx8Hsqpovyx6OLicnJj2mZ4oHs
+# RakLs5y7Rf44Flf6c5aJ2RbSpTYrkhidkyCYbDwlGaNPOevYN+sjI3uyuTOlxMrA
+# cHJWsci0vdM1sYMRwIS48D1guTJTGWNNmEMS9yc9DY0BaGryZhkHgRVoTLhgkz1r
+# NT/X3KTMVN0hSjWxqllR0Ey0hijNoyogW2bhGgCnF8/wbLWkXgJYf8cl/9JXPlX8
+# YF2az+S6ck/MA1qFIlDzELqcS+XQAInxcp14aIM39Nt9CLqXDbNRlITsq+GbNqtP
+# VeNsG1dY4nnb0oqyUx4ejcfxZlYxntDU2nQZkFBosjQ3IqyaahKepw7XVst6c4zM
+# PfOW03fHuVzV3eerUIWI7K1TtP/IZRsAASa/KlIJoKgT5m4RLX0bxq7gUHYkxuPW
+# Uq7wWDqyABln03KuXe7JEOn+jT2B+0GztMN3rzJRDT6hw2Ll1Ptgg6weFr7v9hM6
+# Lx+Q3HAqlXjH90AlrqJehdTXuW4FDBULSffE15sIlFC/1Oo+rCPakVpJ830g3tT2
+# qH0PLM07Fq7dzwurpcCvngsWHHVyfpqhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MjEyNDU0WjAvBgkqhkiG9w0BCQQxIgQg/1jcaTN3KED4G5Llj6snqIMY
-# MEMA/ahmgZg68MqX2IgwDQYJKoZIhvcNAQEBBQAEggIARiv+Rrh+nWjyoRcX7WhL
-# I5aQhcHjSq42X/hucwO63e2bRysZDPqI2hG+hILB9qx13/hDrYlq8mWH26OIlRqG
-# 9h8Q4NnDHpU07kW07W/s7AoWmZBdSGn5LHi9VZxzCnZAQLDQpQTgdNomQdtucHyb
-# HYKE0L8pNoRf9WNVnCNg6apZ/+Bpw++iqc8fbV9pCWbsM6e9IRvnM9JQqJ4RE9zp
-# 4aBR2cGB7Kaf4fRv5Cb16xbz9CTMaUn6t3flaLBg//pbvVmLuNSGKcRHZA7W1fcU
-# MkHDFDcBamE/Z944Q2N2GifUkWwjW/ZTCWyfhQa7e75b9YZtkLeRU7Bv2IzOUITW
-# 1/2tRnEs6KMyytSngrBc0ItUw1uM/kY+VqpWS2f6vw0WEKi4wF+UbeiRFyIvLqjd
-# zxpSAu18D0vU6O/qUgp9smL37SqC2Sm81QiER718pyTHR9I/BN2Cm/ck6ZTQF4vb
-# r4nmjPoO5s1cZC2cLnDC19vUcHkOyZkA3mEt8kURHnDRLpKIHmfXmBTqWBNk8kWx
-# kQmcmZl2XgWmZny2WQIDRRQwamyQVj7PVU1PvQ7Sg+QAgUsJf8KLPLNqqil/fKPC
-# s+MxbAVlrar6KmzyRT03vmzADC6KDCpOXmOemnQ0s6XHDtw3bEjf9zLeic6p5HzM
-# PMaFkP75J9bl5UH98dXmFFk=
+# MjUxMjE5MjE1NTM5WjAvBgkqhkiG9w0BCQQxIgQg85Asbm6i3NC8dYh2TjdUsMv4
+# JM/Glc43p6QKX3pYEeYwDQYJKoZIhvcNAQEBBQAEggIAsCwsZ/6msluqFoXZ+D+z
+# vyldCFJuznL80C47Q4UI6KL67gqKX1A9zZ6CC3GfOoeeYuo/SmzHZ+lKfzoMoEPk
+# CrAtQFk5NlH5yAunZbu5+ZX4P3sRMcE4AJ9pjcMbe28LFg18qlpLCoX/kqwePHD5
+# IBrJ40VXIczNmBu7zUWkS8WHktI5A/7gg30eYllirtCSqHA3NSJxTuFJ9kouuo1R
+# uIgl/+YSUz8gvKYzBiZwW/ixAXpedYTBDI3Xqx+ExH0RPuw9iTwiX6oENOHyNRFh
+# Ap+FvtebDPzgAb/nj2cqh3SHKqGgHNZ4UpEltXW7V9r7EdWVDVv+PG+hhi1fIdP7
+# DNCVzEDhfcpnNpao1bGGulF9G6FDEHT3YLlBNWJbT5hjw7KWJLvfwgyjjbmogY7i
+# Ti3CJ7MhSbv75SoZOg8J1BetNMXrw6uboMY+NZM73dF0LflFy3A0HAPqgqJMd0Ag
+# KOyvxR88o7E8JV+hox5N10bls+wbEaGd3gwFxKGctulwcrg5xCZe/SDRQmPoapW5
+# gNN/qeK00lqPCNcXWFWXU6pJ06MuncKf3q/lrmSn3H98Z7pkcA9wySgZ+2DU/tPu
+# gSw6ztu8t4MsO+v3ZEGO1ZY2iNR2s9ILGV+Oj8aFuh2o0hTNfykaRf50HvHrOGcj
+# VLzQ2g+rJyMR+aTRLlDqIM8=
 # SIG # End signature block

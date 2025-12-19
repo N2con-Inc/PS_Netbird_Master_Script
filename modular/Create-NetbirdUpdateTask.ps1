@@ -144,14 +144,16 @@ $bootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_S
 if ($UpdateMode -eq "Latest") {
     # Use bootstrap with environment variable
     # Pattern: Download script first with proper SYSTEM account flags, then execute
-    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing -UseDefaultCredentials; Invoke-Expression `$script"
+    # NOTE: -UseDefaultCredentials NOT needed for public GitHub
+    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing; Invoke-Expression `$script"
     $taskName = "NetBird Auto-Update (Latest)"
     $description = "Automatically updates NetBird to the latest available version"
 }
 else {
     # Use bootstrap with environment variable
     # Pattern: Download script first with proper SYSTEM account flags, then execute
-    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing -UseDefaultCredentials; Invoke-Expression `$script"
+    # NOTE: -UseDefaultCredentials NOT needed for public GitHub
+    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing; Invoke-Expression `$script"
     $taskName = "NetBird Auto-Update (Version-Controlled)"
     $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
 }
@@ -249,8 +251,8 @@ catch {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJPHt33tklNBEA0Hzr2D7WrxU
-# Ai+gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcT+YqghPr2MHgK3dwpMRnm7r
+# mxCgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -389,33 +391,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# gYum8h4cUhNMvx+ujE6bA2xvFLswDQYJKoZIhvcNAQEBBQAEggIAKIMJN6iYKvOp
-# njo04a/VgPaEUL3MBV4KXQrES+FsIdxXMQ2FZw9kinggWsOrMk3JJj8TlpaDRbdb
-# s0aziyCT4XFto4pKZCtBHe7gFF24egS2HRcQw2+DBx/sbLcpPFJ52Hx6Mul/OqCu
-# mZ34Eytsdm9qC6sfKT7XWCyzLiLzeNPRDmHT0X2cLC9Gi18gUJT3tUR7SxYvchFJ
-# VT6AJD+loyminy8y+A4xPFjl6j96i6hh8JTZDyuVE5aaaWrZeG3KXTC4YhKCvu//
-# qF7Phqqk6RT8tIXZTzMjt9oR5TR+rEhkfBNmvkrkfx81fZwoI11YrcROJH17RbYX
-# WpLazlX9Cqz8ACvgU+yyLl8UUO0uelR9i3lYUQ+J2TXMJhvFVoFyPyH3d9Kvwu0W
-# e1IYVg9yc6vAHRvNjPr5eN+8L9fz5eJJ33cIYL3tboVrJWC3ePH2y/sBCDI2SatZ
-# da2v1GftmwmieXqRAEZKMEKFkm3wJDoodFurR5fKG11J6YPd3MHJM2nXqX384npL
-# U6fZeYzD3H2c+iJdo7OzaCZCIess0GD/nQfpkS2EhgHY0n3EP4adi/n6mTBqxXsZ
-# OcqUkPapbYZoOcMkuenTehwdBc85nuG5szVHQffziAoFQ+6dyCKHR71pBpnGVifA
-# hf+ovfBmJG5u/16w9j1KZbK/DG4ITRuhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# mNoiH6f/RAARDj112VDQwvv3ixcwDQYJKoZIhvcNAQEBBQAEggIAr7YRBEMr+TlT
+# bonGil+hoO7dO59WWi9dFXUbx3kXZ2Aoc3Ghamqi2OE/ejO4kFjsFOaHROB0roBM
+# YTejS7pKPLeSC4+EKDfV7C267A2qdwfreyX6amBNFSm1gF5Lg3yHnikOoIqetbo9
+# K4AfEz9Bj7b6+s5khnHkaepdrOt+iD9Q5E74kMVbcI8JsXg4j3M8HTIfZgdPn9Ld
+# Rd045Z+StjEPoWfBLI3NaZJ45fAG5SfMrkhK1r49Chvz6RFbCwDri+E6AfSbyGlr
+# ulWkhsp8AoYjjGqmLaTvwxdgqtAF8aMeiCAYJA5sCw3ip8seS2fVYNoLwTL3g9rm
+# 85a6pFiQwoG/k7YTvp5P+3Cm1Mu8wNPFSiRbdBQabaxfXdF2j6Lq++mQ3Xeod0tN
+# CpaAimOyOMbMX/eYPnONC7kgQoUoAO74EcXrU6cMQ9qkEYaXmflgKV6P7znhDQjn
+# 6mHpKoeJdz36Yf3hUlt/KuhL8TICJBlCp53LB66uLATgSaj/gDfsqR4IY012dVAM
+# /0tlck+qMy7CPOsSWdTLNNLesI6hjn3lIRejfXql1S7VJVQfB1rBqDf7USBGOyfw
+# X+YGon9AgrPuvz4y3GRLCxF0tF3z5Qzu6w2wTEzl78Cx4/Ws4Ms/bGBTv/vRdCVS
+# GVpP1jFHRlGbHEFmOqBQykO1kLhc826hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MjEyNDU0WjAvBgkqhkiG9w0BCQQxIgQgME6esIbzkNStwYVW1FtKOz88
-# k4tGLyKTwG3y0e4P5rgwDQYJKoZIhvcNAQEBBQAEggIAGN3XgZAA4EOnWAlKW1Bt
-# GKhX7KIIz9jdVFFqQ1hamw3rkOCc+PK3hHkdt6EU9MQTFYiORwAShaaIiIQuXpQt
-# vUHaaGwZtf0YTNP0tbP/G+Sb940VJQXGbR0x0Z+sNnAdU8tEH4HIHeSYus9BUav/
-# rFmMXa22VePhZxsWpNUjAlTMdpF2UYSAc5mV4eU9NrQcubkiUCwdWmIc0BlsOBwK
-# 7/E+WI+bIoUw+KgOy/qn1pKdJL2ueFnINSkl863xcaFwMEQ7zBu6oGT0CCCZPSpF
-# mmBLfLGOD9H1BovavO8KsAAVZNZDGu0y+LRfoRCvF6zYIoEJYg32RCPpQnHdHFVd
-# GkWrUAc1nKYyUlD+feNBRS6IlNvdQCFNCFkeqA+KGponuChXYISP9vwHBEMjWXa4
-# TRoDHfp5L3XNvl+5oLzecnoSOdSRQx+SbRsgQSE87VhG3sVPU1nx95Yk4nSBSkJy
-# TQeQSh3uB/EsaExnnrEB9+JG75iKJ7r6g/L+QZfKWvrpOaGDoWy34gjPSGLLg2TY
-# Im0hHZIzWbMXQ5Zi3BqYOWqcKLrjPvkJlc5tX5fNSwizO1FZcokd0DqxDCocQlL5
-# no9t1l8jerblMClEJVMLRZkWi6UC7g0AQXLeAARaOFHvN+oZmc2CMg82QIVs92X6
-# u/jV4RJZ31uLRHtIbwo8F9U=
+# MjUxMjE5MjE1NTM5WjAvBgkqhkiG9w0BCQQxIgQgn0euhcHt1lIQj5+/xoR+lM2H
+# ZJaNAz0XmPFSHfVdnxMwDQYJKoZIhvcNAQEBBQAEggIAL1MmtVp7xr0wbaYbc/0o
+# SWPrC/ETgbSx4pSCuWG4EGsk4HLD+/PnBJlK1Orngr/6JKcGj0v4IiicX9j5Q+qE
+# AftJAffFKIhp65r1wRv1DrOBJzln6cF5+rN55LiLmssx6AbZ3SDRACj62dptJnyO
+# HuG2WdMRFz8wJzjdeZ8HanYNOd1Jr2sde6XdMo+wrHMFIIJOLFB3/7U/I8kuVdWT
+# QNLTWDXLKZqDlEfHTkmr9BL3MgPmVv73QJgCh230TiaF9LeChRkAjopc7lmYUPOf
+# z1x8HDowCFgUk0v9O6c/bHEMUTrGi3Q2xIpw5qWDl2RdU6e/f6uVDkQa0thjjb1W
+# AuhQystd/8rOUOwhZZyW3y+fxVhzGkbU1wXUDqaKX7g9bhOHj8+kzWBqFNoZeujs
+# DloDeKjCoRD7//9hSK8Jea7jiYK++EQobFV87WLCWwyPboGwH30qVKmEsLxzdLVr
+# 2K/vJ8TB3JwmklJaL2d6eE8qPcjOUav5PvKuD6vnIZXW8gCFQky6YjytjWX1REir
+# uhEVLedR6mGLAfoyRUfjq83k1yVi+ktxk67k8RM1/csl5Vtw7xyKpqAiOWu0WjEu
+# sLhG1AqcG7hctF4lf6BJuP4pUMtbEoCtmYgok5kDEuMazLwuea926hulJB07wDPc
+# HJ2ernEXpHr1B4BglrRbVTA=
 # SIG # End signature block

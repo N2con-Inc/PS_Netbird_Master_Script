@@ -79,23 +79,41 @@ catch {
 ```powershell
 <#
 .SYNOPSIS
-Intune Detection - NetBird Installation
+Intune Detection - NetBird Installation (Enhanced with Service Check)
 #>
 
 $RegistryPath = "HKLM:\SOFTWARE\WireGuard"
 $RegistryValue = "NetBird"
+$ServiceName = "netbird"
 
 try {
+    # Primary check: Registry key
+    $regCheck = $false
     if (Test-Path $RegistryPath) {
         $Value = Get-ItemProperty -Path $RegistryPath -Name $RegistryValue -ErrorAction SilentlyContinue
         if ($Value) {
-            Write-Host "NetBird detected"
-            exit 0
+            $regCheck = $true
         }
     }
+    
+    # Secondary check: Service exists and is not disabled
+    $serviceCheck = $false
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($service -and $service.StartType -ne 'Disabled') {
+        $serviceCheck = $true
+    }
+    
+    # Success if EITHER check passes (more reliable during OOBE)
+    if ($regCheck -or $serviceCheck) {
+        Write-Host "NetBird detected (Registry: $regCheck, Service: $serviceCheck)"
+        exit 0
+    }
+    
+    Write-Host "NetBird not detected"
     exit 1
 }
 catch {
+    Write-Host "Detection error: $($_.Exception.Message)"
     exit 1
 }
 ```
@@ -144,11 +162,26 @@ This creates `Install.intunewin` ready for upload.
 - **Run script as 32-bit**: `No`
 - **Enforce signature check**: `No`
 
-### 4. Set Environment Variables
+### 4. Set Environment Variables / Setup Key Management
 
-**CRITICAL**: The install script reads setup key from machine-level environment variables.
+**CRITICAL**: The install script needs a NetBird setup key. Choose the method that best fits your deployment:
 
-**Option A: Intune PowerShell Script (Proactive Remediation)**
+## Setup Key Management Options
+
+### Option A: Machine Environment Variables (Flexible Management)
+
+**Best for**: Organizations that need to rotate keys frequently or manage multiple deployment groups with a single Win32 package.
+
+**Pros:**
+- Centralized key management via Proactive Remediation
+- Easy to rotate keys across entire fleet
+- Single Win32 package works for all groups
+
+**Cons:**
+- Timing dependency during OOBE (env vars must be set before Win32 app runs)
+- Key visible in environment variables to any process with SYSTEM privileges
+
+**Implementation - Intune PowerShell Script (Proactive Remediation)**
 
 Create a **remediation script** to set environment variables:
 
@@ -190,6 +223,107 @@ catch {
 **Option B: Group Policy / Configuration Profile**
 
 Use Group Policy or an Intune Configuration Profile to set machine-level environment variables on target devices.
+
+### Option C: Per-Package Hardcoded Keys (Most Reliable for OOBE)
+
+**Best for**: Organizations with distinct deployment groups that don't need frequent key rotation, or where OOBE reliability is paramount.
+
+**Pros:**
+- **No timing dependencies** - key is always available
+- **Guaranteed to work during OOBE** - no external dependencies
+- Works offline after Win32 package downloads to device
+- No environment variable management needed
+
+**Cons:**
+- Must create separate .intunewin package for each deployment group
+- Key rotation requires repackaging and redeploying
+- Keys are embedded in the package (though encrypted in .intunewin format)
+
+**Implementation:**
+
+Create a modified `Install.ps1` for each deployment group:
+
+```powershell
+<#
+.SYNOPSIS
+Intune Win32 App - NetBird OOBE Deployment (Hardcoded Key)
+.NOTES
+Deployment Group: Sales Team
+Setup Key Expiration: 2025-03-31
+#>
+
+[CmdletBinding()]
+param()
+
+# Logging
+$LogPath = "C:\Windows\Temp\NetBird-Intune-OOBE.log"
+Start-Transcript -Path $LogPath -Append
+
+try {
+    Write-Host "NetBird Intune OOBE Deployment Starting..."
+    
+    # HARDCODED for this deployment package
+    $SetupKey = "YOUR-GROUP-SPECIFIC-SETUP-KEY-HERE"
+    $MgmtUrl = "https://api.netbird.io"  # Or your self-hosted URL
+    # $TargetVersion = "0.60.8"  # Optional - uncomment for version compliance
+    
+    # Validate key is present
+    if (-not $SetupKey -or $SetupKey -eq "YOUR-GROUP-SPECIFIC-SETUP-KEY-HERE") {
+        throw "Setup key not configured in Install.ps1"
+    }
+    
+    # Set environment variables for bootstrap
+    [System.Environment]::SetEnvironmentVariable("NB_MODE", "OOBE", "Process")
+    [System.Environment]::SetEnvironmentVariable("NB_SETUPKEY", $SetupKey, "Process")
+    [System.Environment]::SetEnvironmentVariable("NB_MGMTURL", $MgmtUrl, "Process")
+    
+    # Optional: Set target version for version compliance
+    if ($TargetVersion) {
+        [System.Environment]::SetEnvironmentVariable("NB_VERSION", $TargetVersion, "Process")
+    }
+    
+    # Download and execute bootstrap
+    $BootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1"
+    Write-Host "Fetching bootstrap from GitHub..."
+    
+    $BootstrapScript = Invoke-RestMethod -Uri $BootstrapUrl -UseBasicParsing -ErrorAction Stop
+    Write-Host "Executing bootstrap..."
+    
+    Invoke-Expression $BootstrapScript
+    
+    $ExitCode = $LASTEXITCODE
+    Write-Host "Bootstrap exit code: $ExitCode"
+    
+    Stop-Transcript
+    exit $ExitCode
+}
+catch {
+    Write-Host "FATAL ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Stop-Transcript
+    exit 1
+}
+```
+
+**Package Creation Workflow:**
+
+1. Create folder: `NetBird-OOBE-SalesTeam`
+2. Copy modified `Install.ps1` with Sales team setup key
+3. Copy `Detection.ps1` (same for all packages)
+4. Package with IntuneWinAppUtil:
+   ```powershell
+   .\IntuneWinAppUtil.exe -c "C:\NetBird-OOBE-SalesTeam" -s "Install.ps1" -o "C:\Output" -q
+   ```
+5. Upload to Intune as "NetBird VPN - OOBE (Sales Team)"
+6. Assign to Sales Autopilot device group
+
+**Repeat for each deployment group** (Engineering, Finance, etc.)
+
+**Key Rotation Process:**
+1. Generate new setup key in NetBird management portal
+2. Update `Install.ps1` with new key
+3. Repackage with IntuneWinAppUtil
+4. Upload new version to Intune (overwrites existing)
+5. Intune automatically redeploys to devices during next policy sync
 
 ### 5. Assign to Autopilot Devices
 
@@ -247,14 +381,34 @@ Get-Content C:\Windows\Temp\NetBird-Intune-OOBE.log
 
 ## Important Notes
 
-### Setup Key Security
+### Setup Key Security Best Practices
 
-**The setup key is stored in a machine-level environment variable**. While this is standard for Intune deployments, consider:
+Regardless of which deployment method you choose, follow these security practices:
 
-- Use setup keys with **expiration dates**
-- Use keys with **auto-group assignment** to limit manual management
-- Rotate keys periodically via the remediation script
-- Monitor key usage in NetBird management portal
+**For All Methods:**
+- Use setup keys with **expiration dates** (30-90 days recommended)
+- Use keys with **auto-group assignment** in NetBird to automatically assign devices to appropriate groups
+- Use **usage limits** on keys where possible (e.g., one-time use keys for high-security environments)
+- Monitor key usage in NetBird management portal for anomalies
+- Revoke compromised keys immediately
+
+**Method-Specific Security:**
+
+**Option A (Environment Variables):**
+- Keys visible to any SYSTEM-level process
+- Rotate keys frequently via Proactive Remediation (quarterly recommended)
+- Use different keys for different device groups
+
+**Option B (Group Policy/Configuration Profile):**
+- Keys visible in GPO/Config Profile to admins
+- Consider using item-level targeting in GPOs to limit visibility
+- Audit access to GPOs containing keys
+
+**Option C (Per-Package Hardcoded):**
+- Keys encrypted within .intunewin package format
+- Keys only accessible during installation (not persistent)
+- Document key expiration in Install.ps1 comments for tracking
+- Keep source Install.ps1 files in secure location (not GitHub public repos)
 
 ### OOBE Mode Specifics
 
@@ -319,6 +473,144 @@ See [modular/intune/README.md](../intune/README.md) for full instructions on usi
 $env:NB_UPDATE_MODE="Target"
 $env:NB_SCHEDULE="Weekly"
 ```
+
+## Hybrid Azure AD Join Workflow
+
+For devices that need to join on-premises Active Directory via VPN:
+
+### Prerequisites
+
+1. **Intune Connector for Active Directory** configured and healthy
+2. **Domain Join profile** created in Intune (Devices > Configuration profiles)
+3. **Autopilot profile** configured with:
+   - Deployment mode: **User-driven**
+   - Join to Azure AD as: **Hybrid Azure AD joined**
+   - Skip domain connectivity check: **Enabled** (CRITICAL for VPN scenarios)
+4. **NetBird setup key** with network access to your domain controllers
+
+### Execution Flow
+
+The Hybrid Join process with VPN follows this sequence:
+
+1. **Device boots** → Autopilot OOBE starts
+2. **User enters Azure AD credentials** (user@company.com)
+3. **Device enrolls in Intune** and receives policies
+4. **Device ESP Phase begins:**
+   - NetBird Win32 app installs (as Required app)
+   - NetBird connects to your network via VPN tunnel
+   - Offline Domain Join (ODJ) blob is retrieved and applied from Intune Connector
+5. **Device reboots automatically**
+6. **Hybrid join completes** (now with VPN connectivity to domain controller)
+7. **User ESP Phase**: User signs in with domain\username (Azure AD synced account)
+8. **User receives their apps and policies**
+
+### Critical Configuration Settings
+
+#### Autopilot Profile
+```
+Deployment mode: User-driven
+Join to Azure AD as: Hybrid Azure AD joined
+Skip domain connectivity check: YES (✓)
+```
+
+**Why Skip Domain Connectivity Check is Critical:**
+- Without this enabled, Autopilot attempts to ping the domain controller BEFORE the VPN connects
+- The ping fails → Autopilot aborts the join process
+- With this enabled, the device trusts that connectivity will be available after VPN setup
+
+#### NetBird Win32 App Assignment
+```
+Assignment type: Required (for devices)
+Install context: System
+ESP Blocking: Yes - include in "Block device use until required apps install"
+```
+
+#### Enrollment Status Page (ESP)
+```
+Show app and profile installation progress: Yes
+Block device use until these required apps install: NetBird VPN - OOBE
+Block device use until all apps and profiles are installed: Yes
+  OR
+Only fail selected blocking apps in technician phase: Yes (and select NetBird)
+```
+
+### Troubleshooting Hybrid Join Failures
+
+#### Check VPN Connectivity During ESP
+
+1. During ESP, press **Shift+F10** to open Command Prompt
+2. Test domain controller connectivity:
+```cmd
+ping dc01.yourdomain.com
+nslookup yourdomain.com
+```
+3. Check if NetBird is connected:
+```cmd
+"C:\Program Files\NetBird\netbird.exe" status
+```
+
+#### Check ODJ Blob Application
+
+Review Windows setup logs:
+```cmd
+notepad C:\Windows\Panther\UnattendGC\setupact.log
+```
+
+Look for these key messages:
+- `"Offline domain join succeeded"` ← Success
+- `"Failed to apply unattend settings"` ← ODJ failed
+- `"Domain join error"` ← Connectivity issue
+
+#### Check NetBird Logs
+
+```powershell
+# Intune deployment log
+Get-Content C:\Windows\Temp\NetBird-Intune-OOBE.log
+
+# NetBird installation logs
+Get-ChildItem C:\Windows\Temp\NetBird-*.log | Get-Content
+```
+
+#### Verify Intune Connector Health
+
+1. Go to: **Intune admin center** → **Devices** → **Configuration profiles** → **Intune Connectors**
+2. Check Connector status: Should show **Active**
+3. Verify Connector can reach your domain controllers
+4. Check Connector event logs on the server hosting it
+
+#### Common Hybrid Join Errors
+
+| Error Symptom | Likely Cause | Solution |
+|---------------|--------------|----------|
+| ESP fails at "Securing your device" | VPN not connecting | Check NetBird setup key validity, network access |
+| "Domain join failed" after reboot | ODJ blob not applied | Check Intune Connector health, verify SYSTEM account can reach connector |
+| Device shows Azure AD joined only | Skip connectivity check not enabled | Enable in Autopilot profile |
+| User can't login with domain creds | Hybrid join didn't complete | Verify VPN stayed connected through reboot |
+
+### Validating Successful Hybrid Join
+
+**On the Device:**
+```powershell
+# Check join status
+dsregcmd /status
+
+# Look for BOTH:
+# AzureAdJoined : YES
+# DomainJoined : YES
+
+# Check NetBird connection
+& "C:\Program Files\NetBird\netbird.exe" status
+```
+
+**In Intune Portal:**
+1. Navigate to: **Devices** → **Windows** → Find the device
+2. Check **Join type**: Should show "Hybrid Azure AD joined"
+3. Check **Primary user**: Should show domain\username
+
+**In Active Directory:**
+1. Open **Active Directory Users and Computers**
+2. Check **Computers** OU for the device
+3. Device should appear with recent "Last Logon" timestamp
 
 ## Next Steps
 

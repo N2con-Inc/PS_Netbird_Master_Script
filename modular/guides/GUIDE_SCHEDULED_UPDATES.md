@@ -227,21 +227,118 @@ New-NetFirewallRule -DisplayName "Allow GitHub Raw (NetBird Updates)" `
 
 **Group Policy/Intune**: Add `raw.githubusercontent.com` to allowed sites if using restrictive policies.
 
-### Technical Implementation
+### Entra-Only (Cloud-Only) Device Considerations
 
-Scheduled tasks use proper SYSTEM account network access patterns:
+**IMPORTANT**: Entra-only devices (Azure AD joined without on-premises AD) behave differently:
+
+**SYSTEM Account Characteristics on Entra-Only:**
+- **NO** domain computer account (DOMAIN\COMPUTER$)
+- **CAN** access public internet resources (like GitHub) anonymously
+- **CANNOT** access on-premises file shares or resources requiring Windows Authentication
+- Uses Azure Device ID for Azure resources (when using managed identities)
+
+**What This Means for NetBird Updates:**
+- ✓ Scheduled tasks **WILL WORK** - GitHub is public and doesn't require authentication
+- ✓ Bootstrap pattern **WILL WORK** - no credentials needed for public repos
+- ✓ NetBird updates **WILL WORK** - all operations are local or to public endpoints
+
+**Testing Checklist for Entra-Only Devices:**
+
+1. **Verify Internet Access from SYSTEM Context:**
 ```powershell
-# CORRECT - Works on domain/Entra environments
-$script = Invoke-RestMethod -Uri $url -UseBasicParsing -UseDefaultCredentials
-Invoke-Expression $script
+# Run as Administrator
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Command `"Invoke-RestMethod -Uri 'https://api.github.com' -UseBasicParsing | Out-File C:\temp\github-test.txt`""
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -RunOnlyIfNetworkAvailable
+Register-ScheduledTask -TaskName "Test-SYSTEM-GitHub" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
 
-# AVOID - May fail in SYSTEM context
-irm $url | iex  # Missing critical flags
+# Wait 2 minutes, then check:
+Get-Content C:\temp\github-test.txt
+# If this shows GitHub API response, SYSTEM can access GitHub
+
+# Cleanup
+Unregister-ScheduledTask -TaskName "Test-SYSTEM-GitHub" -Confirm:$false
 ```
 
-Key flags:
-- `-UseBasicParsing`: Avoids Internet Explorer dependencies
-- `-UseDefaultCredentials`: Uses machine/device identity for auth
+2. **Test NetBird Update Task Creation:**
+```powershell
+# Create the task on an Entra-only device
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'
+Invoke-Expression "& {$script} -UpdateMode Target -Schedule Weekly -NonInteractive"
+
+# Verify task was created
+Get-ScheduledTask -TaskName "NetBird Auto-Update*"
+
+# Test run immediately
+Start-ScheduledTask -TaskName "NetBird Auto-Update (Version-Controlled)"
+
+# Check task history (wait 5 minutes)
+Get-ScheduledTask -TaskName "NetBird Auto-Update (Version-Controlled)" | Get-ScheduledTaskInfo
+```
+
+3. **Verify NetBird Version After Test Run:**
+```powershell
+& "C:\Program Files\NetBird\netbird.exe" version
+
+# Check logs
+Get-ChildItem $env:TEMP\NetBird-*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Get-Content -Tail 50
+```
+
+**Common Issues on Entra-Only Devices:**
+
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| Proxy authentication required | Task fails with 407 Proxy Auth Required | Configure proxy to allow SYSTEM anonymous access to GitHub |
+| Conditional Access blocking | Task fails with 403 Forbidden | Add device compliance exception for scheduled tasks |
+| Network connectivity | Task shows "Last Run Result: 0x8007011" | Check -RunOnlyIfNetworkAvailable is set, verify internet access |
+
+**Validation Commands:**
+```powershell
+# Check device join type
+dsregcmd /status | Select-String "AzureAdJoined", "DomainJoined"
+# Should show: AzureAdJoined : YES, DomainJoined : NO
+
+# Check if scheduled task exists and is enabled
+Get-ScheduledTask -TaskName "NetBird Auto-Update*" | Select-Object TaskName, State, @{Name="NextRun";Expression={(Get-ScheduledTaskInfo -TaskName $_.TaskName).NextRunTime}}
+
+# Check last run result (0 = success)
+Get-ScheduledTaskInfo -TaskName "NetBird Auto-Update (Version-Controlled)" | Select-Object LastRunTime, LastTaskResult
+```
+
+### Technical Implementation
+
+Scheduled tasks use **proper SYSTEM account patterns for public resources**:
+
+```powershell
+# CORRECT - For public GitHub (no authentication needed)
+$script = Invoke-RestMethod -Uri $url -UseBasicParsing
+Invoke-Expression $script
+
+# NOT NEEDED - UseDefaultCredentials is for Windows Authentication
+# (Internal resources, on-prem file shares, authenticated proxies, etc.)
+$script = Invoke-RestMethod -Uri $url -UseBasicParsing -UseDefaultCredentials
+```
+
+**Key Flags Explained:**
+- `-UseBasicParsing`: **REQUIRED** - Avoids Internet Explorer dependencies (critical for SYSTEM context)
+- `-UseDefaultCredentials`: **NOT USED for GitHub** - Only needed for Windows-authenticated resources (on-prem shares, internal APIs with Kerberos/NTLM)
+
+**SYSTEM Account Network Access by Device Type:**
+
+| Device Type | SYSTEM Identity | GitHub Access | On-Prem Shares | Azure Resources |
+|-------------|-----------------|---------------|----------------|------------------|
+| Domain-joined | DOMAIN\COMPUTER$ | ✓ Yes (anonymous) | ✓ Yes (as COMPUTER$) | ✓ With Managed Identity |
+| Hybrid-joined | DOMAIN\COMPUTER$ + Azure Device ID | ✓ Yes (anonymous) | ✓ Yes (as COMPUTER$) | ✓ With Managed Identity |
+| Entra-only | Azure Device ID only | ✓ Yes (anonymous) | ✗ No domain identity | ✓ With Managed Identity |
+
+**For GitHub (public internet):** SYSTEM account on **all device types** can access anonymously without credentials.
+
+**When to use `-UseDefaultCredentials`:**
+- Accessing on-premises file shares: `\\server\share`
+- Internal web APIs using Windows Authentication (Kerberos/NTLM)
+- Authenticated corporate proxies
+- **NOT for public internet resources like GitHub**
 
 ## Intune/RMM Deployment
 
