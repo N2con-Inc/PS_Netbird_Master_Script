@@ -342,15 +342,15 @@ function New-NetBirdUpdateTask {
     }
     
     # Build the PowerShell command
-    $launcherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
+    $bootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1"
     
     if ($updateMode -eq "Latest") {
-        $psCommand = "irm '$launcherUrl' | iex; .\netbird.launcher.ps1 -UpdateToLatest -Silent"
+        $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); irm '$bootstrapUrl' | iex"
         $taskName = "NetBird Auto-Update (Latest)"
         $description = "Automatically updates NetBird to the latest available version"
     }
     else {
-        $psCommand = "irm '$launcherUrl' | iex; .\netbird.launcher.ps1 -UpdateToTarget -Silent"
+        $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); irm '$bootstrapUrl' | iex"
         $taskName = "NetBird Auto-Update (Version-Controlled)"
         $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
     }
@@ -1024,15 +1024,15 @@ if ($InstallScheduledTask) {
         "Startup" { New-ScheduledTaskTrigger -AtStartup }
     }
     
-    $launcherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
+    $bootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1"
     
     if ($taskUpdateMode -eq "Latest") {
-        $psCommand = "`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; & `$tempLauncher -UpdateToLatest -Silent; Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue"
+        $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); irm '$bootstrapUrl' | iex"
         $taskName = "NetBird Auto-Update (Latest)"
         $description = "Automatically updates NetBird to the latest available version"
     }
     else {
-        $psCommand = "`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; & `$tempLauncher -UpdateToTarget -Silent; Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue"
+        $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); irm '$bootstrapUrl' | iex"
         $taskName = "NetBird Auto-Update (Version-Controlled)"
         $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
     }
@@ -1175,8 +1175,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUS0qt+1IRXhvBsnm5rJjDhVRG
-# 3iWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpovYwshRNTIo9NHPLiU6dGjN
+# fYGgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1315,33 +1315,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 3kyJsrnPJRfFHS11AQgMxtfVu1QwDQYJKoZIhvcNAQEBBQAEggIABvkFt4jDXBVV
-# ZYqmnmhcAafGzGgWPAJC+V6NKhyt6b/FD15dPr1cBLjTMcb+eSOmcV9TTVVSBof2
-# 5UURKDODCMfp2ngKa5lTRZ8Olf9quGeTX8ncU0wxHQ8MkGT74IBper5mx39TopST
-# 17NkfM7drOmY72ivcZdYpnzqaUivf5rXBZEAvy0ssqrPR8sVT02rcmVnzoqOur5h
-# ccTy3/O5CNJP0IWpVKOZsJ4/ONRNadXKrpuuKwRQPATj6HC1WmzTVEnUuuMkNYV8
-# tib5IiuMABHCr9RSOvUKfzy2XMOuh7s8l0X5i5lUeddkg5kTRbiexFamgdOis8Fw
-# v56+M9OH+eIWNHFoWHTGY0pRRaoKO+B7IlVVbz+nU0lmHl8xIM5gx5m4xcBRJQ72
-# rbLGxQ3BAlWERcyGRveGCRbc7Y8JRVa7SPnYbDQp4oVuM8rbiRnJvC2oswKR2em0
-# 8Vryg3XSuHIsk05E7MbDyLfJ4+FYof4OKmlbWmF2hpZofq/2o3nsqiZi0sXbYa6N
-# +hegKBA9ne/aN8na9JBXZWvFjjhhIqabwFBfYQdzr7Y4WA6JD77BAoyyujxzTO5a
-# Glrm0he3U/KZRX4hQ1owVSXoPVMvCjMwFNZTlpwJl1I6o5MAIzl20qOzlqxP63U5
-# JK66iiTBxhhtrn7phev3HehK/THBW9KhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# OZmSB4+HUVkGqORNBXNcTCnPKewwDQYJKoZIhvcNAQEBBQAEggIAMU26pR6F/9aP
+# thZgtaJ1TpqxVHCgAGXxQKXxkier75eFxAN2yvrPgtpun1KJetBcpk2n2fRlz6ge
+# efKW3K47Gn1TaGASmt4XOImq5Sg2pktbXXicJ6BiOYbQZ272r4ZX18NJwDldFFyp
+# lQ3J7JO2QGrSqn9UEJtbLYI0PvKccs4v5Xvn6i4ZLjmfPU4P/lAeHJlDPJDzSyUB
+# k5/iSERhHAmpy8nCn9i2jfwR1stBz4OeWlLVPc73dc7AL3KJMcR9ASSn4hyhtsjT
+# Bi4PUJcDtOkggMWlUiABO2LU6c0cG1MlF5Q2u+jFdy1bjMezjmF9DvDI1FLepq+E
+# +y/OjJupO00SyNvHgUhnaRJIHt0atmM4O2XnRt7/WqJfPwN6oSk2hF+FoA4Bf0oh
+# gt90O7nLGOvaiYKJV4YwFQavG4Dq5HdAoJlQoSXePmzzQ+zHQ2wIG9iPZDpkMpIU
+# UP0ghCNWOV3SebdDOH59hpOtpc+jenMGT7faXFcqEm7o8TFoZxrqtQfBLdp3R20r
+# P1n5GdFgH/tzX/LnpeS3kXOTgqkHepzcWfZxjpITRo8qu19Q2z7UG3P/cTbEFh+e
+# aMGIAqWbOIFJY1uLZvY6YfnaE4a029Tx0eejEGZCzDAlYTqH0jk8u5D+5gk/vSsx
+# sHB4BOw3FiabD+WHi2g++B2DBhc3GsOhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MTkzMzExWjAvBgkqhkiG9w0BCQQxIgQgLbd90AKvExN6rS3Yje4bBpVX
-# cbn3lPS2bUlkYqmAjqEwDQYJKoZIhvcNAQEBBQAEggIAbtkws1aYTtRTpkN3q9Q8
-# aGDzh1V2krWEjEHJm6s3+kzKilP93R5hGyZv72V8Dym5rUDYAA6f6pxcQn2otYnh
-# 5LufvW6bls305e/njHvRiLVozoVm2TpTl4vjlECop9D1OKUjmdBMjemmQxExUlsj
-# u9IatKwMTof4Hf9J1PUAoQikYiFf0J4mcl+ZfE550lol3n4sJ1JEQGZwPzVJbPze
-# i+fH9QcTpeyM3tq3GNJJTI/pci0z4K3PNDvm6lGHtADPA+SO+Z89+npnuDCKBnJv
-# qDppx9N8IAx1WwNmggoOwiMUQo4+UftvFvW1g2Fw8mMRK1xazvoPfCsSYE5514M5
-# wNGkwyw8XF/iPdtvX9fek1c53q0cQSZwvbrk2AQyKt4P+6Noao02kFdJEhBjWlc9
-# HsWXYWEhcA2aKQvqX+xhnTs8xepJI8cNnuYAKm/rA5dNrEiuaA6CkszARoXBqWK5
-# 2zaJ3+BjrfoFnAGjqao+NLAqzS1d5ubEWHFwaD63nF4kJKFfhdFUo5j+7jfBjYxz
-# AbTa9pHIjooM5XBQ3u+JPRlrFx6l0I8otY6+D05/8y2492NXPFUCc+qXD9hy6pKE
-# r208C0rSKifjXaSw7AQ1COXgPg/y4K1Ea3DgE6HAOY5HOMbSwLloHq0bcqJbLe+/
-# i9ioH8Vxk7nxpucUgCXRqiM=
+# MjUxMjE5MTk0MjQ5WjAvBgkqhkiG9w0BCQQxIgQgLB1WdJr1YeGCC/gua18UDMdI
+# t+P84nNWYaA1Xi93LIYwDQYJKoZIhvcNAQEBBQAEggIAZQZAijmG/8keiqOglkwd
+# pOaToEV8hrEGJy1BEjeTTXoethR4NUFg4Uv8+4ojYqgDO2awL7lcOTO6VADXc4XP
+# TwNf0qJc5q8yJkHgWsHHcGcCsP4lvN2dEZmiolqQ0Ex+rk5VbJfTHLI9hY4yW3Sf
+# V/hO9jO/K5jjisN2PJId0hy72Ei5KysHPKXHYNreMuOLDhoXACQeh8pIunOgSVHk
+# 34AOkeK7f9lixD9baNj+yLPmNmQi7lFpRvVcGO9sbmPnhmstEcjulHgNOvMZ3l5g
+# TwYexHCvx5atlDkulmV6M63tAlRFJaPAWBFdGiV+p4+4IWEfTDS9seg7nD5QEgM2
+# 0T0XVDrBv8Gb+RLQMJBbdNgxfr3CjjMixWOKaruj9nqmPF7qsQ6LMjY2hTkCDUDV
+# ql/DMwOXRn53xVDO+u4/75nIvXtUtN2yp0yrBwCuU+i6JLtoCfskW17lwyKfnqfQ
+# /d/XzD4UIXfLYct2TVVxMrC7uEHQB+ZAjS5LQ/9agaf7mcLZ2IhKb3WSe0QZgfk/
+# aZ9+YZzDT+eS6NnKoy1wD0voazpRPx8nv3rzAvhsuBM+H2bsCwQi+NNSa/nPG4yZ
+# +v5xRWXo4bV5xv7hNv8IUv9AWZzBevjZgVf4JwGywqq1B7dZieEYF5BDISd7OF4c
+# T3DzXpeRRd0D5ewQ4rA5+F0=
 # SIG # End signature block

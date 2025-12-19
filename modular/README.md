@@ -340,38 +340,35 @@ exit 0
 
 **Weekly version-controlled updates (recommended)**:
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
-.\netbird.launcher.ps1 -InstallScheduledTask -Weekly
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1; .\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Weekly -NonInteractive
 ```
 
 **Daily auto-latest updates**:
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
-.\netbird.launcher.ps1 -InstallScheduledTask -UpdateToLatest -Daily
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1; .\Create-NetbirdUpdateTask.ps1 -UpdateMode Latest -Schedule Daily -NonInteractive
 ```
 
 **Update on every startup**:
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
-.\netbird.launcher.ps1 -InstallScheduledTask -AtStartup
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1; .\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Startup -NonInteractive
 ```
 
 #### B. Manual Update Execution
 
 **Update to latest now**:
 ```powershell
-.\netbird.launcher.ps1 -UpdateToLatest
+[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+```
+
+**Update to target version from GitHub config**:
+```powershell
+# Uses modular/config/target-version.txt from GitHub
+[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
 **Update to specific version**:
 ```powershell
-.\netbird.launcher.ps1 -UpdateToTarget -TargetVersion "0.60.8"
-```
-
-**Update to version from GitHub config**:
-```powershell
-# Uses modular/config/target-version.txt from GitHub
-.\netbird.launcher.ps1 -UpdateToTarget
+[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); [System.Environment]::SetEnvironmentVariable('NB_VERSION', '0.60.8', 'Process'); irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
 #### C. Centralized Version Control
