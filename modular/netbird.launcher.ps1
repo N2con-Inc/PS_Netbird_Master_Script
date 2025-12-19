@@ -145,11 +145,17 @@ param(
     [switch]$UseLocalModules,
 
     [Parameter(Mandatory=$false)]
-    [string]$MsiPath
+    [string]$MsiPath,
+
+    [Parameter(Mandatory=$false)]
+    [string]$ZeroTierNetworkId,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$PreserveZeroTier
 )
 
 # Script version
-$script:LauncherVersion = "1.4.1"
+$script:LauncherVersion = "1.4.2"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -424,6 +430,19 @@ function Get-WizardInputs {
         $script:Version = $versionInput
     }
     
+    # ZeroTier-specific inputs (only for ZeroTier migration mode)
+    if ($script:Mode -eq "ZeroTier") {
+        $ztNetworkInput = Read-Host "ZeroTier Network ID to migrate from (press Enter to migrate all connected networks)"
+        if ($ztNetworkInput) {
+            $script:ZeroTierNetworkId = $ztNetworkInput
+        }
+        
+        $preserveInput = Read-Host "Preserve ZeroTier installation after migration? (Y/N, default N)"
+        if ($preserveInput -eq "Y" -or $preserveInput -eq "y") {
+            $script:PreserveZeroTier = $true
+        }
+    }
+    
     # Full clear (only for Standard/ZeroTier modes)
     if ($script:Mode -in @("Standard", "ZeroTier")) {
         $clearInput = Read-Host "Full configuration clear? (Y/N, default N)"
@@ -438,6 +457,11 @@ function Get-WizardInputs {
     if ($script:SetupKey) { Write-Host "Setup Key: [PROVIDED]" }
     Write-Host "Management URL: $script:ManagementUrl"
     if ($script:Version) { Write-Host "Version: $script:Version" }
+    if ($script:Mode -eq "ZeroTier") {
+        if ($script:ZeroTierNetworkId) { Write-Host "ZeroTier Network ID: $script:ZeroTierNetworkId" }
+        else { Write-Host "ZeroTier Network ID: [ALL CONNECTED NETWORKS]" }
+        if ($script:PreserveZeroTier) { Write-Host "Preserve ZeroTier: Yes" }
+    }
     if ($script:FullClear) { Write-Host "Full Clear: Yes" }
     Write-Host ""
     
@@ -915,7 +939,19 @@ function Invoke-ZeroTierWorkflow {
     
     # Then handle ZeroTier migration
     Write-LauncherLog "Phase 4-5: Handling ZeroTier migration"
-    $migrationResult = Invoke-ZeroTierMigration -SetupKey $script:SetupKey -ManagementUrl $script:ManagementUrl -PreserveZeroTier:$script:PreserveZeroTier -ZeroTierNetworkId $script:ZeroTierNetworkId
+    
+    # Build migration parameters - only pass ZeroTierNetworkId if it's not null/empty
+    $migrationParams = @{
+        SetupKey = $script:SetupKey
+        ManagementUrl = $script:ManagementUrl
+        PreserveZeroTier = $script:PreserveZeroTier
+    }
+    
+    if (-not [string]::IsNullOrEmpty($script:ZeroTierNetworkId)) {
+        $migrationParams['ZeroTierNetworkId'] = $script:ZeroTierNetworkId
+    }
+    
+    $migrationResult = Invoke-ZeroTierMigration @migrationParams
     
     if ($migrationResult) {
         Write-LauncherLog "=== ZeroTier Migration Completed Successfully ==="
@@ -1175,8 +1211,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpovYwshRNTIo9NHPLiU6dGjN
-# fYGgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUH+8mxocu62H0D/NsOMy7PugQ
+# AeKgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1315,33 +1351,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# OZmSB4+HUVkGqORNBXNcTCnPKewwDQYJKoZIhvcNAQEBBQAEggIAMU26pR6F/9aP
-# thZgtaJ1TpqxVHCgAGXxQKXxkier75eFxAN2yvrPgtpun1KJetBcpk2n2fRlz6ge
-# efKW3K47Gn1TaGASmt4XOImq5Sg2pktbXXicJ6BiOYbQZ272r4ZX18NJwDldFFyp
-# lQ3J7JO2QGrSqn9UEJtbLYI0PvKccs4v5Xvn6i4ZLjmfPU4P/lAeHJlDPJDzSyUB
-# k5/iSERhHAmpy8nCn9i2jfwR1stBz4OeWlLVPc73dc7AL3KJMcR9ASSn4hyhtsjT
-# Bi4PUJcDtOkggMWlUiABO2LU6c0cG1MlF5Q2u+jFdy1bjMezjmF9DvDI1FLepq+E
-# +y/OjJupO00SyNvHgUhnaRJIHt0atmM4O2XnRt7/WqJfPwN6oSk2hF+FoA4Bf0oh
-# gt90O7nLGOvaiYKJV4YwFQavG4Dq5HdAoJlQoSXePmzzQ+zHQ2wIG9iPZDpkMpIU
-# UP0ghCNWOV3SebdDOH59hpOtpc+jenMGT7faXFcqEm7o8TFoZxrqtQfBLdp3R20r
-# P1n5GdFgH/tzX/LnpeS3kXOTgqkHepzcWfZxjpITRo8qu19Q2z7UG3P/cTbEFh+e
-# aMGIAqWbOIFJY1uLZvY6YfnaE4a029Tx0eejEGZCzDAlYTqH0jk8u5D+5gk/vSsx
-# sHB4BOw3FiabD+WHi2g++B2DBhc3GsOhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# bU3RE6HRmA3DuMwnYplmNfHSwpowDQYJKoZIhvcNAQEBBQAEggIAkfF30/CqzXBJ
+# qIeXF+va6lC8SCsXrMfBtcxO5GEnWoYVV0NhyO9UYH5EUHjkQlHEOxskFXoKCnxo
+# rbfo1QPrdG/0cHSfh2UbiC12tZInPfi2wSAKwpnixCl6FuCKCvhABSXGEI0GnjWm
+# 2ALqN0HJSzCId6fQThTwjmnSgCSzhAGU9nJA+4A9FT3iaTHphcKK2y+jfAe6HNER
+# UF9ZJtzu6JGbeo6///ZBv8wilO7r6UtSV/WLvBpYCXhUEvEuy6KBP3sZqFv9Mr08
+# 4llq1irPFRbd8ZR/58K7h7IwkYRar1WF4TSihx1c/tfc/VWw00U5rDfQB/JKGIA5
+# M1UeOUTwdvurz10gVkOh2ek9h5JSaorObpXsSTBipmhfegUnnlt3TmdhJqgHKaJo
+# U7m43CbtQbI3HXhKfwuYurf8+VwSp7RmeVeYqhF2YM9bC0HBp0G7vM/62FlxvrKL
+# ntIAscNR1JXgzs6Wf5iXgWD6+B35h5j1o+XqOyV0JJlWwzKrC4LMcMa0VdNG7lGq
+# V6ZF7qpBaLqv3g88xOhNbtu0U0LW7LUFVqZZp4XynOhqiDMA7B+3JHCNRJQOHq5D
+# yv1Wj71639oIIKcYN93+vzVUuKf76F+7HPSEVzV+z43rle2deXxPrIZTksJJNfWn
+# sa7huZR1SPSJ1/4xdwQmVK4h9/9HCLahggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MTk0MjQ5WjAvBgkqhkiG9w0BCQQxIgQgLB1WdJr1YeGCC/gua18UDMdI
-# t+P84nNWYaA1Xi93LIYwDQYJKoZIhvcNAQEBBQAEggIAZQZAijmG/8keiqOglkwd
-# pOaToEV8hrEGJy1BEjeTTXoethR4NUFg4Uv8+4ojYqgDO2awL7lcOTO6VADXc4XP
-# TwNf0qJc5q8yJkHgWsHHcGcCsP4lvN2dEZmiolqQ0Ex+rk5VbJfTHLI9hY4yW3Sf
-# V/hO9jO/K5jjisN2PJId0hy72Ei5KysHPKXHYNreMuOLDhoXACQeh8pIunOgSVHk
-# 34AOkeK7f9lixD9baNj+yLPmNmQi7lFpRvVcGO9sbmPnhmstEcjulHgNOvMZ3l5g
-# TwYexHCvx5atlDkulmV6M63tAlRFJaPAWBFdGiV+p4+4IWEfTDS9seg7nD5QEgM2
-# 0T0XVDrBv8Gb+RLQMJBbdNgxfr3CjjMixWOKaruj9nqmPF7qsQ6LMjY2hTkCDUDV
-# ql/DMwOXRn53xVDO+u4/75nIvXtUtN2yp0yrBwCuU+i6JLtoCfskW17lwyKfnqfQ
-# /d/XzD4UIXfLYct2TVVxMrC7uEHQB+ZAjS5LQ/9agaf7mcLZ2IhKb3WSe0QZgfk/
-# aZ9+YZzDT+eS6NnKoy1wD0voazpRPx8nv3rzAvhsuBM+H2bsCwQi+NNSa/nPG4yZ
-# +v5xRWXo4bV5xv7hNv8IUv9AWZzBevjZgVf4JwGywqq1B7dZieEYF5BDISd7OF4c
-# T3DzXpeRRd0D5ewQ4rA5+F0=
+# MjUxMjE5MjAyMzIyWjAvBgkqhkiG9w0BCQQxIgQggjSmm9Y1iGCh7SSn78/25+fQ
+# GatfhJrC9/XQUjP9z7EwDQYJKoZIhvcNAQEBBQAEggIAecEDwGMe7w5etOTY+iZr
+# U4kZfzhhNjPpE718ozkCywZOQTuNu/R1peN/91GeDqhvcpv/yoz36cQLWLLcGf9U
+# 9pvAA4W32JJoatFfbIKQLHiGeMOHi0bt0HoNgoWmYnWZUD3vpuqo1nPEevsAW0Ce
+# sYkBeCaSH4MOrnkyEvEGA6eNSdC8a5haliMeCBtgwnWtm5d8rTgN83a2itQc9E20
+# LyxkOseWTMBWeg229SUQdV0qXWS+N4tcLXC3PU0XOLdSIrKVbrOe9625SB+wLUKX
+# drY2fPTDbaSES6S+J+jf175mgYkO0woTlOTVolId51Yv3Q8yC3THtbV+k5PGO0bu
+# zYquYjU9+RUnOdcfLDl41tSphtZO8GqWghu0c+shrR1avWDgUAfc7SgdyzH7NMYX
+# edj+K/W0TblgyUIenVxAz8IMA9QcCxwFf7sxlpKAISiHykB2C/0C0fdM8dyBfwB3
+# /ZhSp7zShlDVp3yuDJKWIMTKUOtk8kNrr2HJy/yr9YTeOOYMY68APlFfE0u6rIDX
+# UvUIri+t4sMAxj4y2eM2C6ztglMAQEOvtD1UyV9jr+rjDGWjAL4v6DwShzAQCn4H
+# PEUEE8Jxosc4rSMZ4IRmCgpZYg8jbe06iojU59urAcJdns0vJSPk4VTv1ESGEHpj
+# 0HWIdAvAkPRHqWN10GbwueM=
 # SIG # End signature block
