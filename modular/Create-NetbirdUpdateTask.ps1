@@ -137,17 +137,21 @@ $trigger = switch ($Schedule) {
 }
 
 # Build the PowerShell command using bootstrap pattern
+# IMPORTANT: Uses Invoke-RestMethod with -UseBasicParsing and -UseDefaultCredentials for proper
+# SYSTEM account execution on domain-joined, hybrid-joined, and Entra-only machines
 $bootstrapUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1"
 
 if ($UpdateMode -eq "Latest") {
     # Use bootstrap with environment variable
-    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); irm '$bootstrapUrl' | iex"
+    # Pattern: Download script first with proper SYSTEM account flags, then execute
+    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing -UseDefaultCredentials; Invoke-Expression `$script"
     $taskName = "NetBird Auto-Update (Latest)"
     $description = "Automatically updates NetBird to the latest available version"
 }
 else {
     # Use bootstrap with environment variable
-    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); irm '$bootstrapUrl' | iex"
+    # Pattern: Download script first with proper SYSTEM account flags, then execute
+    $psCommand = "[System.Environment]::SetEnvironmentVariable('NB_UPDATE_TARGET', '1', 'Process'); `$script = Invoke-RestMethod -Uri '$bootstrapUrl' -UseBasicParsing -UseDefaultCredentials; Invoke-Expression `$script"
     $taskName = "NetBird Auto-Update (Version-Controlled)"
     $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
 }

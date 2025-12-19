@@ -15,20 +15,17 @@ Configure automated NetBird updates using Windows scheduled tasks. Two update st
 
 **Weekly version-controlled updates** (recommended):
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Weekly -NonInteractive
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Target -Schedule Weekly -NonInteractive"
 ```
 
 **Daily auto-latest updates**:
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Latest -Schedule Daily -NonInteractive
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Latest -Schedule Daily -NonInteractive"
 ```
 
 **Update on every startup**:
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Startup -NonInteractive
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Target -Schedule Startup -NonInteractive"
 ```
 
 ## Update Strategies
@@ -40,7 +37,7 @@ irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/m
 Updates to newest NetBird release as soon as available.
 
 ```powershell
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Latest -Schedule Weekly
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Latest -Schedule Weekly"
 ```
 
 **Behavior**:
@@ -55,7 +52,7 @@ Updates to newest NetBird release as soon as available.
 Updates only to version specified in GitHub config file.
 
 ```powershell
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Daily
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Target -Schedule Daily"
 ```
 
 **Behavior**:
@@ -103,8 +100,7 @@ Scheduled tasks use:
 Run the launcher interactively for guided setup:
 
 ```powershell
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
-.\netbird.launcher.ps1
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' | iex
 ```
 
 Select **Option 8**: Setup Scheduled Update Task
@@ -169,7 +165,7 @@ Unregister-ScheduledTask -TaskName "NetBird Auto-Update (Latest)" -Confirm:$fals
 
 Use **Startup** schedule:
 ```powershell
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Startup -NonInteractive
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Target -Schedule Startup -NonInteractive"
 ```
 
 Ensures updates happen whenever machine boots, regardless of last update time.
@@ -178,20 +174,108 @@ Ensures updates happen whenever machine boots, regardless of last update time.
 
 Use **Auto-Latest** with **Weekly** schedule:
 ```powershell
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Latest -Schedule Weekly -NonInteractive
+$script = irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1'; Invoke-Expression "& {$script} -UpdateMode Latest -Schedule Weekly -NonInteractive"
 ```
 
 Always on latest stable version without manual intervention.
 
+## Domain/Entra Environment Compatibility
+
+### Supported Machine Types
+
+Scheduled updates are fully supported on:
+
+1. **Domain-joined machines** (Traditional Active Directory) - **DEFAULT/MOST COMMON**
+2. **Hybrid-joined machines** (AD + Entra ID/Azure AD) - **SECOND MOST COMMON**
+3. **Entra-only machines** (Cloud-only, no on-prem AD) - **THIRD MOST COMMON**
+
+**NOT supported**: Standalone workstations (not in scope)
+
+### SYSTEM Account Network Access
+
+Scheduled tasks run as **SYSTEM account** because:
+- NetBird service itself runs as SYSTEM
+- Service management requires SYSTEM privileges  
+- MSI installation requires administrative rights
+- Ensures updates work when no user is logged in
+- Standard Microsoft practice for system maintenance tasks
+
+The SYSTEM account **CAN** access external resources (like GitHub) on:
+- **Domain-joined**: Uses machine account credentials
+- **Hybrid-joined**: Uses device identity via Entra ID
+- **Entra-only**: Uses device identity via Entra ID
+
+### Network Requirements
+
+**Required Outbound Access**:
+- **Destination**: `raw.githubusercontent.com`
+- **Port**: 443 (HTTPS)
+- **Protocol**: TLS 1.2+
+- **Purpose**: SYSTEM account must fetch bootstrap script from GitHub
+
+**Firewall Rule** (if required):
+```powershell
+# Allow PowerShell SYSTEM account to GitHub
+New-NetFirewallRule -DisplayName "Allow GitHub Raw (NetBird Updates)" `
+    -Direction Outbound `
+    -Action Allow `
+    -Protocol TCP `
+    -RemoteAddress * `
+    -RemotePort 443 `
+    -Program "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+```
+
+**Group Policy/Intune**: Add `raw.githubusercontent.com` to allowed sites if using restrictive policies.
+
+### Technical Implementation
+
+Scheduled tasks use proper SYSTEM account network access patterns:
+```powershell
+# CORRECT - Works on domain/Entra environments
+$script = Invoke-RestMethod -Uri $url -UseBasicParsing -UseDefaultCredentials
+Invoke-Expression $script
+
+# AVOID - May fail in SYSTEM context
+irm $url | iex  # Missing critical flags
+```
+
+Key flags:
+- `-UseBasicParsing`: Avoids Internet Explorer dependencies
+- `-UseDefaultCredentials`: Uses machine/device identity for auth
+
 ## Intune/RMM Deployment
 
-Deploy scheduled task via Intune PowerShell script:
+### Option 1: Proactive Remediation (Recommended)
+
+Use dedicated Intune Proactive Remediation scripts in `modular/intune/`:
+
+1. **Detection**: `Set-NetbirdScheduledTask-Detection.ps1`
+2. **Remediation**: `Set-NetbirdScheduledTask-Remediation.ps1`
+
+See [modular/intune/README.md](../intune/README.md) for full deployment instructions.
+
+### Option 2: PowerShell Script Deployment
+
+Deploy via Intune → Devices → Scripts:
 
 ```powershell
-# Intune remediation script
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile "$env:TEMP\Create-NetbirdUpdateTask.ps1"
-& "$env:TEMP\Create-NetbirdUpdateTask.ps1" -UpdateMode Target -Schedule Weekly -NonInteractive
-Remove-Item "$env:TEMP\Create-NetbirdUpdateTask.ps1" -Force
+# Fetch and execute task creation script from GitHub
+$script = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -UseBasicParsing
+Invoke-Expression "& {$script} -UpdateMode Target -Schedule Weekly -NonInteractive"
+```
+
+### Option 3: During Initial Deployment
+
+Set up scheduled task during NetBird installation:
+
+```powershell
+# Set environment variables for bootstrap
+$env:NB_SETUP_SCHEDULED_TASK="1"
+$env:NB_UPDATE_MODE="Target"     # or "Latest"
+$env:NB_SCHEDULE="Weekly"        # or "Daily" or "Startup"
+
+# Run bootstrap (installs NetBird + creates scheduled task)
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 ```
 
 ## Troubleshooting

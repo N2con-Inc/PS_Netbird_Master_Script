@@ -495,6 +495,70 @@ exit 0
 3. **Set up alerting** for non-compliant devices
 4. **Regular audits** of installed versions
 
+## Automated Updates Setup
+
+Enable automatic NetBird updates after initial deployment using scheduled tasks.
+
+### Method 1: Proactive Remediation (Recommended)
+
+Deploy scheduled task setup via Intune Proactive Remediations:
+
+1. Navigate to: **Intune** → **Devices** → **Scripts and remediations** → **Proactive remediations**
+2. Create new remediation:
+   - **Detection script**: `Set-NetbirdScheduledTask-Detection.ps1`
+   - **Remediation script**: `Set-NetbirdScheduledTask-Remediation.ps1`
+   - **Run as**: SYSTEM (logged-on credentials: No)
+
+See [modular/intune/README.md](../intune/README.md) for complete deployment instructions.
+
+**Benefits**:
+- Automated compliance checking
+- Self-healing if task is disabled/deleted
+- Centralized reporting
+- Easy reconfiguration
+
+### Method 2: During Initial Deployment
+
+Modify your Install.ps1 to include scheduled task setup:
+
+```powershell
+# Set environment variables
+[System.Environment]::SetEnvironmentVariable("NB_MODE", "Standard", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_SETUPKEY", $env:NETBIRD_SETUPKEY, "Process")
+[System.Environment]::SetEnvironmentVariable("NB_MGMTURL", $env:NETBIRD_MGMTURL, "Process")
+
+# ADD THESE LINES for scheduled task setup
+[System.Environment]::SetEnvironmentVariable("NB_SETUP_SCHEDULED_TASK", "1", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_UPDATE_MODE", "Target", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_SCHEDULE", "Weekly", "Process")
+
+# Execute bootstrap
+$BootstrapScript = Invoke-RestMethod -Uri $BootstrapUrl -UseBasicParsing
+Invoke-Expression $BootstrapScript
+```
+
+### Method 3: PowerShell Script Deployment
+
+Deploy standalone script via Intune → Devices → Scripts:
+
+```powershell
+# Fetch and execute task creation script from GitHub
+$script = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -UseBasicParsing
+Invoke-Expression "& {$script} -UpdateMode Target -Schedule Weekly -NonInteractive"
+```
+
+### Recommended Configuration
+
+**For standard deployments**:
+- **Update Mode**: `Target` (version-controlled)
+- **Schedule**: `Weekly` (Sunday at 3 AM)
+- **Reason**: Balanced between staying current and maintaining control
+
+**Network Requirements**:
+- Outbound HTTPS to `raw.githubusercontent.com:443`
+- SYSTEM account network access (works on domain/hybrid/Entra-only machines)
+- See [GUIDE_SCHEDULED_UPDATES.md](GUIDE_SCHEDULED_UPDATES.md) for firewall rules
+
 ## Related Guides
 
 - [GUIDE_INTUNE_OOBE.md](GUIDE_INTUNE_OOBE.md) - Autopilot/OOBE deployments

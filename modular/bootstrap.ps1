@@ -12,8 +12,11 @@ Usage:
     Or with inline parameters:
     $env:NB_MODE="Standard"; $env:NB_SETUPKEY="key"; irm '...' | iex
 
+    Setup scheduled task during deployment:
+    $env:NB_SETUP_SCHEDULED_TASK="1"; $env:NB_UPDATE_MODE="Target"; $env:NB_SCHEDULE="Weekly"; irm '...' | iex
+
 .NOTES
-Version: 1.0.0
+Version: 1.1.0
 #>
 
 [CmdletBinding()]
@@ -31,9 +34,12 @@ $ForceReinstall = [bool]$env:NB_FORCEREINSTALL
 $Interactive = [bool]$env:NB_INTERACTIVE
 $UpdateToLatest = [bool]$env:NB_UPDATE_LATEST
 $UpdateToTarget = [bool]$env:NB_UPDATE_TARGET
+$SetupScheduledTask = [bool]$env:NB_SETUP_SCHEDULED_TASK
+$UpdateMode = $env:NB_UPDATE_MODE  # "Latest" or "Target" for scheduled task
+$Schedule = $env:NB_SCHEDULE  # "Weekly", "Daily", or "Startup" for scheduled task
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "NetBird Bootstrap v1.0.0" -ForegroundColor Cyan
+Write-Host "NetBird Bootstrap v1.1.0" -ForegroundColor Cyan
 Write-Host "======================================`n" -ForegroundColor Cyan
 
 Write-Host "Configuration:"
@@ -46,6 +52,11 @@ if ($ForceReinstall) { Write-Host "  Force Reinstall: Enabled" }
 if ($Interactive) { Write-Host "  Interactive Mode: Enabled" }
 if ($UpdateToLatest) { Write-Host "  Update Mode: Latest" }
 if ($UpdateToTarget) { Write-Host "  Update Mode: Target" }
+if ($SetupScheduledTask) { 
+    Write-Host "  Setup Scheduled Task: Enabled" 
+    if ($UpdateMode) { Write-Host "    Update Mode: $UpdateMode" }
+    if ($Schedule) { Write-Host "    Schedule: $Schedule" }
+}
 Write-Host ""
 
 # Download main launcher
@@ -83,6 +94,18 @@ if ($ForceReinstall) { $LauncherArgs['ForceReinstall'] = $true }
 if ($Interactive) { $LauncherArgs['Interactive'] = $true }
 if ($UpdateToLatest) { $LauncherArgs['UpdateToLatest'] = $true }
 if ($UpdateToTarget) { $LauncherArgs['UpdateToTarget'] = $true }
+if ($SetupScheduledTask) { 
+    $LauncherArgs['InstallScheduledTask'] = $true 
+    if ($UpdateMode -eq "Latest") {
+        $LauncherArgs['UpdateToLatest'] = $true
+    }
+    # Default to Target mode if not specified
+    if ($Schedule -eq "Weekly") { $LauncherArgs['Weekly'] = $true }
+    elseif ($Schedule -eq "Daily") { $LauncherArgs['Daily'] = $true }
+    elseif ($Schedule -eq "Startup") { $LauncherArgs['AtStartup'] = $true }
+    # Default to Weekly if not specified
+    elseif (-not $Schedule) { $LauncherArgs['Weekly'] = $true }
+}
 
 # Execute launcher
 Write-Host "Executing NetBird deployment..." -ForegroundColor Yellow

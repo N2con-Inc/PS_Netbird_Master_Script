@@ -273,6 +273,53 @@ To enforce a specific NetBird version (rather than always installing latest):
 2. The installer will only install/upgrade to that specific version
 3. Update the env var via remediation script when you want to update fleet
 
+## Setting Up Scheduled Updates (Optional)
+
+To enable automatic NetBird updates after OOBE deployment, add scheduled task setup to your install script.
+
+### Method 1: Environment Variable (During Installation)
+
+Modify your `Install.ps1` to include scheduled task setup:
+
+```powershell
+# Set environment variables from Intune machine-level env vars
+[System.Environment]::SetEnvironmentVariable("NB_MODE", "OOBE", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_SETUPKEY", $env:NETBIRD_SETUPKEY, "Process")
+[System.Environment]::SetEnvironmentVariable("NB_MGMTURL", $env:NETBIRD_MGMTURL, "Process")
+
+# ADD THESE LINES for scheduled task setup
+[System.Environment]::SetEnvironmentVariable("NB_SETUP_SCHEDULED_TASK", "1", "Process")
+[System.Environment]::SetEnvironmentVariable("NB_UPDATE_MODE", "Target", "Process")  # or "Latest"
+[System.Environment]::SetEnvironmentVariable("NB_SCHEDULE", "Weekly", "Process")    # or "Daily" or "Startup"
+
+# Execute bootstrap
+$BootstrapScript = Invoke-RestMethod -Uri $BootstrapUrl -UseBasicParsing
+Invoke-Expression $BootstrapScript
+```
+
+### Method 2: Separate Proactive Remediation (After Installation)
+
+Deploy scheduled task setup as a separate Intune Proactive Remediation after OOBE completes.
+
+See [modular/intune/README.md](../intune/README.md) for full instructions on using:
+- `Set-NetbirdScheduledTask-Detection.ps1`
+- `Set-NetbirdScheduledTask-Remediation.ps1`
+
+**Recommended for**: Devices that complete OOBE without scheduled task setup.
+
+### Update Mode Selection
+
+**For OOBE deployments, we recommend**:
+- **Update Mode**: `Target` (version-controlled)
+- **Schedule**: `Weekly` or `Startup`
+- **Reason**: Ensures fleet-wide version compliance for security infrastructure
+
+```powershell
+# Recommended OOBE configuration
+$env:NB_UPDATE_MODE="Target"
+$env:NB_SCHEDULE="Weekly"
+```
+
 ## Next Steps
 
 After successful OOBE deployment:
