@@ -15,23 +15,27 @@ Modular architecture for NetBird VPN client deployment on Windows. This system b
 
 ```
 /modular/
-├── netbird.launcher.ps1          (720 lines) - Main orchestrator
-├── bootstrap.ps1                 (102 lines) - Remote bootstrap wrapper
-├── Validate-Scripts.ps1          (93 lines)  - Syntax validation utility
-├── Sign-Scripts.ps1              (133 lines) - Code signing utility
+├── netbird.launcher.ps1          (1000+ lines) - Main orchestrator
+├── bootstrap.ps1                 (110 lines)   - Remote bootstrap wrapper
+├── Create-NetbirdUpdateTask.ps1  (238 lines)   - Scheduled task creator
+├── Validate-Scripts.ps1          (93 lines)    - Syntax validation utility
+├── Sign-Scripts.ps1              (133 lines)   - Code signing utility
+├── UPDATE_GUIDE.md               - Update management documentation
 ├── modules/
 │   ├── netbird.core.ps1          (409 lines) - Logging, paths, MSI operations
 │   ├── netbird.version.ps1       (225 lines) - Version detection & comparison
 │   ├── netbird.service.ps1       (293 lines) - Service control & daemon readiness
 │   ├── netbird.registration.ps1  (839 lines) - Network validation & registration
 │   ├── netbird.diagnostics.ps1   (270 lines) - Status parsing & troubleshooting
+│   ├── netbird.update.ps1        (359 lines) - Automated update management
 │   ├── netbird.oobe.ps1          (509 lines) - OOBE-specific deployment
 │   └── netbird.zerotier.ps1      (414 lines) - ZeroTier migration
 └── config/
-    └── module-manifest.json      - Module metadata & dependencies
+    ├── module-manifest.json      - Module metadata & dependencies
+    └── target-version.txt        - Version control for updates (0.60.8)
 ```
 
-**Total**: ~3,679 lines across 8 files
+**Total**: ~4,800+ lines across 11 files
 
 ### Module Dependency Graph
 
@@ -40,6 +44,7 @@ Core (foundation)
 ├── Version (depends on Core)
 ├── Service (depends on Core)
 ├── Diagnostics (depends on Core)
+├── Update (depends on Core, Version, Service, Diagnostics)
 ├── Registration (depends on Core, Service, Diagnostics)
 ├── OOBE (depends on Core, Service, Registration)
 └── ZeroTier (depends on Core, Service, Registration, Diagnostics)
@@ -47,7 +52,7 @@ Core (foundation)
 
 ### Workflows
 
-The launcher supports 4 deployment workflows:
+The launcher supports 6 deployment workflows:
 
 1. **Standard**: Full-featured installation for enterprise environments
    - Modules: Core, Version, Service, Registration, Diagnostics
@@ -66,6 +71,16 @@ The launcher supports 4 deployment workflows:
 4. **Diagnostics**: Status check and troubleshooting
    - Modules: Core, Service, Diagnostics
    - Purpose: Non-destructive status reporting
+
+5. **UpdateToLatest**: Automated updates to latest version (NEW)
+   - Modules: Core, Version, Service, Diagnostics, Update
+   - Purpose: Update-only, no registration, preserves connections
+   - Use case: Scheduled tasks, manual updates
+
+6. **UpdateToTarget**: Version-controlled updates (NEW)
+   - Modules: Core, Version, Service, Diagnostics, Update
+   - Purpose: Centralized version control via GitHub config
+   - Use case: Controlled rollouts, compliance
 
 ## Usage
 
@@ -317,19 +332,77 @@ exit 0
 
 ---
 
+### 8. Automated Update Management (NEW)
+
+**Best for**: Keeping NetBird up-to-date automatically with scheduled tasks.
+
+#### A. One-Line Scheduled Task Installation
+
+**Weekly version-controlled updates (recommended)**:
+```powershell
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
+.\netbird.launcher.ps1 -InstallScheduledTask -Weekly
+```
+
+**Daily auto-latest updates**:
+```powershell
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
+.\netbird.launcher.ps1 -InstallScheduledTask -UpdateToLatest -Daily
+```
+
+**Update on every startup**:
+```powershell
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
+.\netbird.launcher.ps1 -InstallScheduledTask -AtStartup
+```
+
+#### B. Manual Update Execution
+
+**Update to latest now**:
+```powershell
+.\netbird.launcher.ps1 -UpdateToLatest
+```
+
+**Update to specific version**:
+```powershell
+.\netbird.launcher.ps1 -UpdateToTarget -TargetVersion "0.60.8"
+```
+
+**Update to version from GitHub config**:
+```powershell
+# Uses modular/config/target-version.txt from GitHub
+.\netbird.launcher.ps1 -UpdateToTarget
+```
+
+#### C. Centralized Version Control
+
+The version-controlled update mode reads `modular/config/target-version.txt` from GitHub.
+To roll out a new version to all clients:
+
+1. Edit `modular/config/target-version.txt` (currently: `0.60.8`)
+2. Change to new version (e.g., `0.61.0`)
+3. Commit and push to GitHub
+4. All machines with scheduled tasks update on next run
+
+**See [UPDATE_GUIDE.md](UPDATE_GUIDE.md) for complete documentation.**
+
+---
+
 ## Environment Variables Reference
 
 All bootstrap commands use environment variables for configuration:
 
 | Variable | Description | Example |
 |----------|-------------|---------|  
-| `NB_MODE` | Deployment mode | `Standard`, `OOBE`, `ZeroTier`, `Diagnostics` |
+| `NB_MODE` | Deployment mode | `Standard`, `OOBE`, `ZeroTier`, `Diagnostics`, `UpdateToLatest`, `UpdateToTarget` |
 | `NB_SETUPKEY` | NetBird setup key | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
 | `NB_MGMTURL` | Management server URL | `https://api.netbird.io` |
 | `NB_VERSION` | Target version (compliance) | `0.66.4` |
 | `NB_FULLCLEAR` | Full config reset | `1` (enabled) or `0` (disabled) |
 | `NB_FORCEREINSTALL` | Force reinstall | `1` (enabled) or `0` (disabled) |
 | `NB_INTERACTIVE` | Interactive wizard | `1` (enabled) or `0` (disabled) |
+| `NB_UPDATE_LATEST` | Trigger latest update | `1` (enabled) or `0` (disabled) |
+| `NB_UPDATE_TARGET` | Trigger target update | `1` (enabled) or `0` (disabled) |
 
 **Setup Key Formats**: UUID, Base64, or `nb_setup_` prefix are all supported.
 
