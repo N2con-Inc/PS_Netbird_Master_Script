@@ -526,6 +526,8 @@ ESP Blocking: Yes - include in "Block device use until required apps install"
 ```
 
 #### Enrollment Status Page (ESP)
+
+**Device ESP (Required)**:
 ```
 Show app and profile installation progress: Yes
 Block device use until these required apps install: NetBird VPN - OOBE
@@ -533,6 +535,32 @@ Block device use until all apps and profiles are installed: Yes
   OR
 Only fail selected blocking apps in technician phase: Yes (and select NetBird)
 ```
+
+**User ESP (Recommended: Disable for Hybrid Join)**:
+
+If you are NOT using Active Directory Federation Services (AD FS), the User ESP phase will likely timeout because:
+- Hybrid Azure AD Join registration depends on Azure AD Connect sync (runs every 30 minutes)
+- User ESP requires the device to be fully registered in Azure AD before it can deliver user policies/apps
+- Without AD FS, this creates a race condition that causes timeouts
+
+**To disable User ESP**, create a Custom Configuration Profile in Intune:
+
+```
+Profile type: Templates → Custom
+Name: Disable User ESP for Hybrid Join
+OMA-URI: ./Vendor/MSFT/DMClient/Provider/MS DM Server/FirstSyncStatus/SkipUserStatusPage
+Data type: String
+Value: True
+Assignment: All Autopilot Devices (or your Hybrid Join device group)
+```
+
+**What happens when User ESP is disabled:**
+- User reaches desktop after Device ESP completes
+- Hybrid join registration completes in background (up to 30 minutes)
+- User-targeted policies/apps deploy after registration completes (transparent to user)
+- No timeout errors or delays during provisioning
+
+**See [GUIDE_ADFS_HYBRID_JOIN.md](GUIDE_ADFS_HYBRID_JOIN.md) for detailed explanation of AD FS, the sync delay, and why disabling User ESP is recommended.**
 
 ### Troubleshooting Hybrid Join Failures
 
@@ -622,6 +650,7 @@ After successful OOBE deployment:
 
 ## Related Guides
 
+- [GUIDE_ADFS_HYBRID_JOIN.md](GUIDE_ADFS_HYBRID_JOIN.md) - Understanding AD FS and User ESP in Hybrid Join scenarios
 - [GUIDE_INTUNE_STANDARD.md](GUIDE_INTUNE_STANDARD.md) - Post-OOBE/standard Intune deployment
 - [GUIDE_SCHEDULED_UPDATES.md](GUIDE_SCHEDULED_UPDATES.md) - Automated update management
 - [GUIDE_DIAGNOSTICS.md](GUIDE_DIAGNOSTICS.md) - Troubleshooting and diagnostics
