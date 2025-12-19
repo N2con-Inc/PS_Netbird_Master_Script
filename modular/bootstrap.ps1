@@ -16,7 +16,12 @@ Usage:
     $env:NB_SETUP_SCHEDULED_TASK="1"; $env:NB_UPDATE_MODE="Target"; $env:NB_SCHEDULE="Weekly"; irm '...' | iex
 
 .NOTES
-Version: 1.1.0
+Version: 1.2.0
+
+v1.2.0 Changes:
+- Fixed signature validation issue by fetching scripts directly without saving to disk
+- Invoke-WebRequest -OutFile was corrupting signatures by changing line endings
+- Now uses Invoke-RestMethod and executes via scriptblock to preserve signatures
 #>
 
 [CmdletBinding()]
@@ -39,7 +44,7 @@ $UpdateMode = $env:NB_UPDATE_MODE  # "Latest" or "Target" for scheduled task
 $Schedule = $env:NB_SCHEDULE  # "Weekly", "Daily", or "Startup" for scheduled task
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "NetBird Bootstrap v1.1.0" -ForegroundColor Cyan
+Write-Host "NetBird Bootstrap v1.2.0" -ForegroundColor Cyan
 Write-Host "======================================`n" -ForegroundColor Cyan
 
 Write-Host "Configuration:"
@@ -59,25 +64,23 @@ if ($SetupScheduledTask) {
 }
 Write-Host ""
 
-# Download main launcher
+# Fetch main launcher script from GitHub
+# IMPORTANT: Do NOT use -OutFile as it corrupts signatures by changing line endings
+# Instead, fetch content directly and execute via scriptblock
 $LauncherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
-$TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
-$LauncherPath = Join-Path $TempPath "netbird.launcher.ps1"
 
 try {
-    Write-Host "Downloading launcher from GitHub..." -ForegroundColor Yellow
+    Write-Host "Fetching launcher from GitHub..." -ForegroundColor Yellow
     
-    if (-not (Test-Path $TempPath)) {
-        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
-    }
+    # Fetch script content (preserves signatures)
+    $LauncherScript = Invoke-RestMethod -Uri $LauncherUrl -UseBasicParsing -ErrorAction Stop
     
-    Invoke-WebRequest -Uri $LauncherUrl -OutFile $LauncherPath -UseBasicParsing -ErrorAction Stop
-    Write-Host "Launcher downloaded successfully`n" -ForegroundColor Green
+    Write-Host "Launcher fetched successfully`n" -ForegroundColor Green
 }
 catch {
-    Write-Host "Failed to download launcher: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Failed to fetch launcher: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "`nFallback: Use monolithic script instead" -ForegroundColor Yellow
-    Write-Host "irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/netbird.extended.ps1' -OutFile netbird.ps1" -ForegroundColor Yellow
+    Write-Host "irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/netbird.extended.ps1' | iex" -ForegroundColor Yellow
     exit 1
 }
 
@@ -107,12 +110,17 @@ if ($SetupScheduledTask) {
     elseif (-not $Schedule) { $LauncherArgs['Weekly'] = $true }
 }
 
-# Execute launcher
+# Execute launcher via scriptblock (preserves signatures)
 Write-Host "Executing NetBird deployment..." -ForegroundColor Yellow
 Write-Host "======================================`n" -ForegroundColor Cyan
 
 try {
-    & $LauncherPath @LauncherArgs
+    # Create scriptblock from fetched content and execute with parameters
+    # This preserves code signatures by not saving to disk
+    $ScriptBlock = [scriptblock]::Create($LauncherScript)
+    
+    # Execute with splatted parameters
+    & $ScriptBlock @LauncherArgs
     $ExitCode = $LASTEXITCODE
     
     Write-Host "`n======================================" -ForegroundColor Cyan
@@ -133,8 +141,8 @@ catch {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtif6fPdbr2YPLD7aThCdopWS
-# H9Sgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJyDezWoLpyOvPTwaUQdZSmdo
+# 8megghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -273,33 +281,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 70C+TmAN0GiOzHTa7z3JZgl6/towDQYJKoZIhvcNAQEBBQAEggIApfcotD+PH2MF
-# 5P/FZ1b3yhRDkFh4yMMs9jA08c+7HB0m+E+HaonSU40pc29tjkNVzAr0WD4ez5ho
-# C+A4S/E1DyfmMBvRvdgUO2htr4IPTq1gxnJ+RwkMaQp0z914jeyRVrf7X2lhkOEb
-# urg47WcJ03ys6rgnfRF/8ylbIfEFQTj1vNf+4p5r8qboTGUN0xzM9yjPLudbWtAC
-# u+VokaWy9J5PgHmvguE5whFLMtIx32KNMW+H3NuFO7ohcg3lsPgdSm7Bp/9+oYKv
-# sjf6/n6hQRgfKARf72+KFHf2cZ/BnThJzfphuTEdv2t/kXLi1SxxoIeObzFoJLXL
-# 9CFJLo34ZygJBsGUKwUfSdbCRzP2CIU8nkpUWo/pk9beB1dTameEBgI2sHhuAS6m
-# uRU6wRe6F0/72B3XXjxU+8X36B9UOIfjuP7xM04/9bgVYSGA4TcqSNtv0+D5H4vT
-# mdsU16B7WpL6yakPCwSWmTQWDqKPkBbCIW2mZc0t9QA1fKdEMLh7Drso+z/0UApS
-# 70ylv2+jUaStWbfPzdIshSUVK5RQpfqrYckELKznp1MsnZECtKxFgNtJxcm2UFge
-# WNvUu+XlvdxX149C4cxf+4RBFYIr5jQeG6Pt4/u1sjBuO27WSx2pu3cmN3806W1g
-# WlnhvNQ1Za9vKqS8M1ENCTKAq0YiLyWhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# lZs8F33h8ALNHsgXT3pJPkGni7owDQYJKoZIhvcNAQEBBQAEggIAYFH9I30gCEVS
+# pWzTwl8EiODD2f2xJYq9YG1LwdPlfZeScArIhK8Z6fLg40i9/nz8I35k0baC9tch
+# iSN9eUM9/R1NYvFo+00S9yry1L2BZjhHozi7r7wIu7mfV2yoWa/vJHudhoSbbCcw
+# lV3dpU9Iu/L0pI1RXl1qaPhz/gQwg0rA4A1Qx/VEhgyUElvkfqRcUXYUyBzqmHWw
+# NNI579irUEIbA7zEEESYA8R3kKTrl0VmRL/FEpkR0m/lwhLYJBN3dcEamr0nxlki
+# a1gE7+w4qnR/L+NpTuVLy7ZCoijLz5qTsimTdnIn+yzwefnKfNzx2hRWX03+SFsy
+# g+aBsptO1i5mb//UDb1CZLna+naMLuJFIzrClFfLozUb+YeeaEZA/7H64iBTGJGi
+# ngXf9zPdN+4kybIcg5uo3vGI85QrjcmRbg+n9Qg5hQ8e8MWR3X+DF4PK1vTm0TbY
+# Yqx/BNvcbJgcH/ZG0F4DBTsMh6fXTKIn8BHdoIm6ubbm84JzMbUunssxPN9KfL5z
+# 5m40+qftfhxuZ0k5ys3cQh4allmK+IAjUW+7F0pqSM3C/DX+7TmA7OkmOg2Gug3J
+# TmLuo0LIODi0ZsuR9zCs1IK/yJ+Lt0r1GzlKdQ5YDuywKq/PtZN9urxZ8GT6DAt4
+# RkY69oxShki63mfHBEMgXb7LiEcD/9ChggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MjEyNDU0WjAvBgkqhkiG9w0BCQQxIgQgZVxGU91UwzZPr16Xnz5m34ec
-# CPv2HfgHjBBpvWKsJUswDQYJKoZIhvcNAQEBBQAEggIAkL/yL4306eOBV738U7mn
-# g60LNM8RHnv0BYM1EoB5KvGWlWoHu+Tx1VOaSP0Qouxbc2Pq/F3OnZEp+oVv2vaz
-# MvO9tFm3lSevFXrQFJQdiCndfeQWxxPtfWhCG2SKkqZ0inGidQDLbkKGLhObdJKA
-# vJqgocFovPTvmn+EYJ3rT5iRI0puvbM6+rbuDdn3XPzrFEhYabUG0B05hSmQX41y
-# reXKElQfB5GURLB/mV6rmSKNCGVUt4tpytEpFk+tyHPn1iWewxl/VXkmf+7ppQTo
-# y+2hiNBKWjfEYEcdOhCRImUkkipmU98IdfkS8Rj9qximv6jcEx5bBXDERcvQOX6g
-# bYMDivHDwkN7Gw8J0A/c4BatEmDwS+sJ+3QVS8bMeo5wkGiRnE7j1frnPfPzhO4r
-# NFqyh/ZAme6ljaukYzgkUazCiIPSkAVCG+o2bLtNjW18wa/ULXF4xw/5/Yyb1imi
-# /mRPAfbZ6x7yXK1XpIzS6NoeL8A134MpVoPxyKMI+YWwZWx8gi2EkvT+yDPTssUU
-# y9ktYHgOGEFngmwdc8FqaDyXNQCMA/DYoYjcTBHAeAi4+ev99PMlPZQt+Rdbn8B6
-# yLbBdNRwUb/dGdavp21geeskAwudOJj9rufugbvgX9M3OJyDgvSRjqTSRz27wNIo
-# pAYkAuMxvPzAG3AWSftzQWw=
+# MjUxMjE5MjEyOTE2WjAvBgkqhkiG9w0BCQQxIgQgR0E2du1kjF4tVJZh53J4PO1a
+# 2zRe0Evn5Kg7oeTHLGswDQYJKoZIhvcNAQEBBQAEggIAsvB7F6GjDQd3aP+zdy9+
+# ODrJA0a3PMlX1HYPqN1Q6xoTwHIBXv0AH4yawDlE2SUiO1c4TQDJxgVaiLCWPMO0
+# 3/SIvPx4nvwLfcZX1yCOw1qokmzhhj5Oh/hZAHOMu9za2AyuuJli4ql1O44lahH1
+# Rhfk8FzWYpR41xmykC48uX8HQqSRZgNlEU4rdeUO91kx2i/abxGjsVLF57LN99fd
+# UWgaJnrLPYTa64m7+mN7IgQDoMAqEL84MjY1D6d2udMcuOMfg4BrtSy60IybfBxQ
+# Vp8jCfBIdW4KW8ItyZ0kGukdIXwkefYgugZZGFdwbrRVudyoR0ycOCYth9PrsByn
+# CXyQmT54aUXx8db/67S2mYelA9nz6yxA7gPG2yaX7oEoiK6CdHAUzLXQTRtu43mm
+# UNgb0QZoN7G8kl9dT7ZAiN6rXGudBoUMRBYOmIFupLJQvaNqA02ea3HbYVvfWOCv
+# 4ukga2twIMCA3UxaZI8IT5pG82Sog+AdOJ1fJYBS3FrYY9loQTov/+yVYbkxqPCl
+# B2nlUGdJQHmIdua1E9WY5j5z++EN4nqqStlznFKlLoUWpVcDCOZyBOaWtRXyc1V5
+# hwPYqB9dOCNG4whtdOPQSEx/G2Fx4gVXn6zDP1waWnE9HfD4pIkoBNBEY3pTEQ+W
+# Mfp8CnLxzrkoaaWWKkIALxU=
 # SIG # End signature block
