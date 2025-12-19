@@ -1,11 +1,22 @@
 # NetBird ZeroTier Migration Guide
 
-**Version**: 1.0.0  
+**Version**: 1.0.1  
 **Last Updated**: December 2025
 
 ## Overview
 
-This guide covers migrating from ZeroTier to NetBird with automatic rollback on failure. The migration process safely disconnects ZeroTier networks, installs and registers NetBird, and only removes ZeroTier after confirming successful NetBird connectivity.
+This guide covers migrating from ZeroTier to NetBird with automatic rollback on failure. The migration process safely disconnects ZeroTier networks, installs and registers NetBird, and removes or preserves ZeroTier based on parameters.
+
+## ZeroTier Handling Options
+
+**Default Behavior (no network specified)**:
+- If you do NOT specify a `-ZeroTierNetworkId` parameter: ZeroTier will be **completely uninstalled** after successful migration
+
+**Network-Specific Migration**:
+- If you DO specify a `-ZeroTierNetworkId` parameter: Only that network will be left, and ZeroTier will **remain installed**
+
+**Preserve Option**:
+- Use `-PreserveZeroTier` switch to keep ZeroTier installed regardless of other parameters
 
 ## Prerequisites
 
@@ -98,22 +109,26 @@ The script performs 6-factor verification:
 
 **If verification succeeds**: Migration proceeds to Phase 5
 
-### Phase 5: ZeroTier Cleanup (Optional)
+### Phase 5: ZeroTier Cleanup (Automatic)
 
-If `-FullClear` parameter was used:
-- Script uninstalls ZeroTier: `msiexec /x {ZeroTier-GUID} /quiet /norestart`
+**Default behavior (no -ZeroTierNetworkId specified)**:
+- Script uninstalls ZeroTier: `Get-Package -Name "ZeroTier One" | Uninstall-Package -Force`
 - Removes ZeroTier service
 - Cleans up remaining files
 
-If `-FullClear` was NOT used:
+**When -ZeroTierNetworkId IS specified**:
+- ZeroTier remains installed but disconnected from specified network
+- Can reconnect to other networks or manually uninstall later
+
+**When -PreserveZeroTier switch used**:
 - ZeroTier remains installed but disconnected
 - Can be manually uninstalled later via Windows Settings
 
 ## Migration Scenarios
 
-### Scenario 1: Test Migration (Keep ZeroTier)
+### Scenario 1: Full Migration (Remove ZeroTier)
 
-**Best for**: Testing NetBird before committing to full migration
+**Best for**: Clean migration when leaving ZeroTier completely
 
 ```powershell
 $env:NB_MODE = "ZeroTier"
@@ -122,9 +137,53 @@ irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/m
 ```
 
 **Result**:
-- ZeroTier networks disconnected
+- All ZeroTier networks disconnected
 - NetBird installed and connected
-- ZeroTier remains installed (can reconnect if needed)
+- **ZeroTier UNINSTALLED completely** (default behavior)
+
+**Rollback requires ZeroTier reinstall**: Would need to download and reinstall ZeroTier if needed
+
+### Scenario 2: Single Network Migration (Keep ZeroTier)
+
+**Best for**: Migrating a specific network while keeping ZeroTier for other networks
+
+```powershell
+$env:NB_MODE = "ZeroTier"
+$env:NB_SETUPKEY = "your-setup-key"
+$env:NB_ZTNETWORKID = "a09acf0233c06c28"  # Your specific network ID
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+```
+
+**Result**:
+- Specified ZeroTier network disconnected
+- NetBird installed and connected
+- **ZeroTier remains installed** (can still use other networks)
+
+**Rollback manually** if needed:
+```powershell
+# Reconnect to the specific network
+zerotier-cli join a09acf0233c06c28
+```
+
+### Scenario 3: Test Migration (Preserve ZeroTier)
+
+**Best for**: Testing NetBird before committing to full migration
+
+```powershell
+# Via launcher interactive mode
+.\netbird.launcher.ps1
+# Then select ZeroTier migration and answer "Y" to "Preserve ZeroTier"
+```
+
+Or via direct execution:
+```powershell
+.\netbird.launcher.ps1 -Mode ZeroTier -SetupKey "your-key" -PreserveZeroTier
+```
+
+**Result**:
+- All ZeroTier networks disconnected
+- NetBird installed and connected
+- **ZeroTier remains installed** (can reconnect if needed)
 
 **Rollback manually** if NetBird doesn't work:
 ```powershell
@@ -132,25 +191,7 @@ irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/m
 zerotier-cli join {networkId}
 ```
 
-### Scenario 2: Full Migration (Remove ZeroTier)
-
-**Best for**: Production migration after successful testing
-
-```powershell
-$env:NB_MODE = "ZeroTier"
-$env:NB_SETUPKEY = "your-setup-key"
-$env:NB_FULLCLEAR = "1"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-```
-
-**Result**:
-- ZeroTier networks disconnected
-- NetBird installed and connected
-- ZeroTier uninstalled completely
-
-**No manual rollback possible** - ZeroTier would need reinstall
-
-### Scenario 3: Migration with Custom Management URL
+### Scenario 4: Migration with Custom Management URL
 
 ```powershell
 $env:NB_MODE = "ZeroTier"
@@ -456,6 +497,8 @@ Restart-Service netbird
 ## Related Guides
 
 - [README.md](../README.md) - Main modular system documentation
+- [GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md](GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md) - ZeroTier migration + scheduled updates (two-step workflow)
+- [GUIDE_SCHEDULED_UPDATES.md](GUIDE_SCHEDULED_UPDATES.md) - Automated update scheduling
 - [GUIDE_DIAGNOSTICS.md](GUIDE_DIAGNOSTICS.md) - Troubleshooting NetBird issues
 - [GUIDE_INTUNE_STANDARD.md](GUIDE_INTUNE_STANDARD.md) - Intune deployment methods
 

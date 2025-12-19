@@ -1,6 +1,6 @@
 # netbird.zerotier.ps1
 # Module for ZeroTier to NetBird migration with automatic rollback
-# Version: 1.0.3
+# Version: 1.0.4
 # Dependencies: netbird.core.ps1, netbird.service.ps1, netbird.registration.ps1, netbird.diagnostics.ps1
 
 $script:ModuleName = "ZeroTier"
@@ -310,7 +310,11 @@ function Invoke-ZeroTierMigration {
         2. Disconnect ZeroTier
         3. Install NetBird
         4. Verify NetBird connection
-        5. Uninstall ZeroTier (or preserve if requested)
+        5. Uninstall ZeroTier OR leave networks (based on -ZeroTierNetworkId)
+        
+        Default behavior:
+        - If NO -ZeroTierNetworkId is specified: Uninstall ZeroTier completely
+        - If -ZeroTierNetworkId IS specified: Only leave that network, keep ZeroTier installed
         
         If NetBird fails, automatically reconnects ZeroTier
     #>
@@ -418,25 +422,58 @@ function Invoke-ZeroTierMigration {
 
     Write-Log "NetBird connection verified successfully!" -Source "NETBIRD" -ModuleName $script:ModuleName
 
-    # PHASE 5: Remove ZeroTier (if migration succeeded and ZeroTier was installed)
+    # PHASE 5: Handle ZeroTier based on migration parameters
     if ($script:ZeroTierWasInstalled) {
-        if ($PreserveZeroTier) {
-            Write-Log "=== PHASE 5: Preserving ZeroTier (per -PreserveZeroTier switch) ===" -ModuleName $script:ModuleName
-            Write-Log "ZeroTier remains installed" -Source "ZEROTIER" -ModuleName $script:ModuleName
-            if ($script:ZeroTierWasConnected) {
-                Write-Log "ZeroTier was disconnected during migration" -Source "ZEROTIER" -ModuleName $script:ModuleName
-                Write-Log "To manually reconnect: zerotier-cli join <NETWORK_ID>" -Source "ZEROTIER" -ModuleName $script:ModuleName
+        # Determine action based on parameters
+        $shouldUninstall = $true
+        
+        # If a specific network was targeted OR PreserveZeroTier was set, don't uninstall
+        if ($ZeroTierNetworkId -or $PreserveZeroTier) {
+            $shouldUninstall = $false
+        }
+        
+        if ($shouldUninstall) {
+            # Default behavior: No specific network = full uninstall
+            Write-Log "=== PHASE 5: Uninstalling ZeroTier ===" -ModuleName $script:ModuleName
+            Write-Log "No specific network was targeted - removing ZeroTier completely..." -Source "ZEROTIER" -ModuleName $script:ModuleName
+            
+            try {
+                $package = Get-Package -Name "ZeroTier One" -ErrorAction SilentlyContinue
+                if ($package) {
+                    Write-Log "Uninstalling ZeroTier package..." -Source "ZEROTIER" -ModuleName $script:ModuleName
+                    $package | Uninstall-Package -Force -ErrorAction Stop
+                    Write-Log "ZeroTier successfully uninstalled" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                }
+                else {
+                    Write-Log "ZeroTier package not found via Get-Package, trying alternative method..." "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                    if (Uninstall-ZeroTier) {
+                        Write-Log "ZeroTier successfully uninstalled" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                    }
+                    else {
+                        Write-Log "Failed to uninstall ZeroTier - manual cleanup may be required" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                    }
+                }
+            }
+            catch {
+                Write-Log "Failed to uninstall ZeroTier: $($_.Exception.Message)" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                Write-Log "You can manually uninstall via: Get-Package -Name 'ZeroTier One' | Uninstall-Package -Force" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
             }
         }
         else {
-            Write-Log "=== PHASE 5: Uninstalling ZeroTier ===" -ModuleName $script:ModuleName
-            Write-Log "NetBird is confirmed working - removing ZeroTier..." -Source "ZEROTIER" -ModuleName $script:ModuleName
-            if (Uninstall-ZeroTier) {
-                Write-Log "ZeroTier successfully uninstalled" -Source "ZEROTIER" -ModuleName $script:ModuleName
+            # Preserve ZeroTier - just leave network(s)
+            Write-Log "=== PHASE 5: Preserving ZeroTier Installation ===" -ModuleName $script:ModuleName
+            
+            if ($ZeroTierNetworkId) {
+                Write-Log "Specific network targeted ($ZeroTierNetworkId) - ZeroTier remains installed" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                Write-Log "Network $ZeroTierNetworkId has been left, but ZeroTier is still available" -Source "ZEROTIER" -ModuleName $script:ModuleName
             }
-            else {
-                Write-Log "Failed to uninstall ZeroTier - manual cleanup may be required" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
-                Write-Log "You can manually uninstall via Programs and Features" "WARN" -Source "ZEROTIER" -ModuleName $script:ModuleName
+            elseif ($PreserveZeroTier) {
+                Write-Log "PreserveZeroTier flag set - ZeroTier remains installed" -Source "ZEROTIER" -ModuleName $script:ModuleName
+            }
+            
+            if ($script:ZeroTierWasConnected) {
+                Write-Log "ZeroTier network(s) were disconnected during migration" -Source "ZEROTIER" -ModuleName $script:ModuleName
+                Write-Log "To manually reconnect: zerotier-cli join <NETWORK_ID>" -Source "ZEROTIER" -ModuleName $script:ModuleName
             }
         }
     }
@@ -452,7 +489,7 @@ function Invoke-ZeroTierMigration {
 
 # Module initialization logging (safe for dot-sourcing)
 if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
-    Write-Log "ZeroTier module loaded (v1.0.0)" -ModuleName $script:ModuleName
+    Write-Log "ZeroTier module loaded (v1.0.4)" -ModuleName $script:ModuleName
 }
 
 # SIG # Begin signature block
@@ -614,17 +651,17 @@ if (Get-Command Write-Log -ErrorAction SilentlyContinue) {
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MTk0MjQ2WjAvBgkqhkiG9w0BCQQxIgQg0JOHc4+kT+k1pc7b0dkd5eRf
-# 3dVxbP0zO2Nz/usCrO4wDQYJKoZIhvcNAQEBBQAEggIAvoC445aUS0NbY/8Edikt
-# PqWqkryFLCQGVQSyvprWLqDL8TzbpUDygVy3B8xuifetsMFSzq9x5uRkVxGyh48x
-# GjMxcq0lqUzGAhIx1eQ53dO1+1jCne1+Hl/NyNxxsQK8rFoNez9zdgHWpHonCQRz
-# cABMpEr5mhH68enhr+pWz4Df3X46YPkqis+GwlwnVowuEvDHzFet+BnYPgAv3ZV6
-# KzruTiH0CK7Z3ix+2P4xOWsYjA9i8gcCBORJxk4gJOi4sBLbH74rP4FTX58K0qAk
-# xbtQffY3ddDMMZ477fLrxBe+nB6m8gvUU0PSStcwxLyHETt1Bcgm6h4LPjKXY4af
-# AR4ExX/WrTJ31H3hhfMbfuV25klhKG8cIjdl7wr3RAOsLqBQqLYIdVwl2YkUTuE3
-# vQDMw7KS5PkhhJ4umkvCVBVAcdWcO0rECYukw88mQwWkiCJ24IRNDkq+efZqNjvy
-# KFgiuPLILTA/iMhd2IPeRFzTStp7l/jlYmsWi2cXx9oBGNfgO6nPQzg+cCuEZdfp
-# AJmMmuDYjkLd0FkUms+xjaF1ROVQs0Le38pClvDou/k4otleue39uju2S/r6VK0/
-# tiTqszpjITETjIxC6Zp7NJepPBt+2ly6JcmfskpLNBDH3rgwwPYL+eA++Uud046K
-# 8KpsZWhy38SPQ9VGw04lP/c=
+# MjUxMjE5MjAyMzE5WjAvBgkqhkiG9w0BCQQxIgQg0JOHc4+kT+k1pc7b0dkd5eRf
+# 3dVxbP0zO2Nz/usCrO4wDQYJKoZIhvcNAQEBBQAEggIAiXrjYT4Y2jYDBF48+o9l
+# ppxe8isuFhFWM3v1e7FiCvioH9sZk3Jh3MAc7pD/e3J0nRGCyBTYPwMRiHblyU7G
+# sHJg46vnWy982CMTDuMU0355oD8/k0QLWkSV6DhLUCZHMMOd0GWYKBNr+gixxfyN
+# UvbwM1Fpo1nN4Arn9mZpDKBhwdkqdzfyo0HGtg3tAVbGTE+Z/jGEXZdFQv56DSUp
+# mMYKSigp954ls8GZsDFSEyXoJTlzm0BB00UlhpxcrVxAhaUUx5xxJvBCqhHSvAIt
+# rHDFGFAmiJuzNjcAIX+1DCi7xc/2py3m8fOKLPJtdiBmGO/KinAeii5iKGjXbH8U
+# gqZtiPr+5d6Gf19mcJPDAhm/CdUHesDl43vqXHFDHYpKZi1D8l+57oGRY+2iop2c
+# wFvVWKteq0UgmnDXfDclT0saUvw3xZBW2X7lClyzMMWtD0AnGRbl+pAqc1HcFsVV
+# fMrmSoy4jLt3KuVq8wTUcPRVNxfAPEOPl70UK3cuKqQ8TtGa08jf///lcXZ1y8tQ
+# AoCyNYwrRZJEoWr7aRyAfwj+GAdbxlJ4UbKEItB7ZebDe66RU1qAtHNeDEqmwzb5
+# OlJCWRx+l/GQt8EioEtIWlFMlP06qtPl6drzyYxP74gAypMXiED1FXgMkuyl/uSF
+# 6tgNuCQlwlNk9WrDdkNDy0Y=
 # SIG # End signature block

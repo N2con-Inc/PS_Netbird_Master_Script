@@ -55,7 +55,7 @@ param(
 )
 
 # Script version
-$script:Version = "1.0.0"
+$script:Version = "1.0.1"
 
 Write-Host "`n======================================" -ForegroundColor Cyan
 Write-Host "NetBird Scheduled Update Task Creator v$script:Version" -ForegroundColor Cyan
@@ -187,6 +187,21 @@ if (-not $NonInteractive) {
     if ($confirm -ne "Y" -and $confirm -ne "y") {
         Write-Host "Cancelled." -ForegroundColor Yellow
         exit 0
+    }
+}
+
+# Check for and remove existing NetBird Auto-Update tasks
+$existingTasks = Get-ScheduledTask -TaskName "NetBird Auto-Update*" -ErrorAction SilentlyContinue
+if ($existingTasks) {
+    Write-Host "`nFound existing NetBird Auto-Update task(s) - removing before creating new one..." -ForegroundColor Yellow
+    foreach ($existingTask in $existingTasks) {
+        Write-Host "  Removing: $($existingTask.TaskName)" -ForegroundColor Yellow
+        try {
+            Unregister-ScheduledTask -TaskName $existingTask.TaskName -Confirm:$false -ErrorAction Stop
+        }
+        catch {
+            Write-Host "  Warning: Could not remove $($existingTask.TaskName): $($_.Exception.Message)" -ForegroundColor Yellow
+        }
     }
 }
 
@@ -386,17 +401,17 @@ catch {
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MTk0MjQ4WjAvBgkqhkiG9w0BCQQxIgQgdjI/ESAOqB10wgJG6NCA+LSR
-# rjETXmBNhZWtBX1uDGEwDQYJKoZIhvcNAQEBBQAEggIAL9l67BH33qWKr8ZdqFRz
-# Mi3vplXLUwWNHX5nTJJdAAbfNYSBqnp6smy+lV6In+PcEaJlZHSRDR3cNb3MD4Jd
-# SjNA/9AItbk83I/zKF+5E1/sK4zFFtfBiCN/cKuuKBszXL95xqqxHJQsjncafQ4y
-# gOTskPj09kzJ4mnZ4n80Leim7s6gmWS9tzMh2BB6iD6zZtCYXP4Fv2SkWfXVzhQI
-# VaKeqNuHY3JT6XaQ+lfuF309Dgbo2iQQj9xlxq+Dvb1EvvYCGbe2Ll2ilt3H/Q1r
-# 4BVL+rk81VLSALuMjrJ6CNxGEcGpuqaA60MJwTGe0oql++hhjpg+84yV9ZkiGx2G
-# RQwgQorxYdQzuUEbcC4yDb8pZU2YvooysAwBozAuP3KBkGR5mcV8lkJCpy4jZQMx
-# 2GkRmC3kgOmzF5R2nHtty8r4JpbROF8f1s/yMX36L3yPTDRzPBVOjcgJNxBKxUco
-# zdbGaxdYTn2PFq7pm9iyfCibH16p30Wl2++Bwz6Qdfo5eXVBLb7WpNEMvIoTYspy
-# G94Vvm1yI2PY3WWlMWe1HK+kBhFa9YVSUxbjOIEp6dRa9gHv2blOktLCdiMlBWiA
-# R+wlNsFwa8mAgPyOV/k0Fur7j/TjWhgN4lvZ5rnUNnCkwIV01HYQzoNkn638Su3W
-# WfdfDitbeZ+UzR6yde18Ru4=
+# MjUxMjE5MjAyMzIxWjAvBgkqhkiG9w0BCQQxIgQgdjI/ESAOqB10wgJG6NCA+LSR
+# rjETXmBNhZWtBX1uDGEwDQYJKoZIhvcNAQEBBQAEggIAj6g2ld0GBup/hRsxQcIb
+# 7J99oasA1l4kH5weNc+7fKMNEFb9kiF03l0ajxLiF4Dq52l3j51qZsTosk35UQ3I
+# QM7Da/apKJ4NGnhhgfeOw9ccHPB9//kp87EE83GjkyPJkTfUYyAo6ZoguVdgyJYT
+# mCQIR61C7TJ9T5mA/4YnWWLxhKTFVI2qEDJirIIV/gggk9XTqvuatpkjyUm45+h8
+# SGWTJAPbFmLT0CFhlWLCzxR+XAETDtyGCpGLMkR9LQ1cUKzszNsPAXPPLRL6FCXM
+# wWiRNXte0Sq+CBdp0+/ZKk9OyfQ0YqQaA9cSPurUcMq6v+hHv/q2jyu/7p4DVv6c
+# stR0qI+hYa1t1XgipoNDim/IeDK8FrBWyjfjO+sNRfO1STytkyLOG4MOdL0UUilb
+# dk7YPZmSWxjrEuIKZ0QkQEb99unrfUsXPAWgMQMsVII0uvdvi2K0PKpljpl7g0IU
+# rqbCjDhZovfhYsV6deoXLFmUv/EorHiqAHaClAt6o/DiWTbeWZ1kqPvUaxhE3sGY
+# BV/hOAyRIY+k7xAAPN8lpyZeZzGPBUx5VcGaGAWDGGv7Z6cKZc3RZY8b1rr5/356
+# UgAZi/Wv+/MKlA0Z/XWOgvOgLYgZjZo1XZ8yj9peglw50JgaHUzuoV41E9/Sf1/l
+# K4n9kVILgkYwwI6soetqJ+A=
 # SIG # End signature block

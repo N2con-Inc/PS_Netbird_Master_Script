@@ -48,6 +48,7 @@ irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/m
 - **[GUIDE_INTUNE_OOBE.md](guides/GUIDE_INTUNE_OOBE.md)** - Intune Autopilot/OOBE deployment
 - **[GUIDE_INTUNE_STANDARD.md](guides/GUIDE_INTUNE_STANDARD.md)** - Standard Intune deployment
 - **[GUIDE_ZEROTIER_MIGRATION.md](guides/GUIDE_ZEROTIER_MIGRATION.md)** - Migrate from ZeroTier to NetBird
+- **[GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md](guides/GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md)** - ZeroTier migration + scheduled updates
 
 ### Update Management
 
@@ -143,19 +144,17 @@ See [GUIDE_INTUNE_OOBE.md](guides/GUIDE_INTUNE_OOBE.md) or [GUIDE_INTUNE_STANDAR
 ### ZeroTier Migration
 
 ```powershell
-# Migrate from ZeroTier (preserves ZeroTier)
+# Basic migration (removes ZeroTier by default)
 $env:NB_MODE="ZeroTier"
 $env:NB_SETUPKEY="your-key"
 irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
 
-# Full migration (removes ZeroTier after success)
-$env:NB_MODE="ZeroTier"
-$env:NB_SETUPKEY="your-key"
-$env:NB_FULLCLEAR="1"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+# Migration + Scheduled Updates (two-step modular approach)
+$env:NB_MODE="ZeroTier"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile $env:TEMP\launcher.ps1; & $env:TEMP\launcher.ps1 -InstallScheduledTask -Weekly
 ```
 
-See [GUIDE_ZEROTIER_MIGRATION.md](guides/GUIDE_ZEROTIER_MIGRATION.md) for detailed migration guide.
+See [GUIDE_ZEROTIER_MIGRATION.md](guides/GUIDE_ZEROTIER_MIGRATION.md) for detailed migration guide.  
+See [GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md](guides/GUIDE_ZEROTIER_WITH_SCHEDULED_UPDATES.md) for migration + automated updates.
 
 ## Troubleshooting
 

@@ -155,7 +155,7 @@ param(
 )
 
 # Script version
-$script:LauncherVersion = "1.4.2"
+$script:LauncherVersion = "1.4.3"
 
 # Module cache directory (with manifest version for invalidation)
 $script:ModuleCacheBaseDir = Join-Path $env:TEMP "NetBird-Modules"
@@ -1052,6 +1052,22 @@ if ($InstallScheduledTask) {
     elseif ($AtStartup) { $taskSchedule = "Startup" }
     
     Write-LauncherLog "Creating scheduled task: UpdateMode=$taskUpdateMode, Schedule=$taskSchedule"
+    
+    # Check for and remove existing NetBird Auto-Update tasks
+    $existingTasks = Get-ScheduledTask -TaskName "NetBird Auto-Update*" -ErrorAction SilentlyContinue
+    if ($existingTasks) {
+        Write-LauncherLog "Found existing NetBird Auto-Update task(s) - removing before creating new one"
+        foreach ($existingTask in $existingTasks) {
+            Write-LauncherLog "Removing existing task: $($existingTask.TaskName)"
+            try {
+                Unregister-ScheduledTask -TaskName $existingTask.TaskName -Confirm:$false -ErrorAction Stop
+                Write-LauncherLog "Removed: $($existingTask.TaskName)"
+            }
+            catch {
+                Write-LauncherLog "Warning: Could not remove existing task $($existingTask.TaskName): $($_.Exception.Message)" "WARN"
+            }
+        }
+    }
     
     # Create the task
     $trigger = switch ($taskSchedule) {
