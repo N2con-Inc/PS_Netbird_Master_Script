@@ -129,7 +129,7 @@ This creates `Install.intunewin` ready for upload.
   ```
 - **Uninstall command**: 
   ```
-  msiexec /x {NETBIRD-MSI-GUID} /qn
+  "%programfiles%\Netbird\netbird_uninstall.exe" /S
   ```
 - **Install behavior**: **System**
 - **Device restart behavior**: `Determine behavior based on return codes`
