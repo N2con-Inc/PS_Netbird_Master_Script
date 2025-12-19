@@ -48,12 +48,20 @@
       "version": "1.0.3",
       "dependencies": ["core", "service", "registration"],
       "description": "ZeroTier migration"
+    },
+    "update": {
+      "file": "netbird.update.ps1",
+      "version": "1.0.0",
+      "dependencies": ["core", "version", "service", "diagnostics"],
+      "description": "Update management for automated updates"
     }
   },
   "workflows": {
     "Standard": ["core", "version", "service", "diagnostics", "registration"],
     "OOBE": ["core", "version", "service", "oobe"],
     "ZeroTier": ["core", "version", "service", "diagnostics", "registration", "zerotier"],
-    "Diagnostics": ["core", "diagnostics"]
+    "Diagnostics": ["core", "diagnostics"],
+    "UpdateToLatest": ["core", "version", "service", "diagnostics", "update"],
+    "UpdateToTarget": ["core", "version", "service", "diagnostics", "update"]
   }
 }

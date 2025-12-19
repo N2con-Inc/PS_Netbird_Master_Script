@@ -37,6 +37,24 @@ Suppress non-critical output
 .PARAMETER Interactive
 Enable wizard-style interactive mode (default if no parameters provided)
 
+.PARAMETER UpdateToLatest
+Update NetBird to the latest available version (no registration)
+
+.PARAMETER UpdateToTarget
+Update NetBird to specific target version specified via -TargetVersion (no registration)
+
+.PARAMETER InstallScheduledTask
+Install a scheduled task for automatic updates (use with -Weekly, -Daily, or -AtStartup)
+
+.PARAMETER Weekly
+Schedule updates weekly (Sunday at 3 AM) - use with -InstallScheduledTask
+
+.PARAMETER Daily
+Schedule updates daily (3 AM) - use with -InstallScheduledTask
+
+.PARAMETER AtStartup
+Schedule updates at system startup - use with -InstallScheduledTask
+
 .PARAMETER ModuleSource
 Base URL for module downloads (default: GitHub raw URL)
 
@@ -75,7 +93,7 @@ Changes:
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet('Standard', 'OOBE', 'ZeroTier', 'Diagnostics')]
+    [ValidateSet('Standard', 'OOBE', 'ZeroTier', 'Diagnostics', 'UpdateToLatest', 'UpdateToTarget')]
     [string]$Mode,
 
     [Parameter(Mandatory=$false)]
@@ -101,6 +119,24 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$Interactive,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$UpdateToLatest,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$UpdateToTarget,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$InstallScheduledTask,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Weekly,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Daily,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$AtStartup,
 
     [Parameter(Mandatory=$false)]
     [string]$ModuleSource = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/modules",
@@ -165,9 +201,12 @@ function Show-InteractiveMenu {
     Write-Host "3) OOBE Deployment (Pre-network)"
     Write-Host "4) ZeroTier to NetBird Migration"
     Write-Host "5) Diagnostics & Status Check"
-    Write-Host "6) Exit`n"
+    Write-Host "6) Update NetBird Now (Latest Version)"
+    Write-Host "7) Update NetBird Now (Target Version)"
+    Write-Host "8) Setup Scheduled Update Task"
+    Write-Host "9) Exit`n"
     
-    $selection = Read-Host "Select option [1-6]"
+    $selection = Read-Host "Select option [1-9]"
     
     switch ($selection) {
         "1" {
@@ -198,6 +237,29 @@ function Show-InteractiveMenu {
             return $true
         }
         "6" {
+            Write-LauncherLog "User selected: Update to Latest"
+            $script:Mode = "UpdateToLatest"
+            return $true
+        }
+        "7" {
+            Write-LauncherLog "User selected: Update to Target"
+            $script:Mode = "UpdateToTarget"
+            # Optionally prompt for target version
+            $targetInput = Read-Host "Target version (press Enter to use remote config)"
+            if ($targetInput) {
+                $script:TargetVersion = $targetInput
+            }
+            return $true
+        }
+        "8" {
+            Write-LauncherLog "User selected: Setup Scheduled Update Task"
+            New-NetBirdUpdateTask
+            # After task setup, return to menu
+            Write-Host "`nPress Enter to continue..." -ForegroundColor Cyan
+            Read-Host
+            return Show-InteractiveMenu
+        }
+        "9" {
             Write-LauncherLog "User selected: Exit"
             Write-Host "Exiting..." -ForegroundColor Yellow
             exit 0
@@ -209,6 +271,136 @@ function Show-InteractiveMenu {
     }
     
     return $true
+}
+
+function New-NetBirdUpdateTask {
+    <#
+    .SYNOPSIS
+        Creates a Windows scheduled task for NetBird updates
+    .DESCRIPTION
+        Interactive wizard to create scheduled tasks for automated updates.
+        Follows Microsoft best practices for scheduled task creation.
+    #>
+    
+    Write-Host "`n======================================" -ForegroundColor Cyan
+    Write-Host "Setup NetBird Scheduled Update Task" -ForegroundColor Cyan
+    Write-Host "======================================`n" -ForegroundColor Cyan
+    
+    # Select update mode
+    Write-Host "Update Mode:"
+    Write-Host "1) Auto-Latest (always update to newest version)"
+    Write-Host "2) Version-Controlled (update to target version from GitHub)"
+    Write-Host "3) Cancel`n"
+    
+    $modeSelection = Read-Host "Select update mode [1-3]"
+    
+    $updateMode = switch ($modeSelection) {
+        "1" { "Latest" }
+        "2" { "Target" }
+        "3" { 
+            Write-Host "Cancelled." -ForegroundColor Yellow
+            return
+        }
+        default {
+            Write-Host "Invalid selection." -ForegroundColor Red
+            return
+        }
+    }
+    
+    Write-Host "`nUpdate Mode Selected: $updateMode" -ForegroundColor Green
+    
+    # Select schedule
+    Write-Host "`nSchedule Type:"
+    Write-Host "1) Weekly (every Sunday at 3 AM)"
+    Write-Host "2) Daily (every day at 3 AM)"
+    Write-Host "3) At Startup"
+    Write-Host "4) Cancel`n"
+    
+    $scheduleSelection = Read-Host "Select schedule [1-4]"
+    
+    $trigger = switch ($scheduleSelection) {
+        "1" { 
+            Write-Host "Creating weekly trigger..." -ForegroundColor Yellow
+            New-ScheduledTaskTrigger -Weekly -At 3AM -DaysOfWeek Sunday
+        }
+        "2" { 
+            Write-Host "Creating daily trigger..." -ForegroundColor Yellow
+            New-ScheduledTaskTrigger -Daily -At 3AM
+        }
+        "3" { 
+            Write-Host "Creating startup trigger..." -ForegroundColor Yellow
+            New-ScheduledTaskTrigger -AtStartup
+        }
+        "4" {
+            Write-Host "Cancelled." -ForegroundColor Yellow
+            return
+        }
+        default {
+            Write-Host "Invalid selection." -ForegroundColor Red
+            return
+        }
+    }
+    
+    # Build the PowerShell command
+    $launcherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
+    
+    if ($updateMode -eq "Latest") {
+        $psCommand = "irm '$launcherUrl' | iex; .\netbird.launcher.ps1 -UpdateToLatest -Silent"
+        $taskName = "NetBird Auto-Update (Latest)"
+        $description = "Automatically updates NetBird to the latest available version"
+    }
+    else {
+        $psCommand = "irm '$launcherUrl' | iex; .\netbird.launcher.ps1 -UpdateToTarget -Silent"
+        $taskName = "NetBird Auto-Update (Version-Controlled)"
+        $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
+    }
+    
+    # Create action (following Microsoft best practices)
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$psCommand`""
+    
+    # Create principal (run as SYSTEM with highest privileges - best practice for system updates)
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    
+    # Create settings (best practices from Microsoft Learn)
+    $settings = New-ScheduledTaskSettingsSet `
+        -StartWhenAvailable `
+        -RunOnlyIfNetworkAvailable `
+        -DontStopIfGoingOnBatteries `
+        -AllowStartIfOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+    
+    # Show summary
+    Write-Host "`n--- Task Summary ---" -ForegroundColor Cyan
+    Write-Host "Task Name: $taskName"
+    Write-Host "Update Mode: $updateMode"
+    Write-Host "Schedule: $($trigger.ToString())"
+    Write-Host "Run As: SYSTEM"
+    Write-Host "Description: $description`n"
+    
+    $confirm = Read-Host "Create this scheduled task? (Y/N)"
+    
+    if ($confirm -ne "Y" -and $confirm -ne "y") {
+        Write-Host "Cancelled." -ForegroundColor Yellow
+        return
+    }
+    
+    # Register the task
+    try {
+        Write-Host "`nCreating scheduled task..." -ForegroundColor Yellow
+        
+        $task = New-ScheduledTask -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description $description
+        Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
+        
+        Write-Host "Success! Scheduled task created: $taskName" -ForegroundColor Green
+        Write-Host "`nYou can view/manage this task in Task Scheduler under:" -ForegroundColor Cyan
+        Write-Host "Task Scheduler Library > $taskName" -ForegroundColor Cyan
+        
+        Write-LauncherLog "Scheduled task created successfully: $taskName"
+    }
+    catch {
+        Write-Host "Failed to create scheduled task: $($_.Exception.Message)" -ForegroundColor Red
+        Write-LauncherLog "Scheduled task creation failed: $($_.Exception.Message)" "ERROR"
+    }
 }
 
 function Get-WizardInputs {
@@ -437,6 +629,12 @@ function Invoke-NetBirdDeployment {
         }
         "Diagnostics" {
             return Invoke-DiagnosticsWorkflow
+        }
+        "UpdateToLatest" {
+            return Invoke-UpdateWorkflow -UpdateMode "Latest"
+        }
+        "UpdateToTarget" {
+            return Invoke-UpdateWorkflow -UpdateMode "Target"
         }
         default {
             Write-LauncherLog "Unknown workflow mode: $Mode" "ERROR"
@@ -758,12 +956,118 @@ function Invoke-DiagnosticsWorkflow {
     }
 }
 
+function Invoke-UpdateWorkflow {
+    <#
+    .SYNOPSIS
+        Executes update-only workflows
+    .PARAMETER UpdateMode
+        "Latest" or "Target" update mode
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("Latest", "Target")]
+        [string]$UpdateMode
+    )
+    
+    Write-LauncherLog "=== NetBird Update Workflow ==="
+    Write-LauncherLog "Update Mode: $UpdateMode"
+    
+    if ($UpdateMode -eq "Latest") {
+        # Update to latest available version
+        $result = Invoke-UpdateToLatest
+        return $result
+    }
+    else {
+        # Update to target version
+        if (-not $script:TargetVersion) {
+            Write-LauncherLog "Target version not specified - checking remote config..." "WARN"
+            $script:TargetVersion = Get-TargetVersionFromRemote
+            
+            if (-not $script:TargetVersion) {
+                Write-LauncherLog "No target version specified and remote config unavailable" "ERROR"
+                Write-LauncherLog "Use -TargetVersion parameter or ensure remote config exists" "ERROR"
+                return 1
+            }
+        }
+        
+        Write-LauncherLog "Target version: $script:TargetVersion"
+        $result = Invoke-UpdateToTarget -TargetVersion $script:TargetVersion
+        return $result
+    }
+}
+
 #endregion
 #region Main Execution
 
 Write-LauncherLog "========================================" 
 Write-LauncherLog "NetBird Modular Launcher v$script:LauncherVersion"
 Write-LauncherLog "========================================"
+
+# Handle scheduled task installation switches
+if ($InstallScheduledTask) {
+    Write-LauncherLog "Scheduled task installation requested"
+    
+    # Determine update mode (default to Target if not specified)
+    $taskUpdateMode = if ($UpdateToLatest) { "Latest" } else { "Target" }
+    
+    # Determine schedule (default to Weekly if not specified)
+    $taskSchedule = "Weekly"  # Default
+    if ($Daily) { $taskSchedule = "Daily" }
+    elseif ($AtStartup) { $taskSchedule = "Startup" }
+    
+    Write-LauncherLog "Creating scheduled task: UpdateMode=$taskUpdateMode, Schedule=$taskSchedule"
+    
+    # Create the task
+    $trigger = switch ($taskSchedule) {
+        "Weekly" { New-ScheduledTaskTrigger -Weekly -At 3AM -DaysOfWeek Sunday }
+        "Daily" { New-ScheduledTaskTrigger -Daily -At 3AM }
+        "Startup" { New-ScheduledTaskTrigger -AtStartup }
+    }
+    
+    $launcherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
+    
+    if ($taskUpdateMode -eq "Latest") {
+        $psCommand = "`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; & `$tempLauncher -UpdateToLatest -Silent; Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue"
+        $taskName = "NetBird Auto-Update (Latest)"
+        $description = "Automatically updates NetBird to the latest available version"
+    }
+    else {
+        $psCommand = "`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; & `$tempLauncher -UpdateToTarget -Silent; Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue"
+        $taskName = "NetBird Auto-Update (Version-Controlled)"
+        $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
+    }
+    
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$psCommand`""
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+    
+    try {
+        $task = New-ScheduledTask -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description $description
+        Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
+        
+        Write-LauncherLog "Scheduled task created successfully: $taskName"
+        Write-Host "`nSuccess! Scheduled task created: $taskName" -ForegroundColor Green
+        Write-Host "Update Mode: $taskUpdateMode" -ForegroundColor Cyan
+        Write-Host "Schedule: $taskSchedule" -ForegroundColor Cyan
+        
+        exit 0
+    }
+    catch {
+        Write-LauncherLog "Failed to create scheduled task: $($_.Exception.Message)" "ERROR"
+        Write-Host "Failed to create scheduled task: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Handle update switches (convenience switches that map to modes)
+if ($UpdateToLatest -and -not $Mode) {
+    $Mode = "UpdateToLatest"
+    Write-LauncherLog "Update switch detected: -UpdateToLatest"
+}
+elseif ($UpdateToTarget -and -not $Mode) {
+    $Mode = "UpdateToTarget"
+    Write-LauncherLog "Update switch detected: -UpdateToTarget"
+}
 
 # Check if interactive mode needed
 if (-not $Mode -or $Interactive) {
@@ -871,8 +1175,8 @@ try {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgEwEDLyauhqxfkp+MtaVBj5D
-# V02gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUS0qt+1IRXhvBsnm5rJjDhVRG
+# 3iWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -1011,33 +1315,33 @@ try {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# GCtW5JNP57mkS5pWDWFhcOIIWcUwDQYJKoZIhvcNAQEBBQAEggIAscnMbobkm1yT
-# 14Sx0YnWQ/UZ6rc6vOukSiloFZeE58qMEGwkJuQvoUZWrwQjBwKb24wFYDhqQIvG
-# 1vmIuJkLvRB1o06exP22siRUP1Gu7ggv+KR1qjUTGTTSvng/Y7abbhlpyU0e8RJc
-# Sd2iHF7GUOviLnNMNkcAf1gWzC1tNIksBAc6vf00IFhkAjW4B1e7wUHVTW5erv7X
-# Xovji2+diX7c5RJ1epHKNgkarkwUqtJBlxf0G+5GUaPojJRoxNOdoZWNoxBQ3iDo
-# wtOAYho4Dyh5uKh3Rqwa1abDapPDt9HVfQojldJeNYwGdEIrpc2I+PCX6T83ikgH
-# jBNq27MhGIPIpJdXo5PLWk5LiyIwJkI/eXPeEm5Cjkd2ilYsjqRrZVm0XJAAg8Tx
-# 3+qLkiEbmqKE8+/Z44qaUnBxAYhfon1Iun6BLFwgAEOI+1lVvzpJUmvdxP13JfM/
-# WA4yCKS3fDewlhi4HCpMIw9K+ZPsBOjLusFOLcnjWO+s8Os0/rc7z91z2n+LeGB7
-# XlnoMGNsfGKuOCtPoFBNUtIusA3R33X0Xjuv5HW2eb0WHNvvgjBlkTY4ucYHsEv6
-# qiAZ+v3ZPczrF5vkZZu+IFgA2tPn7MrgiTbiXB+twdCviRg+osfQhe0MPPtncfhy
-# /ZQkJYsgO98vnrZdQPSuAQNteuCXh7ihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 3kyJsrnPJRfFHS11AQgMxtfVu1QwDQYJKoZIhvcNAQEBBQAEggIABvkFt4jDXBVV
+# ZYqmnmhcAafGzGgWPAJC+V6NKhyt6b/FD15dPr1cBLjTMcb+eSOmcV9TTVVSBof2
+# 5UURKDODCMfp2ngKa5lTRZ8Olf9quGeTX8ncU0wxHQ8MkGT74IBper5mx39TopST
+# 17NkfM7drOmY72ivcZdYpnzqaUivf5rXBZEAvy0ssqrPR8sVT02rcmVnzoqOur5h
+# ccTy3/O5CNJP0IWpVKOZsJ4/ONRNadXKrpuuKwRQPATj6HC1WmzTVEnUuuMkNYV8
+# tib5IiuMABHCr9RSOvUKfzy2XMOuh7s8l0X5i5lUeddkg5kTRbiexFamgdOis8Fw
+# v56+M9OH+eIWNHFoWHTGY0pRRaoKO+B7IlVVbz+nU0lmHl8xIM5gx5m4xcBRJQ72
+# rbLGxQ3BAlWERcyGRveGCRbc7Y8JRVa7SPnYbDQp4oVuM8rbiRnJvC2oswKR2em0
+# 8Vryg3XSuHIsk05E7MbDyLfJ4+FYof4OKmlbWmF2hpZofq/2o3nsqiZi0sXbYa6N
+# +hegKBA9ne/aN8na9JBXZWvFjjhhIqabwFBfYQdzr7Y4WA6JD77BAoyyujxzTO5a
+# Glrm0he3U/KZRX4hQ1owVSXoPVMvCjMwFNZTlpwJl1I6o5MAIzl20qOzlqxP63U5
+# JK66iiTBxhhtrn7phev3HehK/THBW9KhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE4MjEyODIwWjAvBgkqhkiG9w0BCQQxIgQg6G3LKaPC5c/Xl3h7KLseMlMa
-# zQ59F4RjiRgkwS2B96owDQYJKoZIhvcNAQEBBQAEggIAhyV/eSnXk/CI0YKAdL6o
-# bwve/OPYOIISYCj+Btv7GkIpNGpxIWpqKezvqjNBtWQVrTzEyjNmk7O9W5RTFmKo
-# gt3eKCHEW0+IXcFXR2P7RMJCgH5DlNFzRTup8+7cw6ku1JWON26W+m5+SWqv+/kN
-# 9WTzs/G7pufc+qwtB21ovRvItDCPRPExAZzzUfmTRp5CpHudiktT6i7A8rPUJnAq
-# IYu7aVUZyFg1fAWZOkhF3dmjsp/rSU1T3ChHy2RRgyUfTTX752DH5Fffb5MeLmph
-# tTiJoGRjXGWKnOQYfIoNjYQ3VOBYwc6Cxt01xeMlFtEHyZey+Iqfroimb9xOqLsA
-# gRYF+EkW2Aiu+2G5djxi3MrDA29UgLt5NrypeQyaBa6Cg1BGdGkW/8IgQKOS60bL
-# dow+D5aqJzUdquxTiCmdueXKU/YJ/FvGineotXDGhfQI+92jUS5oQroaD4CUW071
-# jvbWKxV44XaTmJqZX0Z9x2Ef9/c/vIzM50J3ANwKiR4mO6hfXn5ZIkPHVkdFeBnL
-# AlB3nR3CEJBIMVJvWX8G7u5srbh2/JopebTTol1XL1WsRNOq2Wz4LPnMaDA0Jp8I
-# dSBzG5oaBG7GeDz5+7RAtLcR0nIhGuDwlWu8OvEYUyQ58Yyy9lsGNWiQphYYMfKe
-# mpuNyxHeo6/3uyIGIZ9I03w=
+# MjUxMjE5MTkzMzExWjAvBgkqhkiG9w0BCQQxIgQgLbd90AKvExN6rS3Yje4bBpVX
+# cbn3lPS2bUlkYqmAjqEwDQYJKoZIhvcNAQEBBQAEggIAbtkws1aYTtRTpkN3q9Q8
+# aGDzh1V2krWEjEHJm6s3+kzKilP93R5hGyZv72V8Dym5rUDYAA6f6pxcQn2otYnh
+# 5LufvW6bls305e/njHvRiLVozoVm2TpTl4vjlECop9D1OKUjmdBMjemmQxExUlsj
+# u9IatKwMTof4Hf9J1PUAoQikYiFf0J4mcl+ZfE550lol3n4sJ1JEQGZwPzVJbPze
+# i+fH9QcTpeyM3tq3GNJJTI/pci0z4K3PNDvm6lGHtADPA+SO+Z89+npnuDCKBnJv
+# qDppx9N8IAx1WwNmggoOwiMUQo4+UftvFvW1g2Fw8mMRK1xazvoPfCsSYE5514M5
+# wNGkwyw8XF/iPdtvX9fek1c53q0cQSZwvbrk2AQyKt4P+6Noao02kFdJEhBjWlc9
+# HsWXYWEhcA2aKQvqX+xhnTs8xepJI8cNnuYAKm/rA5dNrEiuaA6CkszARoXBqWK5
+# 2zaJ3+BjrfoFnAGjqao+NLAqzS1d5ubEWHFwaD63nF4kJKFfhdFUo5j+7jfBjYxz
+# AbTa9pHIjooM5XBQ3u+JPRlrFx6l0I8otY6+D05/8y2492NXPFUCc+qXD9hy6pKE
+# r208C0rSKifjXaSw7AQ1COXgPg/y4K1Ea3DgE6HAOY5HOMbSwLloHq0bcqJbLe+/
+# i9ioH8Vxk7nxpucUgCXRqiM=
 # SIG # End signature block

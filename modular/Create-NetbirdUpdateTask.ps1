@@ -1,117 +1,247 @@
 <#
 .SYNOPSIS
-NetBird Modular Deployment Bootstrap - One-Liner Execution Wrapper
+NetBird Scheduled Update Task Creator - Standalone Script
 
 .DESCRIPTION
-Lightweight bootstrap script for remote execution via IRM/IEX pattern.
-Downloads and executes the main launcher with parameters.
+Creates Windows scheduled tasks for automated NetBird updates.
+Can be run independently or called from the interactive launcher.
 
-Usage:
-    irm 'https://raw.githubusercontent.com/.../bootstrap.ps1' | iex
+Follows Microsoft best practices for scheduled task creation:
+- Runs as SYSTEM account for proper privileges
+- Includes network availability checks
+- Uses appropriate execution time limits
+- Allows start on battery power for mobile devices
 
-    Or with inline parameters:
-    $env:NB_MODE="Standard"; $env:NB_SETUPKEY="key"; irm '...' | iex
+.PARAMETER UpdateMode
+Update mode: "Latest" for always latest version, "Target" for version-controlled updates
+
+.PARAMETER Schedule
+Schedule type: "Weekly", "Daily", or "Startup"
+
+.PARAMETER NonInteractive
+Run in non-interactive mode with defaults (weekly target updates)
+
+.EXAMPLE
+.\Create-NetbirdUpdateTask.ps1
+Interactive mode with prompts
+
+.EXAMPLE
+.\Create-NetbirdUpdateTask.ps1 -UpdateMode Latest -Schedule Weekly
+Create weekly task for latest version updates
+
+.EXAMPLE
+.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Daily
+Create daily task for version-controlled updates
 
 .NOTES
 Version: 1.0.0
+Requires Administrator privileges
 #>
-
-[CmdletBinding()]
-param()
 
 #Requires -RunAsAdministrator
 
-# Check for environment variable parameters (set before IRM/IEX)
-$Mode = if ($env:NB_MODE) { $env:NB_MODE } else { "Standard" }
-$SetupKey = $env:NB_SETUPKEY
-$ManagementUrl = $env:NB_MGMTURL
-$TargetVersion = $env:NB_VERSION
-$FullClear = [bool]$env:NB_FULLCLEAR
-$ForceReinstall = [bool]$env:NB_FORCEREINSTALL
-$Interactive = [bool]$env:NB_INTERACTIVE
-$UpdateToLatest = [bool]$env:NB_UPDATE_LATEST
-$UpdateToTarget = [bool]$env:NB_UPDATE_TARGET
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Latest", "Target")]
+    [string]$UpdateMode,
+    
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Weekly", "Daily", "Startup")]
+    [string]$Schedule,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$NonInteractive
+)
 
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "NetBird Bootstrap v1.0.0" -ForegroundColor Cyan
+# Script version
+$script:Version = "1.0.0"
+
+Write-Host "`n======================================" -ForegroundColor Cyan
+Write-Host "NetBird Scheduled Update Task Creator v$script:Version" -ForegroundColor Cyan
 Write-Host "======================================`n" -ForegroundColor Cyan
 
-Write-Host "Configuration:"
-Write-Host "  Mode: $Mode"
-if ($SetupKey) { Write-Host "  Setup Key: $($SetupKey.Substring(0,8))... (masked)" }
-if ($ManagementUrl) { Write-Host "  Management URL: $ManagementUrl" }
-if ($TargetVersion) { Write-Host "  Target Version: $TargetVersion" }
-if ($FullClear) { Write-Host "  Full Clear: Enabled" }
-if ($ForceReinstall) { Write-Host "  Force Reinstall: Enabled" }
-if ($Interactive) { Write-Host "  Interactive Mode: Enabled" }
-if ($UpdateToLatest) { Write-Host "  Update Mode: Latest" }
-if ($UpdateToTarget) { Write-Host "  Update Mode: Target" }
-Write-Host ""
-
-# Download main launcher
-$LauncherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
-$TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
-$LauncherPath = Join-Path $TempPath "netbird.launcher.ps1"
-
-try {
-    Write-Host "Downloading launcher from GitHub..." -ForegroundColor Yellow
+# Interactive mode if parameters not provided
+if (-not $UpdateMode -and -not $NonInteractive) {
+    Write-Host "Update Mode:"
+    Write-Host "1) Auto-Latest (always update to newest version)"
+    Write-Host "2) Version-Controlled (update to target version from GitHub)"
+    Write-Host "3) Cancel`n"
     
-    if (-not (Test-Path $TempPath)) {
-        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
+    $modeSelection = Read-Host "Select update mode [1-3]"
+    
+    $UpdateMode = switch ($modeSelection) {
+        "1" { "Latest" }
+        "2" { "Target" }
+        "3" { 
+            Write-Host "Cancelled." -ForegroundColor Yellow
+            exit 0
+        }
+        default {
+            Write-Host "Invalid selection." -ForegroundColor Red
+            exit 1
+        }
+    }
+}
+elseif (-not $UpdateMode -and $NonInteractive) {
+    # Default to Target for non-interactive
+    $UpdateMode = "Target"
+}
+
+if (-not $Schedule -and -not $NonInteractive) {
+    Write-Host "`nSchedule Type:"
+    Write-Host "1) Weekly (every Sunday at 3 AM)"
+    Write-Host "2) Daily (every day at 3 AM)"
+    Write-Host "3) At Startup"
+    Write-Host "4) Cancel`n"
+    
+    $scheduleSelection = Read-Host "Select schedule [1-4]"
+    
+    $Schedule = switch ($scheduleSelection) {
+        "1" { "Weekly" }
+        "2" { "Daily" }
+        "3" { "Startup" }
+        "4" {
+            Write-Host "Cancelled." -ForegroundColor Yellow
+            exit 0
+        }
+        default {
+            Write-Host "Invalid selection." -ForegroundColor Red
+            exit 1
+        }
+    }
+}
+elseif (-not $Schedule -and $NonInteractive) {
+    # Default to Weekly for non-interactive
+    $Schedule = "Weekly"
+}
+
+Write-Host "`nSelected Configuration:" -ForegroundColor Green
+Write-Host "  Update Mode: $UpdateMode"
+Write-Host "  Schedule: $Schedule`n"
+
+# Create the scheduled task trigger
+$trigger = switch ($Schedule) {
+    "Weekly" {
+        Write-Host "Creating weekly trigger (Sunday at 3 AM)..." -ForegroundColor Yellow
+        New-ScheduledTaskTrigger -Weekly -At 3AM -DaysOfWeek Sunday
+    }
+    "Daily" {
+        Write-Host "Creating daily trigger (3 AM)..." -ForegroundColor Yellow
+        New-ScheduledTaskTrigger -Daily -At 3AM
+    }
+    "Startup" {
+        Write-Host "Creating startup trigger..." -ForegroundColor Yellow
+        New-ScheduledTaskTrigger -AtStartup
+    }
+}
+
+# Build the PowerShell command
+$launcherUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1"
+
+if ($UpdateMode -eq "Latest") {
+    # Download launcher to temp and execute with UpdateToLatest switch
+    $psCommand = @"
+`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; `
+Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; `
+& `$tempLauncher -UpdateToLatest -Silent; `
+Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue
+"@
+    $taskName = "NetBird Auto-Update (Latest)"
+    $description = "Automatically updates NetBird to the latest available version"
+}
+else {
+    # Download launcher to temp and execute with UpdateToTarget switch
+    $psCommand = @"
+`$tempLauncher = Join-Path `$env:TEMP 'netbird-launcher-update.ps1'; `
+Invoke-WebRequest -Uri '$launcherUrl' -OutFile `$tempLauncher -UseBasicParsing; `
+& `$tempLauncher -UpdateToTarget -Silent; `
+Remove-Item `$tempLauncher -Force -ErrorAction SilentlyContinue
+"@
+    $taskName = "NetBird Auto-Update (Version-Controlled)"
+    $description = "Updates NetBird to target version from GitHub config (modular/config/target-version.txt)"
+}
+
+# Create action (following Microsoft best practices)
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$psCommand`""
+
+# Create principal (run as SYSTEM with highest privileges - best practice for system updates)
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+# Create settings (best practices from Microsoft Learn)
+# - StartWhenAvailable: Run task if it missed a scheduled start
+# - RunOnlyIfNetworkAvailable: Don't run without network (needed for GitHub access)
+# - DontStopIfGoingOnBatteries: Continue running on laptops
+# - AllowStartIfOnBatteries: Start even on battery power
+# - ExecutionTimeLimit: 2 hour timeout for safety
+$settings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -RunOnlyIfNetworkAvailable `
+    -DontStopIfGoingOnBatteries `
+    -AllowStartIfOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+
+# Show summary
+Write-Host "`n--- Task Summary ---" -ForegroundColor Cyan
+Write-Host "Task Name: $taskName"
+Write-Host "Update Mode: $UpdateMode"
+Write-Host "Schedule: $Schedule"
+Write-Host "Run As: SYSTEM (highest privileges)"
+Write-Host "Network Required: Yes"
+Write-Host "Battery-Friendly: Yes"
+Write-Host "Description: $description`n"
+
+if (-not $NonInteractive) {
+    $confirm = Read-Host "Create this scheduled task? (Y/N)"
+    
+    if ($confirm -ne "Y" -and $confirm -ne "y") {
+        Write-Host "Cancelled." -ForegroundColor Yellow
+        exit 0
+    }
+}
+
+# Register the task
+try {
+    Write-Host "`nCreating scheduled task..." -ForegroundColor Yellow
+    
+    $task = New-ScheduledTask -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description $description
+    Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
+    
+    Write-Host "Success! Scheduled task created: $taskName" -ForegroundColor Green
+    Write-Host "`nYou can view/manage this task in Task Scheduler:" -ForegroundColor Cyan
+    Write-Host "  1. Open Task Scheduler (taskschd.msc)" -ForegroundColor Cyan
+    Write-Host "  2. Navigate to Task Scheduler Library" -ForegroundColor Cyan
+    Write-Host "  3. Find: $taskName`n" -ForegroundColor Cyan
+    
+    # Show next run time if available
+    try {
+        $taskInfo = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if ($taskInfo) {
+            $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+            if ($taskInfo.NextRunTime) {
+                Write-Host "Next scheduled run: $($taskInfo.NextRunTime)" -ForegroundColor Green
+            }
+        }
+    }
+    catch {
+        # Silent failure - not critical
     }
     
-    Invoke-WebRequest -Uri $LauncherUrl -OutFile $LauncherPath -UseBasicParsing -ErrorAction Stop
-    Write-Host "Launcher downloaded successfully`n" -ForegroundColor Green
+    Write-Host "`nTo test the task immediately, run:" -ForegroundColor Cyan
+    Write-Host "  Start-ScheduledTask -TaskName '$taskName'`n" -ForegroundColor Cyan
+    
+    exit 0
 }
 catch {
-    Write-Host "Failed to download launcher: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "`nFallback: Use monolithic script instead" -ForegroundColor Yellow
-    Write-Host "irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/netbird.extended.ps1' -OutFile netbird.ps1" -ForegroundColor Yellow
-    exit 1
-}
-
-# Build parameter list
-$LauncherArgs = @{
-    Mode = $Mode
-}
-
-if ($SetupKey) { $LauncherArgs['SetupKey'] = $SetupKey }
-if ($ManagementUrl) { $LauncherArgs['ManagementUrl'] = $ManagementUrl }
-if ($TargetVersion) { $LauncherArgs['TargetVersion'] = $TargetVersion }
-if ($FullClear) { $LauncherArgs['FullClear'] = $true }
-if ($ForceReinstall) { $LauncherArgs['ForceReinstall'] = $true }
-if ($Interactive) { $LauncherArgs['Interactive'] = $true }
-if ($UpdateToLatest) { $LauncherArgs['UpdateToLatest'] = $true }
-if ($UpdateToTarget) { $LauncherArgs['UpdateToTarget'] = $true }
-
-# Execute launcher
-Write-Host "Executing NetBird deployment..." -ForegroundColor Yellow
-Write-Host "======================================`n" -ForegroundColor Cyan
-
-try {
-    & $LauncherPath @LauncherArgs
-    $ExitCode = $LASTEXITCODE
-    
-    Write-Host "`n======================================" -ForegroundColor Cyan
-    if ($ExitCode -eq 0) {
-        Write-Host "Bootstrap completed successfully" -ForegroundColor Green
-    } else {
-        Write-Host "Bootstrap failed with exit code: $ExitCode" -ForegroundColor Red
-    }
-    Write-Host "======================================" -ForegroundColor Cyan
-    
-    exit $ExitCode
-}
-catch {
-    Write-Host "Launcher execution failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Failed to create scheduled task: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU41b2x/Fo3lAu9Owa6vy03wWy
-# Exqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU6ZSQWDV54l3EDgWc5VJoMvdW
+# 4uqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -250,33 +380,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# gFOC9lqJCsAi0ZtFAxcxSPGNOgkwDQYJKoZIhvcNAQEBBQAEggIATSSGkNDQ9YdP
-# LgYNaAbG9gP+WC8t/IVxharMhhSU3jbtp0eNHVtq/ZtS55uGeYqtjmPgfVGwveFF
-# PFGn2I7GYJn1aHA0RG4PjUcsj0MmaxGHnsTQcq+qHhLwoG38yLFFvAfMd8onF/49
-# 7M3LE1nfz/7oIaRkK8ZqlwN8kokglmbKwCerHtByMaxuTYGduLzosVD45vArJoK3
-# C0kRYs69l9fHz0MwBrqwyM9TEVDCbMsIo42LTe5UcJbQIOSUMhj/AyglUrJGFnh/
-# pO7g+Lw8xN7+lzkHHnkqj90wVt8dB069BcuN3U2e9GE7xOazTSP3l0Ilw1jr849u
-# mxRiJHghXJn7o2l5m4dsiy+qSa5Y0mjp44H0qbAYOQgEBU4q3v6wIneBsY+JI4Rj
-# ZSfWIjFmoZMh/RLmlnrMiDstt3Jv0xcp8B61btSZBeNwwhWvOm+dbEWFvoTuqcM1
-# XyFGViYgEcYj3cRk8lVxGo15eMEqUTxMxwluPrbgxHyGfaqLBfXA/jyECgtYXBwX
-# Ii2Up9Ifh89WkbZLzzxz0A8upNiOBQWkZIV7gp/vmRgTXh0WKLI0war5UAksTybT
-# ekAKNPskJlrAc+Ko54y2FbpmkAvcURb5Q5QfPXfMtHfJ0Kkk9MZ5wkv/uh2MadQW
-# BYCWblvbRG7xtGvvfwO4KRxx3XdXN+ShggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# +9xg8aNYznVxdbFg2pq45ZHwCA0wDQYJKoZIhvcNAQEBBQAEggIAL4WBjyXQ0tfx
+# mySVYFys1cwwq+PkRJijCyeKOU3CZsqXJVHIk9wVq7FahzAS2RMhAvTnNRDEa/ZF
+# 6vNgbhvKELmOGti+bO0J9WC+E3aDmQJpNFle7zKz7pApIbt+V/ctZbcaO8EVVRS8
+# DbZH9MSUmzX42NH6iA2QD/4EBvFLeFD7hLdLHvwo7ZtItoRwkb6gay1TKrgEMrh6
+# RWGRhUvTm/Xpf3fTontHuGyrjrGtXKU/2fCbIA3g65Npc8jksfm/SV9mVYN61SmO
+# XwZD6haW9d0ZpqV2OdeTse0RrIszIYOPhm4MKJESB45BIq0OY/RTflAYJ+u6KFJc
+# WTY1FriShZD1akedJmgvIHXYvo7bEqLalsXMRHCGK5agcb3/0rB/DVNGJtEGm1FM
+# /9VBpSQHqVfY2Ext2q47riEkRiJ+u1Uh7SzALax/DnbR1rsqKVNbDVGmAU5DhYOa
+# DIk33fC/M7tH7vD5nqTVWIKTtQeTmUF/6Qzfx29Mr3lIne75+sjNv2hGbbaagbu8
+# qB66FTGf1nb35ldE7XkKiv6AsBUa6YY15Wt6iWXCIa4Rzkx5vSnRkqUChh7DroBU
+# AbYeEnqz25VjjpWpEfGSbkNH9Bx3dg/B6oYGSUNCKBzM2fJ6ttyYZ+pBr8zVnv5t
+# ZATnEPZM+M1PK1vdJLCQeGiCVmTY6tShggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjUxMjE5MTkzMzEwWjAvBgkqhkiG9w0BCQQxIgQgk8QhMqgU/uLEVFDNeJKG4CW2
-# NabqSycIIgJ+0FbN8sEwDQYJKoZIhvcNAQEBBQAEggIAikTLWul4CE2sMXC8VqCQ
-# mjBxlcHt1BZqV7lI0q7bFzosl0cibytMdk0mkeGxYkZ6tlT/xYbEPiY7glxBhmKy
-# 2Av9PNdEWvmKjt8UQ0DJviPmGgIk6w3g4W9On3qtilJzteUa4sKq+zGjK51vS9FC
-# /DecPJL9712cDsvZF7JOLVgOBY5zcn30xUrNwrdh+4Pms6bLARjYHLCSpLFC6mI1
-# lRxjs2E/LkgjY0Cq0Pd74fRzVRNoY7xAtZo1mnVQKabmzurCAQH48jDaq4Sbq8CH
-# Z3uDVcw/+suDvB1NflmHCRT9V/UwnO+56aQ/RThlYFhrlWxQQ2jRlxjRkJjAsVQC
-# 1etI7yJNIQj6RkGgBFJKGHIG5hKGT0HO5nFT7NMa8k9dzYKZ8kRLwn/xW0dnBiKf
-# Z1t+mJnOfGmtbHSWBW7PCY4m9/agLuic/a9QPcuhikl2vr6y0UU3T9dm3PLl5wUE
-# 6k7x+MxOtXW/rXMPxK3r6SUUaajeLE3LU66mpnA8h4SC+G6f/jkN80sUXel/Q6vb
-# VyuTFk4bqPynhTQ4+nLq8vk1mZEdP1cowNAeiSyMVOxOVfSGTtpL/Esa7DsfyXIv
-# ZmTqSuXoH5oVO6/PSgDcjx9fTO1emGl/GHjgXDig7Hiqu4DfAGhfvn4Bhohi/aJO
-# Wf0gte/TFuBl33X7jwWl3pA=
+# MjUxMjE5MTkzMzExWjAvBgkqhkiG9w0BCQQxIgQgftxWLRoqYpXmU22KaE91RRzn
+# hUgvnK/frkiGLKUkNGcwDQYJKoZIhvcNAQEBBQAEggIAxn/7c0KDnX0YExaP61CG
+# aZi6cJXXMYCYhpK2eRvcC0M0LjJaApOyKExr5mQU0T+zo1lE293e4SEjssfRr0ft
+# l4KcdpDScf8t1OG57bLZMNyOnbCgw/5dFfA9OnkYIX04ycRY1sBW7yhJqziYZifA
+# GRdc5xOYpGWc2tqp1Z2RTQYAALunIphXnGys5sKHZ3qGoz1i4MDn3Nft5k0G0gEV
+# w226QA5+HFlZYOYbLhBexdSscxHKi3yr3mfhjmabo6/iLKK9tiT9FaV5dVFNH5aB
+# ogSgkSkN1ZM7dEfrdTW6nzTMqWs9K17FPeV7G+5oGOQGh48nLjGuNslB/oxrQN4H
+# KxRXW+8nlkMoCUUh+0oYgEwbqYrQ5Cm/PTEraljL4STew2Px7+iTZ1y3Ab8JkIEW
+# B0kvHotp9VyYE8NhoTMNN9RRsV1F/emk+7rsELd59cDOP6jj/lT/V7uXQKpWq8dF
+# xDzLxsDfAvk+BmJYQebpfTBtHNPJB3cL2OyDD1XHqr53rYkLYju9uRryG3kclCvX
+# GuPR7Fvd9CaIzemgv5sE0Cp1f20ZuiuiI7Cmev3QKsiB1nr83WK1Kx2QjLESt6wC
+# JqUHXfQsZzl+u3OCJ364EtjwVqs1i5YANH/vr6Zixz0ia+KLILoIN4Ub7QBVGOYu
+# bbljIz1uW055wR3vHuCZXkk=
 # SIG # End signature block
