@@ -560,7 +560,7 @@ Assignment: All Autopilot Devices (or your Hybrid Join device group)
 - User-targeted policies/apps deploy after registration completes (transparent to user)
 - No timeout errors or delays during provisioning
 
-**See [GUIDE_ADFS_HYBRID_JOIN.md](GUIDE_ADFS_HYBRID_JOIN.md) for detailed explanation of AD FS, the sync delay, and why disabling User ESP is recommended.**
+**See [GUIDE_ADFS_HYBRID_JOIN.md](authentication/GUIDE_ADFS_HYBRID_JOIN.md) for detailed explanation of AD FS, the sync delay, and why disabling User ESP is recommended.**
 
 ### Troubleshooting Hybrid Join Failures
 
@@ -650,7 +650,9 @@ After successful OOBE deployment:
 
 ## Related Guides
 
-- [GUIDE_ADFS_HYBRID_JOIN.md](GUIDE_ADFS_HYBRID_JOIN.md) - Understanding AD FS and User ESP in Hybrid Join scenarios
+- [GUIDE_ADFS_HYBRID_JOIN.md](authentication/GUIDE_ADFS_HYBRID_JOIN.md) - Understanding AD FS and User ESP in Hybrid Join scenarios
+- [GUIDE_HYBRID_AUTH_METHODS.md](authentication/GUIDE_HYBRID_AUTH_METHODS.md) - AD FS, PHS, and PTA authentication methods
+- [GUIDE_ENTRA_JOIN_TYPES.md](authentication/GUIDE_ENTRA_JOIN_TYPES.md) - Entra Registered, Joined, and Hybrid Joined comparison
 - [GUIDE_INTUNE_STANDARD.md](GUIDE_INTUNE_STANDARD.md) - Post-OOBE/standard Intune deployment
 - [GUIDE_SCHEDULED_UPDATES.md](GUIDE_SCHEDULED_UPDATES.md) - Automated update management
 - [GUIDE_DIAGNOSTICS.md](GUIDE_DIAGNOSTICS.md) - Troubleshooting and diagnostics

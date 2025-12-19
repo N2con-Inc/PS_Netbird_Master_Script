@@ -747,7 +747,8 @@ If you have clients currently on AD FS who want to simplify:
 ## Related Guides
 
 - [GUIDE_ADFS_HYBRID_JOIN.md](GUIDE_ADFS_HYBRID_JOIN.md) - AD FS certificates and infrastructure details
-- [GUIDE_INTUNE_OOBE.md](GUIDE_INTUNE_OOBE.md) - Hybrid Azure AD Join with VPN
+- [GUIDE_ENTRA_JOIN_TYPES.md](GUIDE_ENTRA_JOIN_TYPES.md) - Entra Registered, Joined, and Hybrid Joined comparison
+- [GUIDE_INTUNE_OOBE.md](../GUIDE_INTUNE_OOBE.md) - Hybrid Azure AD Join with VPN
 
 <citations>
 <document>
