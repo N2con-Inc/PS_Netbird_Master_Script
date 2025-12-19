@@ -4,341 +4,405 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a PowerShell-based NetBird VPN client installation and management tool for Windows. The repository contains two single-file scripts optimized for different deployment scenarios.
+This is a modular PowerShell-based NetBird VPN client installation and management tool for Windows. The repository uses a modern modular architecture with bootstrap deployment pattern.
 
-**Scripts:**
+## Architecture: Modular System (ACTIVE)
 
-### `netbird.extended.ps1` - Full-Featured Installation & Management
-- Production-ready for standard Windows installations
-- ~2050 lines with comprehensive inline documentation
-- 4-scenario execution logic for predictable behavior
-- Comprehensive network prerequisites validation (8 checks)
-- Persistent logging to timestamped files for Intune/RMM troubleshooting
-- JSON status parsing with automatic text fallback for reliability
-- Enhanced diagnostic checks for Relays, Nameservers, and Peer connectivity
-- Designed for enterprise deployment via Intune/RMM tools
+**Location**: `modular/` directory
 
-### `netbird.oobe.ps1` - OOBE-Optimized Installation
-- Specialized for Windows Out-of-Box Experience (OOBE) deployments
-- ~680 lines optimized for USB/first-boot deployment
-- Bypasses user profile dependencies ($env:TEMP, HKCU registry, desktop shortcuts)
-- Uses C:\Windows\Temp for all operations (OOBE-safe)
-- Simplified 3-check network validation
-- Direct MSI → register workflow (mirrors manual CLI approach)
-- Setup key required (mandatory for OOBE deployments)
+The current system uses a modular architecture with these key components:
 
-**Key Characteristics:**
-- Windows-only (PowerShell 5.1+ and PowerShell 7+ compatible)
-- Single file architecture for easy deployment
-- Requires Administrator privileges
-- **Both scripts must maintain version synchronization**
+### Core Files
 
-## Commands
+**bootstrap.ps1**
+- Entry point for all deployments
+- Parses environment variables for configuration
+- Fetches and executes launcher from GitHub
+- Minimal logic - delegates to launcher
+- Lines: ~100
 
-### Testing and Running
+**netbird.launcher.ps1**
+- Main orchestrator and controller
+- Loads modules from GitHub or cache
+- Executes workflows based on mode
+- Interactive menu system
+- Lines: ~800+
 
-**Extended Script (Standard Deployments):**
+**modules/** directory
+- `netbird.core.ps1` - Core installation and version management
+- `netbird.registration.ps1` - Registration and setup key handling
+- `netbird.service.ps1` - Windows service management
+- `netbird.version.ps1` - Version detection and comparison
+- `netbird.diagnostics.ps1` - Status checks and troubleshooting
+- `netbird.oobe.ps1` - OOBE-specific deployment logic
+- `netbird.zerotier.ps1` - ZeroTier migration logic
+- `netbird.update.ps1` - Automated update management
+
+**config/** directory
+- `module-manifest.json` - Module registry, versions, workflows
+- `target-version.txt` - Centralized target version for controlled updates
+
+### Key Scripts
+
+**Create-NetbirdUpdateTask.ps1**
+- Standalone script for creating scheduled update tasks
+- Can be run independently or called from launcher
+- Lines: ~250
+
+**Sign-Scripts.ps1**
+- Code signing automation for all PowerShell files
+- Uses N2con Inc code signing certificate
+- Lines: ~100
+
+## Bootstrap Pattern
+
+The deployment pattern follows this flow:
+
+```
+User Command → bootstrap.ps1 → netbird.launcher.ps1 → Load Modules → Execute Workflow
+```
+
+**Key Principles:**
+1. Scripts are always fetched fresh from GitHub (no local storage)
+2. Configuration via environment variables only
+3. Single source of truth in GitHub repository
+4. Modules cached in temp directory for performance
+
+## Environment Variables
+
+All configuration is done via environment variables:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `NB_MODE` | Deployment mode | `Standard`, `OOBE`, `ZeroTier`, `Diagnostics` |
+| `NB_SETUPKEY` | NetBird setup key | UUID/Base64/Prefixed format |
+| `NB_MGMTURL` | Management server | `https://api.netbird.io` |
+| `NB_VERSION` | Target version | `0.60.8` |
+| `NB_FULLCLEAR` | Full config reset | `1` |
+| `NB_FORCEREINSTALL` | Force reinstall | `1` |
+| `NB_UPDATE_LATEST` | Update to latest | `1` |
+| `NB_UPDATE_TARGET` | Update to target | `1` |
+| `NB_INTERACTIVE` | Interactive mode | `1` |
+
+## Deployment Modes
+
+The system supports multiple deployment modes via `NB_MODE`:
+
+- **Standard**: Normal Windows installation with full features
+- **OOBE**: Windows setup phase deployment (bypasses user profile dependencies)
+- **ZeroTier**: Automated migration from ZeroTier to NetBird
+- **Diagnostics**: Status checks and troubleshooting
+- **UpdateToLatest**: Update NetBird to latest version
+- **UpdateToTarget**: Update NetBird to target version
+
+## Module System
+
+### Module Manifest
+
+`modular/config/module-manifest.json` defines:
+- System version (semantic versioning)
+- Module registry (name, path, version, description)
+- Workflow definitions (mode → module mapping)
+
+### Module Loading
+
+Launcher loads modules in this order:
+1. Check temp cache for matching version
+2. Download from GitHub if not cached or version mismatch
+3. Validate signature (if signed)
+4. Dot-source into shared scope
+
+### Module Dependencies
+
+- `netbird.core.ps1` must load first (provides Write-Log)
+- Other modules can depend on core functions
+- Shared scope enables cross-module function calls
+
+## Code Signing
+
+All PowerShell scripts are digitally signed:
+- **Certificate**: N2con Inc code signing certificate
+- **Thumbprint**: B308113A762DD010864EE42377248F40A9A2CD63
+- **Valid Until**: 09/27/2028
+- **Tool**: `Sign-Scripts.ps1` automates signing
+
+## Automated Updates
+
+The system includes update management:
+
+### Update Modes
+1. **UpdateToLatest**: Always fetch newest NetBird release
+2. **UpdateToTarget**: Use version from `config/target-version.txt`
+
+### Scheduled Tasks
+- Created via launcher interactive menu or standalone script
+- Uses bootstrap pattern (not direct script execution)
+- Runs as SYSTEM account with highest privileges
+- Supports weekly, daily, or at-startup schedules
+
+### Update Workflows
 ```powershell
-# View full help and parameter documentation
-Get-Help ./netbird.extended.ps1 -Full
-
-# Run with execution policy bypass (standard deployment method)
-pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1
-
-# Example: Install/upgrade and register with setup key
-pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1 -SetupKey "your-setup-key-here"
-
-# Example: Full reset and registration (enterprise troubleshooting)
-pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1 -SetupKey "key" -FullClear
-
-# Example: Install with desktop shortcut retention
-pwsh -ExecutionPolicy Bypass -File ./netbird.extended.ps1 -SetupKey "key" -AddShortcut
+# Environment variable set → Bootstrap invoked → Launcher detects mode → Update module executes
 ```
 
-**OOBE Script (Windows Setup Phase):**
-```powershell
-# View help
-Get-Help ./netbird.oobe.ps1 -Full
+## Common Modification Scenarios
 
-# USB deployment with local MSI (recommended)
-PowerShell.exe -ExecutionPolicy Bypass -File D:\netbird.oobe.ps1 -SetupKey "key" -MsiPath "D:\netbird.msi"
+### Adding New Module
 
-# Download from GitHub (requires internet during OOBE)
-PowerShell.exe -ExecutionPolicy Bypass -File D:\netbird.oobe.ps1 -SetupKey "key"
+1. Create `modular/modules/netbird.newmodule.ps1`
+2. Add to `module-manifest.json`:
+   ```json
+   {
+     "name": "netbird.newmodule",
+     "path": "modules/netbird.newmodule.ps1",
+     "version": "1.0.0",
+     "description": "New module description"
+   }
+   ```
+3. Add workflow mapping if needed
+4. Sign with `Sign-Scripts.ps1`
+5. Test loading via launcher
 
-# Custom management server
-PowerShell.exe -ExecutionPolicy Bypass -File .\netbird.oobe.ps1 -SetupKey "key" -ManagementUrl "https://netbird.example.com"
+### Adding New Workflow
+
+1. Edit `module-manifest.json` workflows section
+2. Map mode name to required modules array
+3. Update launcher mode validation if needed
+4. Document in README.md
+
+### Modifying Bootstrap Logic
+
+- Keep bootstrap.ps1 minimal (< 150 lines)
+- Environment variable parsing only
+- Delegate complex logic to launcher
+- Test with all deployment modes
+
+### Modifying Launcher
+
+- Located at `modular/netbird.launcher.ps1`
+- Key functions:
+  - Module loading and caching
+  - Interactive menu
+  - Workflow execution
+  - Scheduled task creation
+- Always maintain backward compatibility with existing environment variables
+
+## Testing
+
+No automated tests exist. Manual testing checklist:
+
+- [ ] Test all deployment modes (Standard, OOBE, ZeroTier, Diagnostics)
+- [ ] Test both update modes (Latest, Target)
+- [ ] Verify interactive menu flows
+- [ ] Test scheduled task creation (all schedules)
+- [ ] Verify code signatures valid
+- [ ] Test bootstrap pattern from GitHub
+- [ ] Verify module caching works
+- [ ] Test on clean Windows system
+- [ ] Test upgrade scenarios
+
+## Version Management
+
+### System Versioning
+
+Tracked in `modular/config/module-manifest.json`:
+```json
+{
+  "systemVersion": "1.3.0",
+  ...
+}
 ```
 
-### Version Management
-```powershell
-# Create new version tag (semantic versioning)
-git tag v1.X.Y
-git push origin v1.X.Y
+### Module Versioning
 
-# After tagging, create GitHub release manually at:
-# https://github.com/N2con-Inc/PS_Netbird_Master_Script/releases
+Each module has independent version in manifest:
+```json
+{
+  "modules": [
+    {
+      "name": "netbird.core",
+      "version": "1.2.0"
+    }
+  ]
+}
 ```
 
-**Versioning Rules:**
-- Bug fixes: +0.0.1
-- New features/functions: +0.1.0
-- Major versions: +1.0.0 (manual decision)
-- Every version change requires Git tag + GitHub Release
+### Versioning Rules
 
-### No Build/Test System
-This repository has no automated build, lint, or test infrastructure. Testing is manual via PowerShell execution.
+Follow semantic versioning:
+- **Bug fixes**: +0.0.1
+- **New features**: +0.1.0  
+- **Major changes**: +1.0.0
 
-## Code Architecture
-
-### Single-File Monolith Structure
-The entire codebase is in `netbird.extended.ps1` with this organization:
-
-```
-┌─ Header (Lines 1-78)
-│  ├─ #Requires -RunAsAdministrator
-│  │  ├─ Synopsis/Description/Parameters (.SYNOPSIS block)
-│  │  └─ Version History (detailed changelog in comments)
-│
-├─ Parameters & Configuration (Lines 52-79)
-│  ├─ Script parameters (SetupKey, ManagementUrl, switches)
-│  ├─ Global variables: paths, service names, URLs
-│  └─ Log file path initialization
-│
-├─ Core Functions (Lines 81-1853)
-│  ├─ Write-Log: Centralized logging with error classification + persistent file logging
-│  ├─ Status Command Wrapper (NEW in v1.14.0)
-│  │  ├─ Invoke-NetBirdStatusCommand (retry logic wrapper)
-│  │  └─ Get-NetBirdStatusJSON (JSON parsing with fallback)
-│  ├─ Version Detection (6-method cascade)
-│  │  ├─ Get-LatestVersionAndDownloadUrl (GitHub API)
-│  │  ├─ Get-NetBirdVersionFromExecutable (multiple command attempts)
-│  │  └─ Get-InstalledVersion (registry, path search, service, brute force)
-│  ├─ Installation Functions
-│  │  ├─ Install-NetBird (MSI download & silent install)
-│  │  └─ Compare-Versions (semantic version comparison)
-│  ├─ Service Management
-│  │  ├─ Start/Stop/Restart-NetBirdService
-│  │  └─ Wait-ForServiceRunning
-│  ├─ State Management
-│  │  └─ Reset-NetBirdState (partial/full config clear)
-│  ├─ Registration System (v1.10.0+, enhanced v1.12.0-1.16.0)
-│  │  ├─ Wait-ForDaemonReady (6-level readiness validation with gRPC checks)
-│  │  ├─ Test-NetworkPrerequisites (comprehensive 8-check network validation - v1.15.0)
-│  │  ├─ Test-NetworkStackReady (backward-compatible wrapper)
-│  │  ├─ Test-RegistrationPrerequisites (setup key, TCP/HTTPS connectivity, firewall)
-│  │  ├─ Register-NetBirdEnhanced (intelligent retry with progressive recovery - 5 attempts)
-│  │  ├─ Invoke-NetBirdRegistration (single registration attempt)
-│  │  ├─ Confirm-RegistrationSuccess (6-factor validation with diagnostic checks)
-│  │  ├─ Get-RecoveryAction (error-specific recovery strategies)
-│  │  └─ Invoke-RecoveryAction (automated recovery execution)
-│  ├─ Status & Diagnostics (enhanced v1.13.0-1.14.0)
-│  │  ├─ Check-NetBirdStatus (JSON-first with text fallback, retry logic)
-│  │  ├─ Log-NetBirdStatusDetailed (verbose status output)
-│  │  └─ Export-RegistrationDiagnostics (troubleshooting data export)
-│  │
-└─ Main Execution Logic (Lines 1855-2113) - **MAJOR v1.16.0 REFACTOR**
-   ├─ Administrator check
-   ├─ Version detection & comparison
-   ├─ 4-Scenario Logic Structure:
-   │   ├─ SCENARIO 1: Fresh install without key (install & exit)
-   │   ├─ SCENARIO 2: Upgrade without key (status check, upgrade, status check)
-   │   ├─ SCENARIO 3: Fresh install with key (install, register, verify)
-   │   └─ SCENARIO 4: Upgrade with key (status, upgrade, status, conditional register)
-   └─ Explicit pre/post upgrade status logging
-```
-
-### Key Technical Patterns
-
-**1. Error Classification System (v1.11.0+)**
-All log messages use source attribution:
-- `[NETBIRD-ERROR]`: NetBird daemon/CLI errors
-- `[SCRIPT-ERROR]`: PowerShell script logic errors
-- `[SYSTEM-ERROR]`: Windows OS/service errors
-- Format: `Write-Log "message" "ERROR" -Source "NETBIRD"`
-
-**2. Multi-Method Detection Cascade**
-The script tries 6 progressively exhaustive methods to find existing NetBird installations:
-1. Default path check
-2. Registry enumeration (3 hives)
-3. Common path search
-4. System PATH environment variable
-5. Windows Service path extraction
-6. Brute force recursive search
-
-**3. Enhanced Registration System (v1.10.0+, significantly enhanced v1.12.0-1.14.0)**
-Replaces simple registration with intelligent multi-phase approach:
-- **Phase 0**: Network stack readiness validation (OOBE/fresh Windows install support)
-- **Phase 1**: 6-level daemon readiness validation (service, API, gRPC connectivity, permissions)
-- **Phase 2**: Prerequisites validation (setup key format, TCP/HTTPS connectivity, disk space, firewall)
-- **Phase 3**: Aggressive state clearing for fresh installs (prevents MSI config RPC timeouts)
-- **Phase 4**: Smart registration with progressive recovery (5 retry attempts: wait → partial reset → full reset)
-- **Phase 5**: 6-factor success verification with diagnostic checks (management/signal connected, IP assigned, no errors, relays/nameservers status)
-- **Phase 6**: Diagnostic export on failure with persistent logging
-
-**4. Setup Key Format Support (v1.10.2+)**
-Supports three key formats via regex validation:
-- UUID: `77530893-E8C4-44FC-AABF-7A0511D9558E`
-- Base64: `YWJjZGVmZ2hpamts=`
-- NetBird prefixed: `nb_setup_abc123`
-
-**5. PowerShell 5.1 Compatibility (v1.10.1+)**
-Avoids PowerShell 7+ features for Windows compatibility:
-- No null-conditional operators (`?.`)
-- Explicit null checks instead of modern syntax
-- Compatible with default Windows PowerShell installation
-
-**6. Persistent Logging System (v1.14.0+)**
-Enhanced logging for enterprise troubleshooting:
-- All console output automatically written to timestamped log files
-- Log files stored in `$env:TEMP\NetBird-Installation-{timestamp}.log`
-- Silent failure handling to prevent script interruption
-- Perfect for Intune/RMM deployments where console output is lost
-
-**7. JSON-First Status Parsing (v1.14.0+)**
-Robust status detection with automatic fallback:
-- Primary: JSON parsing via `netbird status --json`
-- Fallback: Text parsing with multiline regex anchors
-- Automatic retry logic (3 attempts with 3s delay)
-- Handles transient daemon communication failures
-
-**8. Enhanced Diagnostic System (v1.14.0+)**
-Comprehensive connectivity and infrastructure diagnostics:
-- **Relays**: P2P fallback server availability
-- **Nameservers**: NetBird DNS resolution capability
-- **Peers**: Network connectivity to other NetBird clients
-- **TCP/HTTPS validation**: Corporate proxy/firewall detection
-- Diagnostic warnings vs. critical errors distinction
-
-**9. Comprehensive Network Prerequisites (v1.15.0+)**
-8-check network validation system with two priority tiers:
-- **Critical (blocking)**: Active adapter, default gateway, DNS servers, DNS resolution, internet connectivity
-- **High-value (warnings)**: Time synchronization, proxy detection, signal server reachability
-- Prevents wasted registration cycles in OOBE/restricted environments
-- Structured results with separate blocking issues vs warnings arrays
-- Detailed logging with ✓/✗ indicators and summary output
-
-**10. 4-Scenario Execution Logic (v1.16.0+)**
-Complete rewrite of main execution flow for predictable behavior:
-- **SCENARIO 1**: Fresh install without key → Install and exit
-- **SCENARIO 2**: Upgrade without key → Pre-check, upgrade, post-check, preserve connection
-- **SCENARIO 3**: Fresh install with key → Install, register, verify
-- **SCENARIO 4**: Upgrade with key → Pre-check, upgrade, post-check, conditional registration
-- Explicit pre/post upgrade status logging for troubleshooting
-- Clear decision logic for when registration occurs
-- FullClear properly forces re-registration even when connected
-
-## Important Implementation Notes
-
-### Maintaining Both Scripts
-
-**CRITICAL: Version Synchronization**
-
-Both `netbird.extended.ps1` and `netbird.oobe.ps1` must maintain synchronized versions. When incrementing the version:
-
-1. Update `netbird.extended.ps1`:
-   - `$ScriptVersion` variable (line ~70)
-   - `.NOTES` Script Version (line ~23)
-   - Version history comment block (line ~28-40)
-
-2. Update `netbird.oobe.ps1`:
-   - `$ScriptVersion` variable (line ~53) - Use format `X.Y.Z-OOBE`
-   - `.NOTES` Script Version (line ~31) - Use format `X.Y.Z-OOBE`
-   - `.NOTES` Base Version line (line ~35) - Reference extended script version
-
-3. Update documentation:
-   - `README.md` - Latest Release section
-   - `CLAUDE.md` - This file (if adding new patterns)
-
-**When to Update OOBE Script:**
-
-Apply changes to OOBE script when modifying extended script in these areas:
-- ✅ **Core logic fixes** (null checks, array handling, error handling)
-- ✅ **Registration command building** (--management-url handling)
-- ✅ **Service management** (wait times, retry logic)
-- ✅ **Status command parsing** (exit code handling)
-- ✅ **Network validation logic** (connectivity checks)
-- ❌ **Version detection** (OOBE uses simplified path-only check)
-- ❌ **Registry operations** (OOBE skips all registry access)
-- ❌ **Desktop shortcut handling** (OOBE skips entirely)
-- ❌ **User profile operations** (OOBE uses C:\Windows\Temp)
-- ❌ **Complex diagnostics** (OOBE uses minimal validation)
-
-**When Modifying Scripts:**
-
-**Version Management:**
-- Update BOTH scripts' `$ScriptVersion` variables
-- Update BOTH scripts' `.NOTES` sections
-- Update version history comment block - **KEEP ENTRIES SUCCINCT (1-2 lines max)**
-- Follow semantic versioning rules strictly
-- **Version notes should be concise summaries, not detailed changelogs**
-
-**Error Handling:**
-- Always use `Write-Log` with appropriate `-Source` parameter
-- Wrap external commands in try-catch with detailed error messages
-- Use error classification: `"ERROR"`, `"WARN"`, or default `"INFO"`
-
-**Service Operations:**
-- Always check service exists before operations
-- Use `Wait-ForServiceRunning` after starting service
-- Handle both WMI and CIM for Windows version compatibility
-
-**Registration Changes:**
-- Registration logic starts at `Register-NetBirdEnhanced` (line 1216)
-- Never reduce wait times without testing in slow enterprise environments
-- Maintain recovery action hierarchy in `Get-RecoveryAction`
-- Validate changes with `Test-RegistrationPrerequisites`
-
-**Path Handling:**
-- Use `$script:NetBirdExe` variable (dynamically updated by detection)
-- Always test path existence before executing commands
-- Support both `$env:ProgramFiles` and `$env:ProgramFiles(x86)`
-
-### Common Modification Scenarios
-
-**Adding New Recovery Action:**
-1. Add error pattern detection in `Invoke-NetBirdRegistration` (line 1194)
-2. Define recovery strategy in `Get-RecoveryAction` (line 917)
-3. Implement action handler in `Invoke-RecoveryAction` (line 958)
-
-**Adding New Validation Check:**
-1. Add check logic in `Test-RegistrationPrerequisites` (line 835) or `Confirm-RegistrationSuccess` (line 989)
-2. Add to validation hashtable
-3. Include in critical checks list if blocking
-
-**Adjusting Timeout/Retry Logic:**
-- Daemon readiness: `Wait-ForDaemonReady -MaxWaitSeconds` (default: 120s)
-- Registration verification: `Confirm-RegistrationSuccess` (default: 120s)
-- Service start wait: `Wait-ForServiceRunning -MaxWaitSeconds` (default: 30s)
-- Registration retries: `Register-NetBirdEnhanced -MaxRetries` (default: 3)
+Update all relevant:
+- Module manifest system version
+- Individual module versions
+- Launcher script version variable
+- Git tag (e.g., `v1.3.0`)
+- GitHub release
 
 ## Documentation Structure
 
-The `docs/` directory contains comprehensive documentation (not code):
-- `REGISTRATION_ENHANCEMENT.md`: v1.10.0 registration system details
-- `ENTERPRISE_ENHANCEMENTS.md`: Enterprise automation features
-- `SCRIPT_ANALYSIS.md`: Technical architecture deep-dive
-- `USAGE_GUIDE.md`: Deployment scenarios and troubleshooting
-- `RELEASE_PROCESS.md`: Version management workflow
+**modular/** documentation:
+- `README.md` - Complete system documentation
+- `QUICK_START.md` - Fast deployment examples
+- `UPDATE_GUIDE.md` - Update management guide
+- `INTUNE_GUIDE.md` - Intune/MDM deployment
+- `MODULE_LOADING.md` - Module system architecture
+- `DEPENDENCIES.md` - External dependencies
+- `AUDIT_FINDINGS.md` - Security audit findings
 
-**Do not modify documentation unless explicitly changing implementation behavior.**
+## Legacy Scripts (ARCHIVED)
+
+**Location**: `archive/` directory  
+**Status**: DEPRECATED - Not maintained
+
+The original monolithic scripts have been archived:
+- `netbird.extended.ps1`
+- `netbird.oobe.ps1`
+- `netbird.zerotier-migration.ps1`
+- `OOBE_USAGE.md`
+- `docs/` (legacy documentation)
+
+**Do not modify archived scripts.** All development should focus on the modular system.
+
+See `archive/README.md` for historical context.
 
 ## Critical Constraints
 
-1. **Single-file requirement**: Never split into modules (deployment simplicity requirement)
-2. **Windows PowerShell 5.1 compatibility**: Must work on all Windows versions without PowerShell 7
-3. **Administrator requirement**: Script always requires elevation
-4. **No external dependencies**: Cannot add module imports or package dependencies
-5. **Inline help preservation**: Keep `.SYNOPSIS` block comprehensive for `Get-Help` output
+1. **Bootstrap Pattern**: Scripts must be fetched from GitHub, not stored locally
+2. **Environment Variables**: All configuration via environment variables
+3. **PowerShell 5.1 Compatibility**: Must work on Windows PowerShell 5.1
+4. **Code Signing**: All scripts must be signed before commit
+5. **No External Dependencies**: Cannot use external modules or packages
+6. **Administrator Requirement**: All scripts require elevation
 
-## Testing Checklist for Changes
+## Important Implementation Notes
 
-Since there are no automated tests, verify manually:
-- [ ] PowerShell 5.1 syntax compatibility (no `?.`, `??`, etc.)
-- [ ] Run `Get-Help ./netbird.extended.ps1 -Full` validates successfully
-- [ ] Test on clean Windows system (no NetBird installed)
-- [ ] Test upgrade path (NetBird already installed)
-- [ ] Test registration with valid setup key
-- [ ] Test error recovery (invalid key, network issues)
-- [ ] Verify administrator check blocks non-elevated execution
-- [ ] Check log output clarity and error source attribution
+### When Modifying Scripts
+
+**Always:**
+- Update version numbers (system and/or module)
+- Sign scripts with `Sign-Scripts.ps1`
+- Test bootstrap pattern from GitHub
+- Update documentation if behavior changes
+- Follow existing code patterns
+
+**Never:**
+- Break bootstrap pattern (scripts must be fetchable)
+- Add external dependencies
+- Use PowerShell 7+ only features
+- Store configuration in local files
+- Skip code signing
+
+### Error Handling
+
+Use the `Write-Log` function from `netbird.core.ps1`:
+```powershell
+Write-Log "Message" "ERROR"  # or "WARN", "INFO"
+```
+
+All logs go to:
+- Console output
+- Temp log files (`$env:TEMP\NetBird-*.log`)
+
+### Service Operations
+
+Service management in `netbird.service.ps1`:
+- Always check service exists first
+- Use appropriate wait times
+- Handle both WMI and CIM
+- Log all service operations
+
+### Registration
+
+Registration logic in `netbird.registration.ps1`:
+- Supports UUID, Base64, and prefixed setup keys
+- Progressive retry with recovery actions
+- Comprehensive validation (6 factors)
+- Diagnostic export on failure
+
+## Commands
+
+### Running Locally
+
+```powershell
+# Interactive launcher
+.\modular\netbird.launcher.ps1
+
+# Specific mode
+.\modular\netbird.launcher.ps1 -Mode Standard -SetupKey "key"
+
+# Update workflow
+.\modular\netbird.launcher.ps1 -UpdateToLatest
+```
+
+### Testing Bootstrap Pattern
+
+```powershell
+# Standard deployment
+$env:NB_SETUPKEY = "test-key"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+
+# OOBE deployment
+$env:NB_MODE = "OOBE"
+$env:NB_SETUPKEY = "test-key"
+irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+```
+
+### Code Signing
+
+```powershell
+cd modular
+.\Sign-Scripts.ps1
+```
+
+### Creating Scheduled Tasks
+
+```powershell
+# Interactive
+.\modular\Create-NetbirdUpdateTask.ps1
+
+# Non-interactive
+.\modular\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Weekly -NonInteractive
+```
+
+## Git Workflow
+
+```powershell
+# Stage changes
+git add modular/
+
+# Commit with co-author
+git commit -m "feat: Description
+
+Co-Authored-By: Warp <agent@warp.dev>"
+
+# Tag version
+git tag v1.3.0
+
+# Push
+git push origin main
+git push origin v1.3.0
+```
+
+## Support and Issues
+
+- **GitHub Issues**: For bugs and feature requests
+- **GitHub Discussions**: For questions and community support
+- **Documentation**: Always check `modular/README.md` first
+
+<citations>
+<document>
+<document_type>RULE</document_type>
+<document_id>odaqxy30wjV3uB7cXv06pn</document_id>
+</document>
+<document>
+<document_type>RULE</document_type>
+<document_id>C56HSXJNv9vUoi6yE7bTVs</document_id>
+</document>
+<document>
+<document_type>RULE</document_type>
+<document_id>FDqIvEOQNabaRFF5lQvbj5</document_id>
+</document>
+</citations>
