@@ -266,12 +266,7 @@ try {
     $SetupKey = "YOUR-GROUP-SPECIFIC-SETUP-KEY-HERE"
     $MgmtUrl = "https://api.netbird.io"  # Or your self-hosted URL
     # $TargetVersion = "0.60.8"  # Optional - uncomment for version compliance
-    
-    # Validate key is present
-    if (-not $SetupKey -or $SetupKey -eq "YOUR-GROUP-SPECIFIC-SETUP-KEY-HERE") {
-        throw "Setup key not configured in Install.ps1"
-    }
-    
+       
     # Set environment variables for bootstrap
     [System.Environment]::SetEnvironmentVariable("NB_MODE", "OOBE", "Process")
     [System.Environment]::SetEnvironmentVariable("NB_SETUPKEY", $SetupKey, "Process")
