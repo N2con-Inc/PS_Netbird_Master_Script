@@ -44,6 +44,11 @@ $env:NB_MODE="RegisterUninstallZT"; $env:NB_SETUPKEY="your-setup-key"; irm 'http
 $env:NB_MODE="Update"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
+**Scenario 4: Purge ZeroTier (no NetBird changes)**
+```powershell
+$env:NB_MODE="PurgeZeroTier"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+```
+
 ### With Custom Management Server
 
 ```powershell
@@ -83,7 +88,7 @@ User Command → Bootstrap-Netbird.ps1 → Downloads Main Script → Executes wi
 ```
 
 The bootstrap:
-1. Parses mode (Register, RegisterUninstallZT, or Update)
+1. Parses mode (Register, RegisterUninstallZT, Update, or PurgeZeroTier)
 2. Validates requirements (e.g., setup key for register modes)
 3. Downloads appropriate main script from GitHub
 4. Executes script with resolved parameters
@@ -93,11 +98,16 @@ This ensures scripts are always fresh from GitHub - no local file management nee
 
 ## Environment Variables
 
-| Variable | Description | Required For | Example |
-|----------|-------------|--------------|---------|
-| `NB_MODE` | Deployment mode | All (defaults to Register) | `Register`, `RegisterUninstallZT`, `Update` |
-| `NB_SETUPKEY` | NetBird setup key | Register modes | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
-| `NB_MGMTURL` | Management server URL | Optional | `https://api.netbird.io:443` (default) |
+|| Variable | Description | Required For | Example |
+||----------|-------------|--------------|---------|
+|| `NB_MODE` | Deployment mode | All (defaults to Register) | `Register`, `RegisterUninstallZT`, `Update`, `PurgeZeroTier` |
+|| `NB_SETUPKEY` | NetBird setup key | Register modes | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
+|| `NB_MGMTURL` | Management server URL | Optional | `https://api.netbird.io:443` (default) |
+|| `NB_ALLOW_PROFILE_SWITCHING` | Allow switching away from `default` (defaults to locked) | Register modes | `true` / `false` |
+
+### Profiles and Locking (default-only)
+- Registration uses `--profile default`.
+- By default profiles are locked (NB_DISABLE_PROFILES=true is set at machine scope); to allow switching set `NB_ALLOW_PROFILE_SWITCHING=true` or use bootstrap `-AllowProfileSwitching`.
 
 **Note**: Parameters override environment variables if both are provided.
 
@@ -109,14 +119,16 @@ Registers an already-installed NetBird client.
 
 **What it does:**
 1. Verifies NetBird is installed
-2. Registers with `netbird up --setup-key`
-3. Waits for connection confirmation (up to 40 seconds)
-4. Removes desktop shortcut
-5. Logs all actions
+2. Ensures/locks profile to `default` (unless profile switching allowed)
+3. Registers with `netbird up --setup-key --profile default`
+4. Waits for connection confirmation (up to 40 seconds)
+5. Removes desktop shortcut
+6. Logs all actions
 
 **Parameters:**
 - `-SetupKey` (required): NetBird setup key
 - `-ManagementUrl` (optional): Custom management server
+- `-LockProfiles` (switch, default: on): Lock to default profile and disable switching
 
 **Exit Codes:**
 - `0`: Success
@@ -128,16 +140,18 @@ Registers NetBird and uninstalls ZeroTier.
 
 **What it does:**
 1. Verifies NetBird is installed
-2. Checks if ZeroTier is installed
-3. Registers NetBird with setup key
-4. Waits for connection confirmation
-5. Uninstalls ZeroTier (if present)
-6. Removes desktop shortcut
-7. Logs all actions
+2. Ensures/locks profile to `default` (unless profile switching allowed)
+3. Checks if ZeroTier is installed
+4. Registers NetBird with setup key and `--profile default`
+5. Waits for connection confirmation
+6. Uninstalls ZeroTier (if present)
+7. Removes desktop shortcut
+8. Logs all actions
 
 **Parameters:**
 - `-SetupKey` (required): NetBird setup key
 - `-ManagementUrl` (optional): Custom management server
+- `-LockProfiles` (switch, default: on)
 
 **Exit Codes:**
 - `0`: Success
@@ -176,8 +190,9 @@ The main scripts import a shared module with reusable functions:
 - `Get-LatestNetBirdVersion` - Query GitHub for latest release
 - `Test-NetBirdConnected` - Verify connection status
 - `Remove-DesktopShortcut` - Delete desktop shortcut
-- `Uninstall-ZeroTier` - Remove ZeroTier from system
+- `Uninstall-ZeroTier` - Remove ZeroTier from system (robust)
 - `Install-NetBirdMsi` - Install NetBird from MSI
+- `Lock-NetBirdProfiles` - Lock to `default` and disable profile switching (reversible)
 
 ## Use Cases
 
@@ -191,6 +206,22 @@ $env:NB_SETUPKEY="your-key"
 irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
+Silent installer commands for Intune:
+
+```powershell
+# EXE (install)
+netbird_installer_x.y.z_windows_amd64.exe /S
+
+# MSI (install)
+msiexec /i netbird-x.y.z.msi /qn /norestart
+
+# EXE (uninstall)
+"%ProgramFiles%\NetBird\netbird_uninstall.exe" /S
+
+# MSI (uninstall by product code)
+msiexec /x {PRODUCT-CODE-GUID} /qn /norestart
+```
+
 ### VPN Migration
 
 Migrate from ZeroTier to NetBird:
@@ -199,6 +230,12 @@ Migrate from ZeroTier to NetBird:
 $env:NB_MODE="RegisterUninstallZT"
 $env:NB_SETUPKEY="your-key"
 irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+```
+
+### Purge ZeroTier only
+
+```powershell
+$env:NB_MODE="PurgeZeroTier"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
 ### Maintenance Updates

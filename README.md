@@ -48,6 +48,14 @@ Update NetBird to the latest version:
 $env:NB_MODE="Update"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
+### Scenario 4: Purge ZeroTier (no NetBird changes)
+
+Remove ZeroTier robustly without touching NetBird:
+
+```powershell
+$env:NB_MODE="PurgeZeroTier"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+```
+
 ### With Custom Management Server
 
 ```powershell
@@ -59,25 +67,33 @@ $env:NB_MODE="Register"; $env:NB_SETUPKEY="your-key"; $env:NB_MGMTURL="https://n
 - **[modular/README.md](modular/README.md)** - Complete documentation for the simplified system
 - **[archive/modular/README.md](archive/modular/README.md)** - Documentation for the archived complex system
 
-## Three Deployment Modes
+## Deployment Modes
 
-| Mode | Use Case | Script |
-|------|----------|--------|
-| **Register** | NetBird installed, needs registration | `Register-Netbird.ps1` |
-| **RegisterUninstallZT** | NetBird + ZeroTier installed, migrate to NetBird | `Register-Netbird-UninstallZerotier.ps1` |
-| **Update** | Update NetBird to latest version | `Update-Netbird.ps1` |
+|| Mode | Use Case | Script |
+||------|----------|--------|
+|| **Register** | NetBird installed, needs registration | `Register-Netbird.ps1` |
+|| **RegisterUninstallZT** | NetBird + ZeroTier installed, migrate to NetBird | `Register-Netbird-UninstallZerotier.ps1` |
+|| **Update** | Update NetBird to latest version | `Update-Netbird.ps1` |
+|| **PurgeZeroTier** | Remove ZeroTier only (no NetBird changes) | `Purge-ZeroTier.ps1` |
 
 ## Environment Variables
 
 Configuration via environment variables or parameters:
 
-| Variable | Description | Required For | Example |
-|----------|-------------|--------------|---------|  
-| `NB_MODE` | Deployment mode | All | `Register`, `RegisterUninstallZT`, `Update` |
-| `NB_SETUPKEY` | NetBird setup key | Register modes | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
-| `NB_MGMTURL` | Management server URL | Optional | `https://api.netbird.io:443` (default) |
+|| Variable | Description | Required For | Example |
+||----------|-------------|--------------|---------|  
+|| `NB_MODE` | Deployment mode | All | `Register`, `RegisterUninstallZT`, `Update`, `PurgeZeroTier` |
+|| `NB_SETUPKEY` | NetBird setup key | Register modes | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
+|| `NB_MGMTURL` | Management server URL | Optional | `https://api.netbird.io:443` (default) |
+|| `NB_ALLOW_PROFILE_SWITCHING` | Allow switching away from `default` profile (defaults to locked) | Register modes | `true` / `false` |
 
 **Note**: Parameters override environment variables when both are provided.
+
+### Profiles and Locking (default-only)
+
+- By default, scripts lock NetBird to the `default` profile and set NB_DISABLE_PROFILES=true at the machine scope.
+- The bootstrap accepts `-AllowProfileSwitching` (or `NB_ALLOW_PROFILE_SWITCHING=true`) to temporarily allow switching.
+- Registration explicitly uses `--profile default` to ensure a single machine-wide profile.
 
 ## Requirements
 
@@ -118,6 +134,44 @@ This pattern ensures:
 - Group Policy startup scripts
 - Provisioning packages
 - Zero-touch deployments
+
+#### Intune Win32 app examples
+
+- Silent EXE install (NetBird):
+
+```powershell
+netbird_installer_x.y.z_windows_amd64.exe /S
+```
+
+- Silent MSI install (NetBird):
+
+```powershell
+msiexec /i netbird-x.y.z.msi /qn /norestart
+```
+
+- Silent uninstall (EXE install):
+
+```powershell
+"%ProgramFiles%\NetBird\netbird_uninstall.exe" /S
+```
+
+- Silent uninstall (MSI product code example):
+
+```powershell
+msiexec /x {PRODUCT-CODE-GUID} /qn /norestart
+```
+
+- Post-install bootstrap (Register and lock to default):
+
+```powershell
+$env:NB_MODE="Register"; $env:NB_SETUPKEY="<your-key>"; irm "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1" | iex
+```
+
+- Purge ZeroTier only:
+
+```powershell
+$env:NB_MODE="PurgeZeroTier"; irm "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1" | iex
+```
 
 ### Update Management
 
