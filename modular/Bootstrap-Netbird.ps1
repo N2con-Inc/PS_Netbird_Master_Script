@@ -48,14 +48,13 @@ Parameters override environment variables if both are provided
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Register", "RegisterUninstallZT", "Update")]
-    [string]$Mode,
+    [string]$Mode = "",
     
     [Parameter(Mandatory=$false)]
-    [string]$SetupKey,
+    [string]$SetupKey = "",
     
     [Parameter(Mandatory=$false)]
-    [string]$ManagementUrl
+    [string]$ManagementUrl = ""
 )
 
 #Requires -RunAsAdministrator
@@ -68,6 +67,15 @@ $ResolvedManagementUrl = if ($ManagementUrl) { $ManagementUrl } else { $env:NB_M
 # Default to Register mode if not specified
 if (-not $ResolvedMode) {
     $ResolvedMode = "Register"
+}
+
+# Validate mode
+$ValidModes = @("Register", "RegisterUninstallZT", "Update")
+if ($ResolvedMode -notin $ValidModes) {
+    Write-Host "" -ForegroundColor Red
+    Write-Host "ERROR: Invalid mode '$ResolvedMode'" -ForegroundColor Red
+    Write-Host "Valid modes: $($ValidModes -join ', ')" -ForegroundColor Yellow
+    exit 1
 }
 
 Write-Host "======================================" -ForegroundColor Cyan
@@ -174,8 +182,8 @@ catch {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYTGnLWs9gisv63aNiym0Ky4I
-# 5qygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkDSBVuM4aEuBk+K2mFDuZmP2
+# x0ugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -314,33 +322,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 7k1kl1qvDAwn2a7HY4dPDINHSJQwDQYJKoZIhvcNAQEBBQAEggIApYPX+EaEQowe
-# ctHwsCDbkdr3S3qD/PKFGVstGN8f9TUdhQ+Xq8JxFeKmJZFWNCIhs5YL2S3K1Uak
-# nvBmY4Z1dSMozn9y0rJbgAUkirwsuKsA4cWZFamaIJnU+8lQxGfCrvE1yZIRhVR6
-# Tyts5dEfJ/dwJ15+ecPo6MzbEJw5lbukTcOwN+MAOtR6gW+P32949CvJ5DpDVzJz
-# n71MLmXPXBMUn7TYOw0YB5QfxKkk8d9Q9hC3iGXB3H/QBJhm/vPukBWToymSz/EZ
-# 9xmtHL4tUP/nixciOWlQJXFX84EtTodaF+/IozH+7fVdvQqooeYuTLIyaGvz81Eg
-# C3U+N/dvgzFDxcdKYaaVo7bTtb8TH+RfruS1MqgyjKWrlEsPFo/vZU94rv8LBnjV
-# PErytagEhOgjWJM4WV/4DgsnOqB0ipUTngpO9wto8pnwm6zTk3H9uOeW3O4enPrk
-# KrSgjMW8iVCM/fQKiv5yG7uh06DV5942ylSszXS6couhKo5g5WjtIMm+QBZiQApo
-# GdByvD1vzOXWVvTzitao0RSGLJnHi9mD0K3Vdvdx75+HlBQQwtnOPrahYMk8obnN
-# 732YRPuugsf1SgWl0bWEO2btDUlWt7MwY3eeCCp/Wj6KLps8f9cTOkb/N99bv2uC
-# czAKsIzBEMMuJ7/ztt7UTkPoEu7BkSOhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# y4GF5IHPCVarCCIP7OJr+9f+ch4wDQYJKoZIhvcNAQEBBQAEggIAsSWUCc/SH3w/
+# CPmjmac/lTdZIE36gQSFsgG//7XMgfXPONb6tcjGsYFs2TxsAxMI7g8rvVKjKrRk
+# JLR/TtLgoK8dzyOp7XJaE9YQL84UmwCJpXnd08ecqCxtI3dAw/u0ZA3rWpoS3+8K
+# byUSXJ9T54RjdjHc7vXDtyqfrPn2yDOW0XyyFB5mQllUIHZfdi5MSCr3e0dDMM0r
+# SnJDrwuErnENazdRyUn7KnUrdUXcvhNNfAZi7IAlQ6RBUAKLSt7WiTcDtHLEVLi3
+# Isu581HBZ43k4Pv3OFXaxYiPVlzqnT7AQ7wDugrhC+fUr6SEpONGKukVipOcsTq3
+# 6m4U6VlzglS+RdI3msTKdKU9w2+3+YxQ2tEzsssTzVG0FmqEI5NXEPR2fYhVDiNi
+# ZnZudML5YdmIUSSlhO4Od+KjV2GuijEpIPjyk9arytGddjSAnMxutYhn53OKjytr
+# XfdtP0vT3b4m3zkCoHXmOQ4La7wlWZdtlIodlH47+3o/nMUMq/fSXOzjTFdH5xDP
+# sPetTwmk7P953QeDnDYTw+pCRfolj6i4Ma1VUADsTL4I773mr4eJON63HCZD9RH/
+# J/gV8U2cfvEcOgduZ1Sx5By+iTCSNmnNc4kgL+vE8B5WWdeKSki0qn4U+SubNYHj
+# 4ljjHZ8DktreSu0lutWPecbXNBzqLxehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjEwWjAvBgkqhkiG9w0BCQQxIgQgTcUOhBSfhmfNEGzKvSH5X/60
-# Mi3SmLlyPVoWJ+VvkgkwDQYJKoZIhvcNAQEBBQAEggIAufTDMXUObcmJxEoXwgG7
-# vMBOWnDkdQ29HwSw/VLbbA6E0rrP8SCnvhUoXwrir0X6/roEjKGxkH0d0zlJqwV3
-# rNhmciIJO/ghNzNMjA/nao/mDaxGMyIWkDyvOuFIHV3R+FH8HwBc2JgSPWm1XRod
-# RtmuJtdwXteCtRpWavh4EB1iE8ae+NAZWwGEnYoLpUSKK+rWEKsxGyl7CdV212Da
-# I36Pz0pTqAv3qJsiCZTcW6JLhM44EP9MxO8fFVTHWTMNTBt9t0M3ojxQ2FuKqpyz
-# EOI7PCvkZ+IjEke3FKVZckQRjGqPnMUjDp3/0DI2XCctyVz/76C7+i6vkIiRAypr
-# qlwRictLpOTb7RQFgqbMlTgYjFnU8JgIkPBlmYDpDz05QFl9gIwgmgalx5MMenID
-# 259Hl6mQB0VdONATz6qs4xMTfYHScqz+OgQtF6pZsze9Qx8LzJrgOIQu5xFpjfxH
-# /iemy7uv4F9mK5c6pnzgb+EjjK/9voic2wlF46wJPLrS3B2xf4RX5XzHna9uxt2r
-# 9OuNYWtslMxtnHI4Jjud0+pScUZUY75TU0gQuFeTs8gv9syqKvTKxCygqHQYqAUm
-# 8Ti7cDE800mBIweFbpBN+88nMGsYmLSFa+bwwgxXpp0mhQczkIopRWY2PfrfFvZi
-# kaUuBkQWswdPqetE01VEcNg=
+# MjYwMTEwMDExMzU1WjAvBgkqhkiG9w0BCQQxIgQgphWiSSnCdjujZeKeEmgbu/XF
+# cwUyw7JQB6L3evEHuDUwDQYJKoZIhvcNAQEBBQAEggIAoZa3rYp/OF9O6cd8lVGA
+# TpuOcE7FugqN8j+wRX0IFHm5fYUDuOhmI6k6UPkUL8EGqsnUEKS+eFITbEe8AMXr
+# IHQJG5CLfcuuHrsvFQ1LIjd4U2IRZDR+BVCPnwUcz9CFvB7tQVtAJIZPZRWB/rj0
+# a1aWtgTTOWNJ7izo9PAYRjodfexYkwz+aWc5s91DZ/um2gyFMQw+cIPOCnOR8rNe
+# ZCRrUX9tR6wIBMlqcDFiFqtLkEnsONRR8AhG7/M9yGWQ0cyjtEfLUJi9DnoVvtPd
+# zxELQ+b5N6YUABJUWsIRkzmRmn8zeo2wcP4s2hMpt150AFgfcmERAMbzs4XqEMed
+# IyVGHY4oF3OboZNBK7sRigGZOUX3KUnX9/3ZNgrl/VlkQZjS7rYhQl1Tz96WRu0K
+# rxMqXU00YsuIJ5+zd7zKaUueVULplVjjLHwWN/p04hZgMs3X9Y5R8zvqx76bY9zL
+# ia5iDCu+TWDq1dn9u1S/u3ayZy4+vnsD1uhFAd1InbR8obB845/Ayz9bZdv6SCrX
+# xIrhP4eJbyPJenczhWKlxCTPOL5Ny9/MPRUS9sCGDMNjB1hY/BPMPDD+BMXPVs/1
+# lpzYVhGby42fqukvKhK5UnVCPLERpT2+bxV5t7HiwXLWpQ6pvSIVpa6dG99ZTFyq
+# XvfYFYYiA/nRNaQcRBRVIfk=
 # SIG # End signature block
