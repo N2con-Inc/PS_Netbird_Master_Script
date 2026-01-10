@@ -157,15 +157,40 @@ if ($zerotierInstalled) {
     Write-Log "ZeroTier is not installed - skipping uninstall step" -Source "ZEROTIER" -LogFile $script:LogFile
 }
 
-# Step 4: Register NetBird
+# Step 3: Register NetBird
 Write-Log "" -LogFile $script:LogFile
 Write-Log "Step 3: Registering NetBird..." -LogFile $script:LogFile
 Write-Log "Setup Key: $($SetupKey.Substring(0,[Math]::Min(8,$SetupKey.Length)))... (masked)" -LogFile $script:LogFile
 Write-Log "Management URL: $ManagementUrl" -LogFile $script:LogFile
 
+# Ensure target profile exists (handles legacy and new layouts)
+$profileAdded = $false
+try {
+    $candidatePaths = @()
+    if ($targetProfile -eq "default") {
+        $candidatePaths += (Join-Path $env:ProgramData "Netbird\default.json")
+    }
+    $candidatePaths += (Join-Path $env:ProgramData "Netbird\$targetProfile\config.json")
+    $candidatePaths += (Join-Path $env:ProgramData "Netbird\$targetProfile.json")
+
+    $exists = $false
+    foreach ($p in $candidatePaths) { if (Test-Path $p) { $exists = $true; $configPath = $p; break } }
+
+    if (-not $exists) {
+        Write-Log "Profile '$targetProfile' not found; creating via 'netbird profile add'" -LogFile $script:LogFile
+        $null = & $netbirdExe profile add $targetProfile 2>&1
+        $profileAdded = $true
+        $null = & $netbirdExe profile select $targetProfile 2>&1
+        Start-Sleep -Seconds 1
+    }
+}
+catch {
+    Write-Log "Profile operations not supported on this NetBird version; continuing" "WARN" -LogFile $script:LogFile
+}
+
 try {
     # Build netbird up command
-    $upArgs = @("up", "--setup-key", $SetupKey)
+    $upArgs = @("up", "--setup-key", $SetupKey, "--profile", $targetProfile)
     
     # Only add management-url if it's not the default
     if ($ManagementUrl -ne "https://api.netbird.io:443") {
@@ -173,10 +198,26 @@ try {
         $upArgs += $ManagementUrl
     }
     
-    Write-Log "Executing: netbird up --setup-key [MASKED]$(if ($ManagementUrl -ne 'https://api.netbird.io:443') { ' --management-url ' + $ManagementUrl })" -LogFile $script:LogFile
+    Write-Log "Executing: netbird up --profile $targetProfile --setup-key [MASKED]$(if ($ManagementUrl -ne 'https://api.netbird.io:443') { ' --management-url ' + $ManagementUrl })" -LogFile $script:LogFile
     
     $output = & $netbirdExe $upArgs 2>&1
     $exitCode = $LASTEXITCODE
+
+    # Fallback: if missing config error occurs, try creating empty config for legacy layout then retry once
+    if ($exitCode -ne 0 -and ($output -like "*config file*does not exist*")) {
+        Write-Log "Missing config detected; creating placeholder and retrying once" "WARN" -LogFile $script:LogFile
+        if ($targetProfile -eq "default") {
+            $legacyPath = Join-Path $env:ProgramData "Netbird\default.json"
+            if (-not (Test-Path $legacyPath)) { New-Item -ItemType File -Path $legacyPath -Force | Out-Null }
+        } else {
+            $newPath = Join-Path $env:ProgramData "Netbird\$targetProfile\config.json"
+            New-Item -ItemType Directory -Force -Path (Split-Path $newPath) | Out-Null
+            if (-not (Test-Path $newPath)) { New-Item -ItemType File -Path $newPath -Force | Out-Null }
+        }
+        Start-Sleep -Seconds 1
+        $output = & $netbirdExe $upArgs 2>&1
+        $exitCode = $LASTEXITCODE
+    }
     
     Write-Log "Command output: $output" -Source "NETBIRD" -LogFile $script:LogFile
     Write-Log "Exit code: $exitCode" -Source "NETBIRD" -LogFile $script:LogFile
@@ -281,8 +322,8 @@ if ($connected) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUARHsjWd3oT2CT3REiIhwnzuy
-# 84egghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUyW8QVMgTV/b0h9odvLbPb+I
+# JCmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -421,33 +462,33 @@ if ($connected) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# HpXF/1NC2ICR9eBqolL9WPDfFPUwDQYJKoZIhvcNAQEBBQAEggIAG8UP5Yt4ZWiW
-# ybogtCHt5cuYO92x49IJRn0MDHH61jxdRBAj0lA6zAzhjT0V0PEw3RJKJVrGrwkQ
-# eYtBq/ohVun4CNbmIcbEeSb538EWhxPAE3CemIX1yeatWsIkSJqGAgu3VnYHT3hr
-# QyUVXkwzaYd4Lqm+NRBiNYIff5uvUSy6O29X8eU3Scd9PJBYstg5sAxsSqDfQOYy
-# JXUAoxqZIbWOSYJfzs5nN0O01TvqA5+0BjeaeZKlKnqsMKzmEpLVbBpoR5l2PRpV
-# YBO64Fqr1bUxHTk8ppF8+/MGKMvZw4bdArYKNQtb0gk6AQYmLE95N/laJ+SHMQDW
-# 1bp5ido6hrHzjsvW92R1g+M7BCxEaDBvcT3jl8ulIn1zWg6GSLBGMBEHj1s6Jd7M
-# wghcCgld8pJ2nom3mU/U8aogIWa7Z71cgEAx+zjE3h84SHYTd5qkgMW8CcjY4KUa
-# r3qneHUiuJ4/oBHiuS7jn5F5QFL7K4PqouPv+FmFuCpx6B8hvPeYRJLw59Bc153P
-# 0trH7nRbWoNutaoDvqnBDZNQ+Y3MY4QzOGSvc508Bl9NOZ/GvpxMru7TK590qzrt
-# Bu1n4VSW71fbtXYJhHEUfND8q/dvMja22f4brD6WJdvufdUYEByM08Fsni78dsJF
-# VhFrEFj1flo/Lm3xiP7Jfq8+l67n/AmhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# jKH8Mrz0FEl4ojcnLpY/Q4qZNtgwDQYJKoZIhvcNAQEBBQAEggIASE9Lpf+kPVKo
+# 8j1S+Saiv32QGx0wxMzwZGavD5ZjNuiECwLqBXgFFTkhohSnKulFLZzVNsYRyCGO
+# 7qFAPk0yT6p6vNNwkwR6RIN7ZkwdUFLhc0zglft0NCOo8phObAyIoFgvLt6CL+mX
+# 9db4s48PiKrEvHFA2zrWouciPqLwKSV+aPF8gDqrHtubKe4vpdFXY5e7WeLC571b
+# ym+013FYpf2BTbGhccxkUmqmSKnGNrAAK6Cz4veYKL1SjES8DzlKfyTjTAkX9QxR
+# zgI4wU3wdBZjp2X429sV3rNEFe5BmSKHUMGpHhZfziFVNbFRvZC0WGQYAaBaxx3v
+# I7FJz6+fuUG0UFh25e8UW46T9eyWN4Uj7mtGw2SaQqXXUOw+sO5HIK/f9HWPMAD4
+# FKEj5Q6fSsGEvZ70I1Ixnb1RXqnUDoGyzokpGShHA1fQLLvMY3WDETwxFkH1Ttns
+# AyvXfJeaKDhEZlyfTZwnjXIMBRYEMdmaWHKbVx5rzFcEsxkvKvckYj65HJ0Jw9bN
+# B+3QR5sz4D6g3UFnb7/A2nTYF466xjC5qhJYBTeHjM5tfy+RiV3SFiyoEH3BUQwa
+# /RMAw/r+4myo3BtdI3Ym2QSIfnju/za9UrZ/tl4hd0HZ1cC3E4Id7XUxgHst29af
+# F/KrDUiQjmpl/YMeKUpG0Y6jfofSl7+hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEzNDA4WjAvBgkqhkiG9w0BCQQxIgQg/E3PhlnBhSUjisxLr8jknO8r
-# w4unnW2rKu1qjdyre7wwDQYJKoZIhvcNAQEBBQAEggIAa7LfLSk8hpQ0QqL4SRM9
-# sjz19qwW7VpZsq1+lq/RNWZwzrmCrfEpaXdMLZLAqJkfAvQPYaNpfg/hbaA+NuCJ
-# ZouLwCvPcLsCfcuSfzuwKBx+CYnodWvxHAiYOsyO6FT10F9w5HEf+bci6R02/sk3
-# LShrTD+OBjAnIqZMAY+I8Rb39Mb1BfRl1iIIbsrsJy/eOS05g/tLCQP/pwmXyrb5
-# FHj+HlcGhQ8Tgfp1j2QyDejspv22JPtiTqYYLutL7NsGw90wWiDfQoSrmp83sMuD
-# nH5rY/BYgoDGhS2WIgZy9SjYwU1mGEma/YUhOgmoVTnKQW6xP0JH55OUc1UJrj0O
-# bYjfpkK2KkIrzg72WH2jcIJlgTdDT1Ji6qDOE06n8BMkgSajC+BVM36geMjAPRMz
-# kZm5sM498P3r278c1dPOuuXxpnqG1V3PhL3l25skNtn8LdLiS/9hDKImJauSLlf7
-# C3Te6offuGNN8RI+HDl5K7RASE4sbAIKG/sGRbF0D1N/oBEhrnjFCWL4Io90B+6G
-# mbsSJXKGHiGy4Fy+B+gjcuo+hxuWecmhuTv+kS3z/DpE1zcxhNvPjx/f8YrzGNdp
-# LD6y6QQxs/1ozeNZl0bDhCw/nxgVoexPO0XbKZuOmodkLK4WIHr3U90cTxzD9Plp
-# pSX4+K3HlcuEQFg+IC/fw58=
+# MjYwMTEwMDEzODM1WjAvBgkqhkiG9w0BCQQxIgQgt+Q/iTuJStwqQrz/bm4/t9XC
+# 0U5bgCFurTSZLsC4dO8wDQYJKoZIhvcNAQEBBQAEggIAu9zB0JVFL7agU57zRKw8
+# 9hPceWqe9bPtY2uF/0hNGOk1ZvwzHiyu7H0Dv3yulHrqPzVRZKii2OkO0o0kaPDY
+# +TDH3MUirNQDnTpaVGP4tHNOkGbE92kjHbSRZT8zKOL+LBjcJp2ibJvjv3N1pdvv
+# of8mYLNuj/SmsL9npgnke7ta5LojNXyXqllYJes4v+Hp32LYpXsHdpwDPPAFJrVZ
+# dDJnHbCYdntz82QWg1SoWS3NeTFrJs8DyQfuXPAkfprvIfdeOefnrhmSL836aUDb
+# ST5XJkaR8D1Zo5xjeJkhc0qtBEjdLrFvhMkwFF9+SBKPklmeUICZsKfEl9H0jH33
+# wiciyW97nmrrsPNqMI7Lb8zBbrglR+/EH2APUUiWLgpd1+iONUxKe0UhGNI0rPRk
+# BHN6RDc5p3FeW9maKFiJhsfgOocdOmu92f5qoFoe5j9VMVn50ByxM+27L/QaIHAf
+# bgY1gypoSu2iVCGBrT2EGv22T78fkI5/lfWQc2Jc8u1PqWzn02y2l3gYGYcZQOQx
+# W5jtk9rtArv2O3z+0D7wEUqUj+fOmSoyyr/5HvZL8GtwbIdkVNxG8JN0i/dEtRqn
+# vXGy8jLTiJpSBqJodp/6PrWvYbYcWt/S3AymYG0YPUq7d7QqrwDD172WiUZl/9X5
+# wudgRtoPP3r0Zjy4blgaF3A=
 # SIG # End signature block
