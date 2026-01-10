@@ -84,7 +84,7 @@ function Write-Log {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateNotNullOrEmpty()]
+        [AllowEmptyString()]
         [string]$Message,
         
         [Parameter(Mandatory=$false)]
@@ -99,6 +99,19 @@ function Write-Log {
         [string]$LogFile
     )
 
+    # Handle empty messages as blank lines
+    if ([string]::IsNullOrEmpty($Message)) {
+        Write-Host ""
+        if ($LogFile) {
+            try {
+                "" | Out-File -FilePath $LogFile -Append -Encoding UTF8 -ErrorAction SilentlyContinue
+            } catch {
+                Write-Debug "Log file write failed: $($_.Exception.Message)"
+            }
+        }
+        return
+    }
+    
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
     $logPrefix = switch ($Level) {
