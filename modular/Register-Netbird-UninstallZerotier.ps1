@@ -47,7 +47,10 @@ param(
     [string]$SetupKey,
     
     [Parameter(Mandatory=$false)]
-    [string]$ManagementUrl = "https://api.netbird.io:443"
+    [string]$ManagementUrl = "https://api.netbird.io:443",
+
+    [Parameter(Mandatory=$false)]
+    [string]$ProfileName = "default"
 )
 
 # Script Configuration
@@ -90,9 +93,35 @@ if ($currentVersion) {
 Write-Log "" -LogFile $script:LogFile
 Write-Log "Step 2: Checking NetBird service configuration..." -LogFile $script:LogFile
 
-$configPath = "$env:ProgramData\Netbird\default.json"
+# Enforce target profile (default)
+$activeProfilePath = "$env:ProgramData\Netbird\active_profile.json"
+$targetProfile = if ($ProfileName) { $ProfileName } else { "default" }
+$activeProfileName = $null
+
+if (Test-Path $activeProfilePath) {
+    try {
+        $activeProfile = Get-Content $activeProfilePath -Raw | ConvertFrom-Json
+        if ($activeProfile.profile) { $activeProfileName = $activeProfile.profile }
+    } catch {
+        $activeProfileName = $null
+    }
+}
+
+if (-not $activeProfileName -or $activeProfileName -ne $targetProfile) {
+    Write-Log "Setting active profile to '$targetProfile'" -LogFile $script:LogFile
+    try {
+        New-Item -ItemType Directory -Force -Path (Join-Path $env:ProgramData "Netbird") | Out-Null
+        $json = @{ profile = $targetProfile } | ConvertTo-Json -Compress
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($activeProfilePath, $json, $utf8NoBom)
+    } catch {
+        Write-Log "Failed to set active profile: $($_.Exception.Message)" "WARN" -LogFile $script:LogFile
+    }
+}
+
+$configPath = "$env:ProgramData\Netbird\$targetProfile\config.json"
 if (-not (Test-Path $configPath)) {
-    Write-Log "NetBird configuration not found, initializing service..." -LogFile $script:LogFile
+    Write-Log "NetBird configuration not found at $configPath, initializing service..." -LogFile $script:LogFile
     
     try {
         # Install and start service to create config
@@ -114,7 +143,7 @@ if (-not (Test-Path $configPath)) {
         Write-Log "Failed to initialize NetBird service: $($_.Exception.Message)" "WARN" -LogFile $script:LogFile
     }
 } else {
-    Write-Log "NetBird configuration exists" -LogFile $script:LogFile
+    Write-Log "NetBird configuration exists at $configPath" -LogFile $script:LogFile
 }
 
 # Step 3: Check ZeroTier installation
@@ -252,8 +281,8 @@ if ($connected) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyHg+T9yJGhjczAoEzOyO9j/U
-# JhWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUARHsjWd3oT2CT3REiIhwnzuy
+# 84egghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -392,33 +421,33 @@ if ($connected) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# 6zUe07ZLOuSFKsVQyZlafa7r47UwDQYJKoZIhvcNAQEBBQAEggIAeVRqHUj9BuDM
-# +7lFGown2ZzT/n/p5Brg1WFgdY5f1EqEqAjv/sOSgQ0pUMQl75njO6yYwrQ0C0eL
-# w6y63rJeOua4ozYfX2D9qvyj4nZuZyTHgVzwrGMbtoQk8+blLuswP29s3L8DHEB5
-# jhjR1n8nSPEZEgdqA5rgl7YNmPTmSfaOx14GsQHavC7f/ghZiKSSoNbLX/Ay641a
-# wk6wgZwyozmfUldxw2iFeplCAybXWCETwr9nNa0wAcnxTi3GnuLtWsmxmRiWCtqX
-# tjpPJjT0wBrRYEfXkeSixFHC8m1e+BFYHAcC7PNCZJiKRlQS0gX+KT46yofmTyxf
-# LDuXjQ+ma+hSSVDh5XT+NCMLhaZIsif8Y2lFkZBMt7PR1w0n19C4EUpVGAzMw/Dr
-# ZkzGIK0fq1B2cg35+PJ+vHgpMkUrUxPWif1+CZ675g3KrwrbFdv0lqjt3gi0obRu
-# kLEpI7nK7KBVo5OIVSQykf23LgaHkZLifQfS5BM9GUB6M72W4BLoRqQYIU2JQMB2
-# ilCUFx70eAbK3rfZISax22EUr0RT/cuprXUeOvSMV9pUbUzM1Ya8xE4gcCmz/Lf4
-# J1jlZSjCxmydKJmYbEI++1fd+pr84hnC6Lh8Z84ld0uatKX9oqyKsNASeygKZquW
-# bKECmpBTFTh6gv5euUfiRV4VfjqSi8ihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# HpXF/1NC2ICR9eBqolL9WPDfFPUwDQYJKoZIhvcNAQEBBQAEggIAG8UP5Yt4ZWiW
+# ybogtCHt5cuYO92x49IJRn0MDHH61jxdRBAj0lA6zAzhjT0V0PEw3RJKJVrGrwkQ
+# eYtBq/ohVun4CNbmIcbEeSb538EWhxPAE3CemIX1yeatWsIkSJqGAgu3VnYHT3hr
+# QyUVXkwzaYd4Lqm+NRBiNYIff5uvUSy6O29X8eU3Scd9PJBYstg5sAxsSqDfQOYy
+# JXUAoxqZIbWOSYJfzs5nN0O01TvqA5+0BjeaeZKlKnqsMKzmEpLVbBpoR5l2PRpV
+# YBO64Fqr1bUxHTk8ppF8+/MGKMvZw4bdArYKNQtb0gk6AQYmLE95N/laJ+SHMQDW
+# 1bp5ido6hrHzjsvW92R1g+M7BCxEaDBvcT3jl8ulIn1zWg6GSLBGMBEHj1s6Jd7M
+# wghcCgld8pJ2nom3mU/U8aogIWa7Z71cgEAx+zjE3h84SHYTd5qkgMW8CcjY4KUa
+# r3qneHUiuJ4/oBHiuS7jn5F5QFL7K4PqouPv+FmFuCpx6B8hvPeYRJLw59Bc153P
+# 0trH7nRbWoNutaoDvqnBDZNQ+Y3MY4QzOGSvc508Bl9NOZ/GvpxMru7TK590qzrt
+# Bu1n4VSW71fbtXYJhHEUfND8q/dvMja22f4brD6WJdvufdUYEByM08Fsni78dsJF
+# VhFrEFj1flo/Lm3xiP7Jfq8+l67n/AmhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEyODEyWjAvBgkqhkiG9w0BCQQxIgQgVZdBoNeFnTjGiE8l3RDL3Z2+
-# knyRHVajPwb0WvsZ3xMwDQYJKoZIhvcNAQEBBQAEggIAuIwqGw9s7pkQHlCb3M5x
-# d59d+WbdDGe9OVBSeDgot++IP9i9idb46QEHgGXg4sgh/4d+zz0ZaqbxgHK3B1Cg
-# Ur7RuzLFRR6ZSp65esn3d06fEUvAAOMvwbUyVef/96vOCfNm4BBvyS2xWP/SUOYO
-# +jqgPkgTNJ5356aAf/OqbCImDig3wcrMjPBvChOXWvlM70s71DUXYWFxFcRgELEe
-# dhwoe9FpWcEtBh7ccJovm1ZRjgdeRn6bTAPxE+lGD2rb+ZDd6AeC3jlF4QIg069j
-# PAQRqouhGy7bIFnXpem0GzoY05AkJ8s7OBtxcC2D4BCdWZKBKsutqB8e/o2MobGc
-# UlelQjTokRvdgDnKGatububXxWtAdw20QLaxthX7j6QKRy5PMDVd3oZGG2eFHeWa
-# GFb0N51sfp93Qulf4v52804revkd+1qNyl/00J0cQWGsisO3SsfM5RGT/pbvuwhN
-# WWcvTk0gNdAMF6lXP1GOaJhGX0ikgOUiHdPVTkLCn0bMtjL4Zk15zLz5512YQLAC
-# Vko3oaewQaa7BAi4iz8PpSXItBM3bz9eHywCqta89ZmT06ERdLOUOekHFBCqY7uQ
-# Q/s8MYHHQtwM/21C2N2Rp+xsSa6s9U2V2OrQcDd0VW6DQOYWmV6VQlA6WMxYdYUi
-# UpTrQwjZeb/9TgkXrL0oooA=
+# MjYwMTEwMDEzNDA4WjAvBgkqhkiG9w0BCQQxIgQg/E3PhlnBhSUjisxLr8jknO8r
+# w4unnW2rKu1qjdyre7wwDQYJKoZIhvcNAQEBBQAEggIAa7LfLSk8hpQ0QqL4SRM9
+# sjz19qwW7VpZsq1+lq/RNWZwzrmCrfEpaXdMLZLAqJkfAvQPYaNpfg/hbaA+NuCJ
+# ZouLwCvPcLsCfcuSfzuwKBx+CYnodWvxHAiYOsyO6FT10F9w5HEf+bci6R02/sk3
+# LShrTD+OBjAnIqZMAY+I8Rb39Mb1BfRl1iIIbsrsJy/eOS05g/tLCQP/pwmXyrb5
+# FHj+HlcGhQ8Tgfp1j2QyDejspv22JPtiTqYYLutL7NsGw90wWiDfQoSrmp83sMuD
+# nH5rY/BYgoDGhS2WIgZy9SjYwU1mGEma/YUhOgmoVTnKQW6xP0JH55OUc1UJrj0O
+# bYjfpkK2KkIrzg72WH2jcIJlgTdDT1Ji6qDOE06n8BMkgSajC+BVM36geMjAPRMz
+# kZm5sM498P3r278c1dPOuuXxpnqG1V3PhL3l25skNtn8LdLiS/9hDKImJauSLlf7
+# C3Te6offuGNN8RI+HDl5K7RASE4sbAIKG/sGRbF0D1N/oBEhrnjFCWL4Io90B+6G
+# mbsSJXKGHiGy4Fy+B+gjcuo+hxuWecmhuTv+kS3z/DpE1zcxhNvPjx/f8YrzGNdp
+# LD6y6QQxs/1ozeNZl0bDhCw/nxgVoexPO0XbKZuOmodkLK4WIHr3U90cTxzD9Plp
+# pSX4+K3HlcuEQFg+IC/fw58=
 # SIG # End signature block
