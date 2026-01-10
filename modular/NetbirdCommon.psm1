@@ -322,6 +322,65 @@ function Remove-DesktopShortcut {
 
 #endregion
 
+#region Profile Locking
+
+function Set-MachineEnvironmentVariable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$false)][string]$Value
+    )
+    try {
+        $envKey = 'HKLM:SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+        if ($PSBoundParameters.ContainsKey('Value') -and $null -ne $Value) {
+            New-ItemProperty -Path $envKey -Name $Name -Value $Value -PropertyType String -Force | Out-Null
+        } else {
+            Remove-ItemProperty -Path $envKey -Name $Name -ErrorAction SilentlyContinue
+        }
+        return $true
+    } catch { return $false }
+}
+
+function Lock-NetBirdProfiles {
+    [CmdletBinding()]
+    param(
+        [Parameter()][string]$TargetProfile = 'default',
+        [switch]$Enable
+    )
+    try {
+        $activeProfilePath = Join-Path $env:ProgramData 'Netbird\active_profile.json'
+        if ($Enable) {
+            # Re-enable profile switching
+            Set-MachineEnvironmentVariable -Name 'NB_DISABLE_PROFILES' -Value $null | Out-Null
+        } else {
+            # Disable profile switching
+            Set-MachineEnvironmentVariable -Name 'NB_DISABLE_PROFILES' -Value 'true' | Out-Null
+        }
+        # Enforce active profile file
+        try {
+            New-Item -ItemType Directory -Force -Path (Join-Path $env:ProgramData 'Netbird') | Out-Null
+            $json = @{ profile = $TargetProfile } | ConvertTo-Json -Compress
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText($activeProfilePath, $json, $utf8NoBom)
+        } catch {}
+        # Restart service to pick up env change (best-effort)
+        try {
+            $svc = Get-Service -Name 'NetBird' -ErrorAction SilentlyContinue
+            if ($svc) {
+                if ($svc.Status -eq 'Running') { Stop-Service -Name 'NetBird' -Force -ErrorAction SilentlyContinue }
+                Start-Service -Name 'NetBird' -ErrorAction SilentlyContinue
+            } else {
+                # Install if missing
+                $exe = Get-NetBirdExecutablePath
+                if ($exe) { & $exe service install 2>&1 | Out-Null; & $exe service start 2>&1 | Out-Null }
+            }
+        } catch {}
+        return $true
+    } catch { return $false }
+}
+
+#endregion
+
 #region NetBird Connection Status
 
 function Test-NetBirdConnected {

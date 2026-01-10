@@ -50,7 +50,7 @@ param(
     [string]$ManagementUrl = "https://api.netbird.io:443",
 
     [Parameter(Mandatory=$false)]
-    [string]$ProfileName = "default"
+    [switch]$LockProfiles = $true
 )
 
 # Script Configuration
@@ -95,7 +95,7 @@ Write-Log "Step 2: Checking NetBird service configuration..." -LogFile $script:L
 
 # Enforce target profile (default)
 $activeProfilePath = "$env:ProgramData\Netbird\active_profile.json"
-$targetProfile = if ($ProfileName) { $ProfileName } else { "default" }
+$targetProfile = "default"
 $activeProfileName = $null
 
 if (Test-Path $activeProfilePath) {
@@ -106,6 +106,8 @@ if (Test-Path $activeProfilePath) {
         $activeProfileName = $null
     }
 }
+
+if ($LockProfiles) { Lock-NetBirdProfiles -TargetProfile $targetProfile | Out-Null }
 
 if (-not $activeProfileName -or $activeProfileName -ne $targetProfile) {
     Write-Log "Setting active profile to '$targetProfile'" -LogFile $script:LogFile
@@ -322,8 +324,8 @@ if ($connected) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUyW8QVMgTV/b0h9odvLbPb+I
-# JCmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoO9RlgibS/epyoJCL8Yoz4ea
+# RZSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -462,33 +464,33 @@ if ($connected) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# jKH8Mrz0FEl4ojcnLpY/Q4qZNtgwDQYJKoZIhvcNAQEBBQAEggIASE9Lpf+kPVKo
-# 8j1S+Saiv32QGx0wxMzwZGavD5ZjNuiECwLqBXgFFTkhohSnKulFLZzVNsYRyCGO
-# 7qFAPk0yT6p6vNNwkwR6RIN7ZkwdUFLhc0zglft0NCOo8phObAyIoFgvLt6CL+mX
-# 9db4s48PiKrEvHFA2zrWouciPqLwKSV+aPF8gDqrHtubKe4vpdFXY5e7WeLC571b
-# ym+013FYpf2BTbGhccxkUmqmSKnGNrAAK6Cz4veYKL1SjES8DzlKfyTjTAkX9QxR
-# zgI4wU3wdBZjp2X429sV3rNEFe5BmSKHUMGpHhZfziFVNbFRvZC0WGQYAaBaxx3v
-# I7FJz6+fuUG0UFh25e8UW46T9eyWN4Uj7mtGw2SaQqXXUOw+sO5HIK/f9HWPMAD4
-# FKEj5Q6fSsGEvZ70I1Ixnb1RXqnUDoGyzokpGShHA1fQLLvMY3WDETwxFkH1Ttns
-# AyvXfJeaKDhEZlyfTZwnjXIMBRYEMdmaWHKbVx5rzFcEsxkvKvckYj65HJ0Jw9bN
-# B+3QR5sz4D6g3UFnb7/A2nTYF466xjC5qhJYBTeHjM5tfy+RiV3SFiyoEH3BUQwa
-# /RMAw/r+4myo3BtdI3Ym2QSIfnju/za9UrZ/tl4hd0HZ1cC3E4Id7XUxgHst29af
-# F/KrDUiQjmpl/YMeKUpG0Y6jfofSl7+hggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# ELYYkp7c+tXg+c6xSkDzujiTG8gwDQYJKoZIhvcNAQEBBQAEggIAk+Xiwq5BRzUd
+# H8XCJmQFqC9ZDDuDuNAI5ndJGDeFhuJKsZVs17i8p/LfSUoIXYjzRrZQ6twawThb
+# g7h/xJfVk3ZxjT8r1ysDPPKmhTZddK52aIRgKDa3ISB0GC0LjaUqMmEyDtjNl+2X
+# 2mqijXaiLKk49DVJiUT0zi4/8Q1XHX8lwVHOVW1WlQ7ghxK7fG2cchcdAHXB9B0j
+# /frX0NxlXogFQus464wkX7yclBw+gxu6jCODfb4gZq6ES+ngEFmRHr1OjgoyYPrT
+# guyPMs+UReqrS/x0UOTS2hDto82Gjd9RMgdx1i0NsZyGReXT4DKzpXawY1cyLiES
+# 0NsKpYvKAKStxMuL7iPX6TH9PwvTJzYPg798E8mQMn0Q+NW69CKbtfQbKz6xLBPr
+# W39655gwfSEHYR4VSgwhTE8ao7F+VPKGh8jyFiKwGc5wePJ1G7RMTrCMIsvdAXen
+# C9vrlzSrE6kM7Nsijt4mjtblHMrCgGILHfhlqHkIhATAQP1LnAjWivevfQTwbN25
+# KX/XJA7u8nG4H9ez2CwcB3Y88FrJmIU0dm57jsvnQS2OSpLI2sjeyiqNp06JK6JB
+# 1O5+ddKKAhzqqV+e9jDAl5Bbj5HMRJ+/cQbnW8xadNEG5/tssWt/CkGnwPJ6n5HD
+# K8cMpViyiLkB7fcAuYmNjr9SwxE6rkChggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEzODM1WjAvBgkqhkiG9w0BCQQxIgQgt+Q/iTuJStwqQrz/bm4/t9XC
-# 0U5bgCFurTSZLsC4dO8wDQYJKoZIhvcNAQEBBQAEggIAu9zB0JVFL7agU57zRKw8
-# 9hPceWqe9bPtY2uF/0hNGOk1ZvwzHiyu7H0Dv3yulHrqPzVRZKii2OkO0o0kaPDY
-# +TDH3MUirNQDnTpaVGP4tHNOkGbE92kjHbSRZT8zKOL+LBjcJp2ibJvjv3N1pdvv
-# of8mYLNuj/SmsL9npgnke7ta5LojNXyXqllYJes4v+Hp32LYpXsHdpwDPPAFJrVZ
-# dDJnHbCYdntz82QWg1SoWS3NeTFrJs8DyQfuXPAkfprvIfdeOefnrhmSL836aUDb
-# ST5XJkaR8D1Zo5xjeJkhc0qtBEjdLrFvhMkwFF9+SBKPklmeUICZsKfEl9H0jH33
-# wiciyW97nmrrsPNqMI7Lb8zBbrglR+/EH2APUUiWLgpd1+iONUxKe0UhGNI0rPRk
-# BHN6RDc5p3FeW9maKFiJhsfgOocdOmu92f5qoFoe5j9VMVn50ByxM+27L/QaIHAf
-# bgY1gypoSu2iVCGBrT2EGv22T78fkI5/lfWQc2Jc8u1PqWzn02y2l3gYGYcZQOQx
-# W5jtk9rtArv2O3z+0D7wEUqUj+fOmSoyyr/5HvZL8GtwbIdkVNxG8JN0i/dEtRqn
-# vXGy8jLTiJpSBqJodp/6PrWvYbYcWt/S3AymYG0YPUq7d7QqrwDD172WiUZl/9X5
-# wudgRtoPP3r0Zjy4blgaF3A=
+# MjYwMTEwMDE1NDQzWjAvBgkqhkiG9w0BCQQxIgQgy52Vv8nk0Ny+6tA6OdbzJVup
+# Ld34e/I+rU1wQ4wem7gwDQYJKoZIhvcNAQEBBQAEggIAaRidcjX7X8UDcZxrWOwa
+# XCd4kB2uapsCuP85qE/c40l+Ep5ld3z2blIwg6cbc7R7ddD0hXCqL0Wl/mAjMwYH
+# ejucCKZSTOJLoplR8gkmvOuVwIk3mFMu5lUyzRztyngS/Ic8TY1bEy8T0bMyb5em
+# Bmo5V1clcggz4n1/t6DuIQ6whltogZgPCznUj4lbqcYBa+MOiNFWuIUGBqLLgEMD
+# 8QH9TGG2NibV/akowY9zHRcjajwsnWi9/jBLIeAFwgixfE7dLujc5n3vTvdJN3Y7
+# A/7H8ux3fx0Z7O7QMWfMoH11Rivb9RT/YEOuUWpKEX0UobR6QDDXjXbMY0bd5kTO
+# 4F29DTCZGe23kYnxTdPuwb9Hms37qe3R2+5fwfRsEzQ+I4cUqkIp2AaJzI98xkAf
+# 9c8F1v1CkZcdmymnLCTUjoPkm/fLssWAo35aEFR3o8xQ3RrV3QJEtL0R3Cdxlycx
+# m76Jmo7rdfOANgk1F7UzpZlqgPTqpWi1fh8ds7jTcXlmlYomuW/oCMGYk3mL+ToP
+# WvejYAXyXL+1dwh4iEH2wTwZF99gi6Sv6pb1WXGR6749xAuRNJIoVdTTILS0EbMx
+# bZOrC9H3AasxlQ5E82igbiq4se1enAzTUvllwOQkLqB6V+Yrn3tkJ0WAoFB5IngW
+# tjOU7R0IYehIjE5B9BfJ3lE=
 # SIG # End signature block

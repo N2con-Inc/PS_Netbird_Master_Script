@@ -1,213 +1,55 @@
-<#
+#Requires -RunAsAdministrator
+<#+
 .SYNOPSIS
-Unified bootstrap wrapper for NetBird deployment scenarios
+Purge ZeroTier from the system (service, networks, adapters, leftovers)
 
 .DESCRIPTION
-Single bootstrap script that downloads and executes the appropriate NetBird script based on mode.
-Supports both environment variables and parameters for flexible deployment.
-
-Three modes available:
-- Register: Register NetBird with setup key and remove desktop shortcut
-- RegisterUninstallZT: Register NetBird and uninstall ZeroTier
-- Update: Update NetBird to latest version
-
-.PARAMETER Mode
-Deployment mode: Register, RegisterUninstallZT, or Update (optional if $env:NB_MODE is set)
-
-.PARAMETER SetupKey
-NetBird setup key (optional if $env:NB_SETUPKEY is set) - Required for Register modes
-
-.PARAMETER ManagementUrl
-NetBird management server URL (optional if $env:NB_MGMTURL is set)
-
-.EXAMPLE
-# Scenario 1: Register only (using environment variables)
-$env:NB_MODE="Register"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
-
-.EXAMPLE
-# Scenario 2: Register + Uninstall ZeroTier
-$env:NB_MODE="RegisterUninstallZT"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
-
-.EXAMPLE
-# Scenario 3: Update only
-$env:NB_MODE="Update"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
-
-.EXAMPLE
-# Using parameters instead of environment variables
-irm 'https://...' -OutFile b.ps1; .\b.ps1 -Mode Register -SetupKey "your-key"
-
-.EXAMPLE
-# Using scriptblock with parameters
-& ([ScriptBlock]::Create((irm 'https://...'))) -Mode Register -SetupKey "your-key" -ManagementUrl "https://custom.url"
+Runs the hardened ZeroTier uninstall routine without touching NetBird.
+Intended for cleanup on hosts that have migrated to NetBird.
 
 .NOTES
-Version: 1.0.0
-Parameters override environment variables if both are provided
+Script Version: 1.0.0
 #>
 
 [CmdletBinding()]
-param(
-    [Parameter(Mandatory=$false)]
-    [string]$Mode = "",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$SetupKey = "",
-    
-    [Parameter(Mandatory=$false)]
-    [string]$ManagementUrl = "",
+param()
 
-    [Parameter(Mandatory=$false)]
-    [switch]$AllowProfileSwitching
-)
+$ScriptVersion = "1.0.0"
+$script:LogFile = "$env:TEMP\ZeroTier-Purge-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 
-#Requires -RunAsAdministrator
-
-# Resolve parameters: Script parameters take precedence over environment variables
-$ResolvedMode = if ($Mode) { $Mode } else { $env:NB_MODE }
-$ResolvedSetupKey = if ($SetupKey) { $SetupKey } else { $env:NB_SETUPKEY }
-$ResolvedManagementUrl = if ($ManagementUrl) { $ManagementUrl } else { $env:NB_MGMTURL }
-$ResolvedAllowProfileSwitching = $AllowProfileSwitching
-if (-not $PSBoundParameters.ContainsKey('AllowProfileSwitching') -and $env:NB_ALLOW_PROFILE_SWITCHING) {
-    $ResolvedAllowProfileSwitching = ($env:NB_ALLOW_PROFILE_SWITCHING.ToLower() -in @('1','true','yes','on'))
-}
-
-# Default to Register mode if not specified
-if (-not $ResolvedMode) {
-    $ResolvedMode = "Register"
-}
-
-# Profiles: by default we do not allow switching (lock to 'default')
-$LockProfiles = -not [bool]$ResolvedAllowProfileSwitching
-
-# Validate mode
-$ValidModes = @("Register", "RegisterUninstallZT", "Update", "PurgeZeroTier")
-if ($ResolvedMode -notin $ValidModes) {
-    Write-Host "" -ForegroundColor Red
-    Write-Host "ERROR: Invalid mode '$ResolvedMode'" -ForegroundColor Red
-    Write-Host "Valid modes: $($ValidModes -join ', ')" -ForegroundColor Yellow
+# Import shared module
+$ModulePath = Join-Path $PSScriptRoot "NetbirdCommon.psm1"
+if (-not (Test-Path $ModulePath)) {
+    Write-Error "Required module NetbirdCommon.psm1 not found at: $ModulePath"
     exit 1
 }
+Import-Module $ModulePath -Force
 
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "NetBird Deployment Bootstrap v1.0.0" -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor White
-Write-Host ""
-Write-Host "Mode: $ResolvedMode"
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "ZeroTier Purge Script v$ScriptVersion" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "" -LogFile $script:LogFile
 
-# Validate mode-specific requirements
-if ($ResolvedMode -eq "Register" -or $ResolvedMode -eq "RegisterUninstallZT") {
-    if (-not $ResolvedSetupKey) {
-        Write-Host ""
-        Write-Host "ERROR: Setup key required for $ResolvedMode mode" -ForegroundColor Red
-        Write-Host "Provide via parameter: -SetupKey 'your-key'" -ForegroundColor Yellow
-        Write-Host "Or environment variable: `$env:NB_SETUPKEY='your-key'" -ForegroundColor Yellow
-        exit 1
-    }
-    
-    Write-Host "Setup Key: $($ResolvedSetupKey.Substring(0,[Math]::Min(8,$ResolvedSetupKey.Length)))... (masked)"
-    if ($ResolvedManagementUrl) {
-        Write-Host "Management URL: $ResolvedManagementUrl"
-    }
+if (-not (Test-ZeroTierInstalled)) {
+    Write-Log "ZeroTier does not appear to be installed. Nothing to do." -LogFile $script:LogFile
+    exit 0
 }
 
-Write-Host ""
+Write-Log "Attempting robust ZeroTier removal..." -Source "ZEROTIER" -LogFile $script:LogFile
 
-# Determine which script to download based on mode
-$ScriptName = switch ($ResolvedMode) {
-    "Register" { "Register-Netbird.ps1" }
-    "RegisterUninstallZT" { "Register-Netbird-UninstallZerotier.ps1" }
-    "Update" { "Update-Netbird.ps1" }
-    "PurgeZeroTier" { "Purge-ZeroTier.ps1" }
-    default { 
-        Write-Host "ERROR: Invalid mode: $ResolvedMode" -ForegroundColor Red
-        exit 1
-    }
-}
-
-$ScriptUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/$ScriptName"
-$ModuleUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/NetbirdCommon.psm1"
-$TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
-$ScriptPath = Join-Path $TempPath $ScriptName
-$ModulePath = Join-Path $TempPath "NetbirdCommon.psm1"
-
-# Download main script and module from GitHub
-try {
-    Write-Host "Downloading $ScriptName from GitHub..." -ForegroundColor Yellow
-    
-    if (-not (Test-Path $TempPath)) {
-        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
-    }
-    
-    # Use WebClient with UTF8 encoding to preserve signatures
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Encoding = [System.Text.Encoding]::UTF8
-    
-    # Download main script
-    $scriptContent = $webClient.DownloadString($ScriptUrl)
-    
-    # Write with UTF8 no-BOM to preserve signatures
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($ScriptPath, $scriptContent, $utf8NoBom)
-    
-    Write-Host "Script downloaded successfully" -ForegroundColor Green
-    
-    # Download shared module
-    Write-Host "Downloading NetbirdCommon.psm1 module..." -ForegroundColor Yellow
-    $moduleContent = $webClient.DownloadString($ModuleUrl)
-    [System.IO.File]::WriteAllText($ModulePath, $moduleContent, $utf8NoBom)
-    
-    Write-Host "Module downloaded successfully" -ForegroundColor Green
-    Write-Host ""
-}
-catch {
-    Write-Host "Failed to download script: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
-
-# Build parameter list for main script (only for modes that need parameters)
-$MainScriptArgs = @{}
-
-if ($ResolvedMode -eq "Register" -or $ResolvedMode -eq "RegisterUninstallZT") {
-    $MainScriptArgs['SetupKey'] = $ResolvedSetupKey
-    $MainScriptArgs['LockProfiles'] = $LockProfiles
-    
-    if ($ResolvedManagementUrl) {
-        $MainScriptArgs['ManagementUrl'] = $ResolvedManagementUrl
-    }
-}
-
-# Execute main script
-$ActionDescription = switch ($ResolvedMode) {
-    "Register" { "NetBird registration" }
-    "RegisterUninstallZT" { "NetBird registration and ZeroTier removal" }
-    "Update" { "NetBird update" }
-    "PurgeZeroTier" { "ZeroTier purge" }
-}
-
-Write-Host "Executing $ActionDescription..." -ForegroundColor Yellow
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host ""
-
-try {
-    if ($MainScriptArgs.Count -gt 0) {
-        & $ScriptPath @MainScriptArgs
-    } else {
-        & $ScriptPath
-    }
-    
-    $ExitCode = $LASTEXITCODE
-    exit $ExitCode
-}
-catch {
-    Write-Host "Script execution failed: $($_.Exception.Message)" -ForegroundColor Red
+if (Uninstall-ZeroTier) {
+    Write-Log "ZeroTier removed successfully" -Source "ZEROTIER" -LogFile $script:LogFile
+    exit 0
+} else {
+    Write-Log "ZeroTier removal may be incomplete. A reboot may be required." "WARN" -Source "ZEROTIER" -LogFile $script:LogFile
     exit 1
 }
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+uXKOiStB+nsPKYeBRD5TaNX
-# kKugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUR9p6vxBnZIC8dn5qReI3TYka
+# VfCgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -346,33 +188,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# hLpYSaf+WAv5CDsdphbs7EIRUKwwDQYJKoZIhvcNAQEBBQAEggIAlRKLqCN3tAa4
-# GfOa8dEnSVTsvseXy0HxSeMDAtAqh8l7lwwm/e3/7dw9W8pgaN9CjfxdMR0+1Cod
-# YGNwBY2blF2ieJ4NqUBk6GiPYZNIRP7I43JQ9cjSXPo0ghy0/j/BQ47dbBGJohPu
-# 1xYfmqKR3xL8rTN/o9io2LqUl69N/lF3sYmDAJjNKXbSz5G+VRDjgrl0EYve6DpD
-# Xtd4icr1tOx1TpNNxxw7JlbTH4tzZaARLPHjG/dAwYy1s7Vf26XFuDwulCwABY5y
-# Vz8mYUlEYNbxz3US7eHh+tzYRbkiaHK8juBlJsXmZN337S/UoPRcS7ZYKNSUB6M7
-# zANUsukZagbgK0jcal0pJY1OiOnBxAONGZ/3BHpL+0yQShoOSk1zBgMoKfd+XPVa
-# ZjSSMzMHRn1JZLfRN3wwJRFkc8gGM34AzM9c4f6qqfO1E/dUWRHpXtlLhHzDnmSf
-# HK/SUXlL5sxKyRIbJg230LvOPX9nEjeJREjOfEDlCDEobrY0xIcwifOoga4BPGxY
-# kzAnY/dGUa6hM9uR3ZzEwBRaqs0M7oW71eg3UTFqqooRgidYlmk51zdcnS6bRfzv
-# axdJGV+B86/a9kbI3WAqwqu48o3elfpoA1GzzydNeX1px/jNN/iziXERg+MMl86j
-# QznBl517vurNHWDlc7IXRKJBJEwvb2GhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# hcBrNd3JyNZ2i/QAPvCl1R7Mlu4wDQYJKoZIhvcNAQEBBQAEggIAgZZpJwvlqEkr
+# 3Ln7P7uUBg/8fe9/IYPQgoKhS8bCg5qhQg77fKcKFPbrNt+8Egrgg5ndWNypj2Dw
+# kpDlqCroxzsiT2fOgRey3i2NHimGfTrKC+oQO87xmq+uaJR2+rl50PtuLzWt0hD2
+# n3uuMyc9HicDkLzxBz+ukGwsI9FK1tfmm+a+K1iMjWavBN/16iF9UxM9NtMeAONJ
+# e6LcYqZ09WTmfZy+F5XOvXktETZTk5ongLU/dFfkaljjr/oqdXX2ZPap0DudEGT+
+# 43zYNteRSt7sGk9z5++xnJfhz4SdVEiz2D9NSsWmPUeaeIFnaJ4FdxYiBTEuNQed
+# hWefRXnVfY+kLdZoUEkeExYMHTRZvw3jnKCbGsN0nh1mWP15I4NmYMyLj2NY5Xjo
+# lHRU9kAuq/rEgwr2u+pft8znMoiMU1EVRj+makZFRhIHTNgRx7hpX8gLSWBeqzJh
+# DYpz08rDMGVgHfHLGxTs8lGx6nw6cNBA1EZvXdZvPab1fHcEkbbrJOfMGBMasgDe
+# kI0RQgXNS6q9ZQmlVHqFBrcdFVxtU2mZzkxlDGMywEFgzIoGoCoJmfjbPhPwNx+R
+# fUn97hbvfnGNtcG0vvcYugZV1H7XqSbPQtjCDPkXT4YhXD1C1Skt8agPxulqrYWU
+# r+/cFxyBRVs1I6dO8b2kFnCzbCjoImihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDE1NDQzWjAvBgkqhkiG9w0BCQQxIgQgMZ3JFOw/8osVWWCBwfXfji1v
-# ys4oKLM538WPtmiwLx0wDQYJKoZIhvcNAQEBBQAEggIAZd5kyReUWDSIcGwHOfyp
-# t/FnS4HSX8o4AjMbnCABhBWtDHmX+NubWhSHgkUYpCszpa8H99p6t9cpKlTY27pL
-# 0hGgdTzh/tCuhaXhc07HiZy7g6sOspFdHKDJs1BPqUKR8ywNuMXTBszUepsB6rrW
-# Z5hJi62lCt178HbbL3RQqRE3pSu+z2Hmmkyqzmmc7DvLBh5rz69Ko1i8yWzpoheJ
-# yiQmIVmBK2aQx4wAnvAu1a10JTy+H/Do7wLQvLK77Z9VDn8VlE9T9T7pqxKwO9ar
-# KvwlOIj0Uq3owrWAKkJxDONayoSLCBa+rKpjFCwVoEiebbq3trBQq2v+/1bLwA7b
-# XmVm0Bfma0ZVhd0qiRbOOXWifBb93LYWl1iVS9jKLgCSVNhTgeDtlJ0J//e4uo2J
-# mNAY4rhmZXMAy2F4fZjYiwqChziF/iCzoBzm3QOR+P5k5y8ANhNeZ4hq/LbvO4NL
-# 7FXhrzs2iUqSrYdycDrzJmKq1KnZnv+JODAyD10T6DyG/DefXbFeVoH6cf48sX9r
-# OpW3vTzDFL0RL9U3nf2yl8xggaGfe3llo+cswUk2EaenNU2jPGdjq4LM9hwbwFis
-# IJx6olV3UDgR9+xeq24yVmi4/Qa9xkaj9G/mS2B/Dbn3HVKEf2HaOD1Od1SfJUdZ
-# 79e+PWcWPwWZyXidOvAVbOI=
+# MjYwMTEwMDE1NDQzWjAvBgkqhkiG9w0BCQQxIgQg0GaFwj3TA4KhHTmCzsuiT80q
+# 4z7d5gHGppDjREQs9ocwDQYJKoZIhvcNAQEBBQAEggIAMmz1kMfq+KJJW0B/6BE9
+# JX5iwUbtYmJMVpiEDd76K1O4W7ommZ7uqeK8X5sZIPQ5DtLQyimf3N0SqNLBDSsN
+# XBGPKoRlLhL2EM1PPbV5wfnNYGkxGyMUJTNEJIrEJ7f4n/79H7QhyUpHDt2Bwl2V
+# B1p2a0clu/xhDU/cYXOwKaVPtHuz/FhTblHxOv7DnWKh2jBqqndajIVjqqpoAIH6
+# r2l291EmFqXL4K9L2oPLLYUXoq/abYoFf47w27d1ubGGerfO+QYwcjb5llFFmSKK
+# VLksed46iJIEuX6VvOANiemLitip+VKjddkdUVFcPOdgDDrq8bId5yKzfbVdT3KW
+# pEb0mPEGAxgrO9fuwwFRvXvj1fKKtqRNevqEwhIWXEBOycKeRcgoPaGyS5GYGrWP
+# 7MQ8+oDsBmvp/zuNlTbort2Uhx33eb1arQhN3MvcGM7GS0rMrfgrSaUX4eCER0tV
+# g1YjGjZLtC5FLtlYgURDWaJV2tpt9Aq2efa209W5AJh2mAG/vHwM5TA6zD4xeG29
+# fVHowXWkxB2N7hjjHuwAS8LJd8hkIgmQ0Rpd86v7xZ0G0bZu1uXf5ChVjlqNoN88
+# M/1dfQirSIw1lz3v1RAs6OjsHtypreuxtBKppNszXIz5kKkP0FtEXoK9yssMSTDQ
+# /2xxMAqQuAn7N2/c5qp0ojI=
 # SIG # End signature block
