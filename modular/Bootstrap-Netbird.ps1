@@ -114,10 +114,12 @@ $ScriptName = switch ($ResolvedMode) {
 }
 
 $ScriptUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/$ScriptName"
+$ModuleUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/NetbirdCommon.psm1"
 $TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
 $ScriptPath = Join-Path $TempPath $ScriptName
+$ModulePath = Join-Path $TempPath "NetbirdCommon.psm1"
 
-# Download main script from GitHub
+# Download main script and module from GitHub
 try {
     Write-Host "Downloading $ScriptName from GitHub..." -ForegroundColor Yellow
     
@@ -128,6 +130,8 @@ try {
     # Use WebClient with UTF8 encoding to preserve signatures
     $webClient = New-Object System.Net.WebClient
     $webClient.Encoding = [System.Text.Encoding]::UTF8
+    
+    # Download main script
     $scriptContent = $webClient.DownloadString($ScriptUrl)
     
     # Write with UTF8 no-BOM to preserve signatures
@@ -135,6 +139,13 @@ try {
     [System.IO.File]::WriteAllText($ScriptPath, $scriptContent, $utf8NoBom)
     
     Write-Host "Script downloaded successfully" -ForegroundColor Green
+    
+    # Download shared module
+    Write-Host "Downloading NetbirdCommon.psm1 module..." -ForegroundColor Yellow
+    $moduleContent = $webClient.DownloadString($ModuleUrl)
+    [System.IO.File]::WriteAllText($ModulePath, $moduleContent, $utf8NoBom)
+    
+    Write-Host "Module downloaded successfully" -ForegroundColor Green
     Write-Host ""
 }
 catch {
@@ -182,8 +193,8 @@ catch {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkDSBVuM4aEuBk+K2mFDuZmP2
-# x0ugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXswH7Lv5w4DIijiWSX3vb9+U
+# Su2gghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -322,33 +333,33 @@ catch {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# y4GF5IHPCVarCCIP7OJr+9f+ch4wDQYJKoZIhvcNAQEBBQAEggIAsSWUCc/SH3w/
-# CPmjmac/lTdZIE36gQSFsgG//7XMgfXPONb6tcjGsYFs2TxsAxMI7g8rvVKjKrRk
-# JLR/TtLgoK8dzyOp7XJaE9YQL84UmwCJpXnd08ecqCxtI3dAw/u0ZA3rWpoS3+8K
-# byUSXJ9T54RjdjHc7vXDtyqfrPn2yDOW0XyyFB5mQllUIHZfdi5MSCr3e0dDMM0r
-# SnJDrwuErnENazdRyUn7KnUrdUXcvhNNfAZi7IAlQ6RBUAKLSt7WiTcDtHLEVLi3
-# Isu581HBZ43k4Pv3OFXaxYiPVlzqnT7AQ7wDugrhC+fUr6SEpONGKukVipOcsTq3
-# 6m4U6VlzglS+RdI3msTKdKU9w2+3+YxQ2tEzsssTzVG0FmqEI5NXEPR2fYhVDiNi
-# ZnZudML5YdmIUSSlhO4Od+KjV2GuijEpIPjyk9arytGddjSAnMxutYhn53OKjytr
-# XfdtP0vT3b4m3zkCoHXmOQ4La7wlWZdtlIodlH47+3o/nMUMq/fSXOzjTFdH5xDP
-# sPetTwmk7P953QeDnDYTw+pCRfolj6i4Ma1VUADsTL4I773mr4eJON63HCZD9RH/
-# J/gV8U2cfvEcOgduZ1Sx5By+iTCSNmnNc4kgL+vE8B5WWdeKSki0qn4U+SubNYHj
-# 4ljjHZ8DktreSu0lutWPecbXNBzqLxehggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# uTtDsTpryTX8Nwkyo62/KuSX3dEwDQYJKoZIhvcNAQEBBQAEggIATTt8t/kuGMg4
+# 5O7XNtG2NzS1vrLUlBkm9r7FMNah3Nfz87mQ9xFEfZHGVeF3p9oVM5d9k/kW4ZD0
+# 7GzQfpYASl+211fQ86f8/Ndu8VSNqtEVVs4zDCGpJSXyUeElcLFDxKpGaJSsminN
+# ah8xSI2k8UKsgILNNiCFu0Dzp/ZmfpKqLpzUuLXR64LD/Czy7BzSNd4bLMPnZDlT
+# DrNCw956eJUyLb5Xm0abiDd8nF3ijy0kICvKCDBADGcQRtgO2xmmThZedJdtua14
+# BQ3KJRnmGsAzOG67/b2yx20g+hWJGaYVbaQZoDZNEQDwv56YnwAlMMLjOBVTDEZW
+# Guvrd12GITCESv4Y4uA+Ag+oGsq8YYt9VjvizMop4M6U1Q/bDLi1hLfBlWL+okgq
+# E67yDbQ+hU5cMstEwJ4nq0QdTg2E8yllsuHm/1jD8hp7rAwwtMQNNDcR6cilGJNF
+# /Wr1dTTq71lum6InmXuB0cNGyjGtvVDNnTd7mKGwEAH09wryi/zFIn16Ct4oxBTd
+# hTc+6KHpJU5l2nYZ7h/+yB3k/EAsBYuutHscbO8SGfwMgzK8Gt6AxZjwNFoOt8FV
+# fWByBeoRbWwipgHE7JD/bX3itTkKYdAN8xHDtiM33XhnGyORsPTv+IA9AmOq2JWt
+# HJhzVTVPsMmRi4luTRRnmfaZLA2fB1ChggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDExMzU1WjAvBgkqhkiG9w0BCQQxIgQgphWiSSnCdjujZeKeEmgbu/XF
-# cwUyw7JQB6L3evEHuDUwDQYJKoZIhvcNAQEBBQAEggIAoZa3rYp/OF9O6cd8lVGA
-# TpuOcE7FugqN8j+wRX0IFHm5fYUDuOhmI6k6UPkUL8EGqsnUEKS+eFITbEe8AMXr
-# IHQJG5CLfcuuHrsvFQ1LIjd4U2IRZDR+BVCPnwUcz9CFvB7tQVtAJIZPZRWB/rj0
-# a1aWtgTTOWNJ7izo9PAYRjodfexYkwz+aWc5s91DZ/um2gyFMQw+cIPOCnOR8rNe
-# ZCRrUX9tR6wIBMlqcDFiFqtLkEnsONRR8AhG7/M9yGWQ0cyjtEfLUJi9DnoVvtPd
-# zxELQ+b5N6YUABJUWsIRkzmRmn8zeo2wcP4s2hMpt150AFgfcmERAMbzs4XqEMed
-# IyVGHY4oF3OboZNBK7sRigGZOUX3KUnX9/3ZNgrl/VlkQZjS7rYhQl1Tz96WRu0K
-# rxMqXU00YsuIJ5+zd7zKaUueVULplVjjLHwWN/p04hZgMs3X9Y5R8zvqx76bY9zL
-# ia5iDCu+TWDq1dn9u1S/u3ayZy4+vnsD1uhFAd1InbR8obB845/Ayz9bZdv6SCrX
-# xIrhP4eJbyPJenczhWKlxCTPOL5Ny9/MPRUS9sCGDMNjB1hY/BPMPDD+BMXPVs/1
-# lpzYVhGby42fqukvKhK5UnVCPLERpT2+bxV5t7HiwXLWpQ6pvSIVpa6dG99ZTFyq
-# XvfYFYYiA/nRNaQcRBRVIfk=
+# MjYwMTEwMDEyMDM5WjAvBgkqhkiG9w0BCQQxIgQg7FXPxfm6giS3ZWQRjrpY5YII
+# EMIWllXDI6D6qYvjrZQwDQYJKoZIhvcNAQEBBQAEggIApxAXXHRWVnSWMPSFivjH
+# SpokbD8G8GqiabIZqRDpzqbV4cZdoM2zqUOZWAf52LlALOlBobD+dv3ZpIpkdvgL
+# uBGLHQGscAj9NPydYAArVMjhasUNb1BjOTQTl9UPml/YZhiW6vzoiEkS71d7CY73
+# jHeiIokiaEn+wCFexW+HbF/FV8Igpn3I2WBPOHPaEkwhKINRGh6f5DrZ5DhTgHur
+# inAfx6b0gTSFmZnHm2UEdQvzNUPa4nPFRcJh4U+R8Oezn8omJf5A9lLZz96i7g5S
+# dxq+rUwztoJr93OISi0G32sf3+G78G6i57n639imJhr0YWrq9PPUJMNlFAz6lHJj
+# LjP4mJ1yCiKxlD+kQGawHVjdKrCgoFfUaiauh7TB75RsjL0aoTnlZgmduniwnHNE
+# tKpz1/Oieqw4IC3+0dz/zffgIe+HdNf7bXcKPchC6wAJzRAAMuEnaW4J+VNDojFY
+# IJUof6h7VoyznO7Cl2pIHCXLbyprkzOuj6NWkw8Dw/MliCd3/9Ep9VdmqzwBCrY+
+# TVytdCKldtUw70wTrQosU1WbeHfMFSz/gjvW7tHdH8ipIS4sLbWPgr4e/3Zt5cyX
+# tMpRF/Z8W0pqJ8dnZRsJkh5aqmyUQ4+shy43evRXf6HWLKxSZSN9bQTRJMKh1crk
+# eD+vY5BOYu7JYon3t2xHtfs=
 # SIG # End signature block
