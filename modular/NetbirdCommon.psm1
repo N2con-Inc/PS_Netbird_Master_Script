@@ -400,64 +400,127 @@ function Test-ZeroTierInstalled {
     [CmdletBinding()]
     param()
     
-    $service = Get-Service -Name "ZeroTierOneService" -ErrorAction SilentlyContinue
-    return ($null -ne $service)
+    $svcNames = @("ZeroTierOneService","ZeroTier One")
+    foreach ($n in $svcNames) {
+        $s = Get-Service -Name $n -ErrorAction SilentlyContinue
+        if ($null -ne $s) { return $true }
+    }
+    return $false
+}
+
+function Get-ZeroTierCliPath {
+    [CmdletBinding()]
+    param()
+    $candidates = @(
+        Join-Path $env:ProgramData "ZeroTier\One\zerotier-cli.bat" ,
+        Join-Path $env:ProgramFiles "ZeroTier\One\zerotier-cli.bat"
+    )
+    foreach ($p in $candidates) { if (Test-Path $p) { return $p } }
+    return $null
+}
+
+function Stop-ZeroTierRuntime {
+    [CmdletBinding()]
+    param()
+    try {
+        $svc = Get-Service -Name "ZeroTierOneService" -ErrorAction SilentlyContinue
+        if (-not $svc) { $svc = Get-Service -Name "ZeroTier One" -ErrorAction SilentlyContinue }
+        if ($svc -and $svc.Status -ne 'Stopped') {
+            Stop-Service -InputObject $svc -Force -ErrorAction SilentlyContinue
+            $svc.WaitForStatus('Stopped','00:00:10') | Out-Null
+        }
+    } catch {}
+    Get-Process -Name "zerotier-one*" -ErrorAction SilentlyContinue | ForEach-Object { $_ | Stop-Process -Force -ErrorAction SilentlyContinue }
+}
+
+function Test-ZeroTierCompletelyRemoved {
+    [CmdletBinding()]
+    param()
+    $svc = Get-Service -Name "ZeroTierOneService" -ErrorAction SilentlyContinue
+    if ($svc) { return $false }
+    $svc2 = Get-Service -Name "ZeroTier One" -ErrorAction SilentlyContinue
+    if ($svc2) { return $false }
+    if (Test-Path (Join-Path $env:ProgramData "ZeroTier")) { return $false }
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "ZeroTier*" -or $_.InterfaceDescription -like "*ZeroTier*" }
+        if ($adapters -and $adapters.Count -gt 0) { return $false }
+    } catch {}
+    return $true
 }
 
 function Uninstall-ZeroTier {
     <#
     .SYNOPSIS
-        Uninstalls ZeroTier from the system
+        Uninstalls ZeroTier from the system robustly
     .DESCRIPTION
-        Uses WMI to find and uninstall ZeroTier product
+        Leaves networks, stops service/process, runs silent uninstall, removes leftovers, verifies removal
     #>
     [CmdletBinding()]
     param()
-    
+
+    $ok = $true
     try {
-        # Find ZeroTier in registry
+        # 1) Try to disconnect from all networks (best-effort)
+        $cli = Get-ZeroTierCliPath
+        if ($cli) {
+            try {
+                $nets = & $cli listnetworks 2>&1
+                $ids = @()
+                foreach ($line in ($nets -split "`n")) {
+                    if ($line -match "^([0-9a-f]{10})\s+") { $ids += $matches[1] }
+                }
+                foreach ($id in $ids) { & $cli leave $id 2>&1 | Out-Null }
+            } catch {}
+        }
+
+        # 2) Stop runtime
+        Stop-ZeroTierRuntime
+
+        # 3) Uninstall via registry uninstall string / MSI
         $uninstallKeys = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         )
-        
-        $zerotier = Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue | 
-            Where-Object { $_.DisplayName -like "*ZeroTier*" } | 
+        $zerotier = Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like "*ZeroTier*" } |
             Select-Object -First 1
-        
-        if (-not $zerotier) {
-            return $false
+
+        if ($zerotier -and $zerotier.UninstallString) {
+            $uninstallString = $zerotier.UninstallString
+            if ($uninstallString -match "MsiExec\.exe\s+/[IX](\{[A-F0-9-]+\})") {
+                $productCode = $matches[1]
+                $args = @("/x", $productCode, "/quiet", "/norestart")
+                $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList $args -Wait -PassThru
+                if ($proc.ExitCode -ne 0) { $ok = $false }
+            } else {
+                $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$uninstallString /S`"" -Wait -PassThru
+                if ($proc.ExitCode -ne 0) { $ok = $false }
+            }
+        } else {
+            $ok = $false
         }
-        
-        # Get uninstall string
-        $uninstallString = $zerotier.UninstallString
-        if (-not $uninstallString) {
-            return $false
+
+        # 4) Try to remove adapters (best-effort)
+        try {
+            Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "ZeroTier*" -or $_.InterfaceDescription -like "*ZeroTier*" } |
+              ForEach-Object { Disable-NetAdapter -Name $_.Name -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetAdapter -Name $_.Name -Confirm:$false -ErrorAction SilentlyContinue }
+        } catch {}
+
+        # 5) Remove leftovers
+        foreach ($p in @(
+            (Join-Path $env:ProgramData "ZeroTier"),
+            (Join-Path $env:ProgramFiles "ZeroTier"),
+            (Join-Path ${env:ProgramFiles(x86)} "ZeroTier")
+        )) {
+            try { if (Test-Path $p) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue } } catch {}
         }
-        
-        # Parse MSI product code if it's an MSI uninstall
-        if ($uninstallString -match "MsiExec\.exe\s+/[IX](\{[A-F0-9-]+\})") {
-            $productCode = $matches[1]
-            
-            # Uninstall silently
-            $uninstallArgs = @(
-                "/x", $productCode,
-                "/quiet",
-                "/norestart"
-            )
-            
-            $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $uninstallArgs -Wait -PassThru
-            return ($process.ExitCode -eq 0)
-        }
-        else {
-            # Direct uninstall string execution
-            $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$uninstallString /S`"" -Wait -PassThru
-            return ($process.ExitCode -eq 0)
-        }
+
+        # 6) Verify
+        if (-not (Test-ZeroTierCompletelyRemoved)) { $ok = $false }
     }
-    catch {
-        return $false
-    }
+    catch { $ok = $false }
+
+    return $ok
 }
 
 #endregion
