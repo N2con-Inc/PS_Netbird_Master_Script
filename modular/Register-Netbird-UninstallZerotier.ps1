@@ -86,9 +86,40 @@ if ($currentVersion) {
     Write-Log "Current NetBird version: $currentVersion" -LogFile $script:LogFile
 }
 
-# Step 2: Check ZeroTier installation
+# Step 2: Initialize NetBird service if needed
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 2: Checking for ZeroTier installation..." -LogFile $script:LogFile
+Write-Log "Step 2: Checking NetBird service configuration..." -LogFile $script:LogFile
+
+$configPath = "$env:ProgramData\Netbird\default.json"
+if (-not (Test-Path $configPath)) {
+    Write-Log "NetBird configuration not found, initializing service..." -LogFile $script:LogFile
+    
+    try {
+        # Install and start service to create config
+        $installOutput = & $netbirdExe service install 2>&1
+        Write-Log "Service install output: $installOutput" -Source "NETBIRD" -LogFile $script:LogFile
+        
+        $startOutput = & $netbirdExe service start 2>&1
+        Write-Log "Service start output: $startOutput" -Source "NETBIRD" -LogFile $script:LogFile
+        
+        Start-Sleep -Seconds 3
+        
+        if (Test-Path $configPath) {
+            Write-Log "NetBird service initialized successfully" -LogFile $script:LogFile
+        } else {
+            Write-Log "Service initialized but config file not created" "WARN" -LogFile $script:LogFile
+        }
+    }
+    catch {
+        Write-Log "Failed to initialize NetBird service: $($_.Exception.Message)" "WARN" -LogFile $script:LogFile
+    }
+} else {
+    Write-Log "NetBird configuration exists" -LogFile $script:LogFile
+}
+
+# Step 3: Check ZeroTier installation
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 3: Checking for ZeroTier installation..." -LogFile $script:LogFile
 $zerotierInstalled = Test-ZeroTierInstalled
 
 if ($zerotierInstalled) {
@@ -97,7 +128,7 @@ if ($zerotierInstalled) {
     Write-Log "ZeroTier is not installed - skipping uninstall step" -Source "ZEROTIER" -LogFile $script:LogFile
 }
 
-# Step 3: Register NetBird
+# Step 4: Register NetBird
 Write-Log "" -LogFile $script:LogFile
 Write-Log "Step 3: Registering NetBird..." -LogFile $script:LogFile
 Write-Log "Setup Key: $($SetupKey.Substring(0,[Math]::Min(8,$SetupKey.Length)))... (masked)" -LogFile $script:LogFile
@@ -135,9 +166,9 @@ catch {
     exit 1
 }
 
-# Step 4: Wait and verify connection
+# Step 5: Wait and verify connection
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 4: Verifying NetBird connection..." -LogFile $script:LogFile
+Write-Log "Step 5: Verifying NetBird connection..." -LogFile $script:LogFile
 Write-Log "Waiting 10 seconds for connection to establish..." -LogFile $script:LogFile
 Start-Sleep -Seconds 10
 
@@ -174,9 +205,9 @@ if (-not $connected) {
     Write-Log "WARNING: Proceeding with ZeroTier uninstall despite connection issue" "WARN" -LogFile $script:LogFile
 }
 
-# Step 5: Uninstall ZeroTier
+# Step 6: Uninstall ZeroTier
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 5: Uninstalling ZeroTier..." -LogFile $script:LogFile
+Write-Log "Step 6: Uninstalling ZeroTier..." -LogFile $script:LogFile
 
 if ($zerotierInstalled) {
     Write-Log "Attempting to uninstall ZeroTier..." -Source "ZEROTIER" -LogFile $script:LogFile
@@ -190,9 +221,9 @@ if ($zerotierInstalled) {
     Write-Log "ZeroTier not installed - skipping uninstall" -Source "ZEROTIER" -LogFile $script:LogFile
 }
 
-# Step 6: Remove desktop shortcut
+# Step 7: Remove desktop shortcut
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 6: Removing NetBird desktop shortcut..." -LogFile $script:LogFile
+Write-Log "Step 7: Removing NetBird desktop shortcut..." -LogFile $script:LogFile
 
 if (Remove-DesktopShortcut) {
     Write-Log "Desktop shortcut removed successfully" -LogFile $script:LogFile
@@ -221,8 +252,8 @@ if ($connected) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULf64Fwkz6bGPxmH31MPVER0Q
-# WtSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyHg+T9yJGhjczAoEzOyO9j/U
+# JhWgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -361,33 +392,33 @@ if ($connected) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# mX4sMMWk+l2dlORHLz0WV/MczYUwDQYJKoZIhvcNAQEBBQAEggIAzEGq8OGo1tP6
-# 3xrSXRVPlFLMtJtydZForNUuWMBJwAFZRmWhzpMwXsNrqVQSiI9FRet0X8Rcd36E
-# 0kL6JlOQ9hTF4ww3CjTzZL+DSd3RKdjLbkBacMtuER3y5DZwIWdhTH7hmQTnEkyo
-# HwqQANDJ3CAfW4c4BNAWlUu/ilsa+R/gdkDB2uyKg6HJq63DQeLz0evpbnilKkVL
-# 2cOk3R1sIwir5nSIAIAmugdzBrG2icMWwmmJjKzr402XFtJPooLdR3fKgr3jqIkp
-# G1ky31ndcBUfnZpIo8+HBBWU1GvoBLzYMp1DK6hCQRUSZ4X476wSXGiPnNSb/PIr
-# ZaCs9bC0L13wPH+HM/ZHC5ylQlgfPXojG7gNpAworvIUnrWho8rCf69Q5gq1WeLw
-# RVnzMgB+k/dxoroo0V1cmIkGumyzf0A+BYGZop1QwktSo9pcnCU9zTqh2yCvKqzW
-# D0dx6kFoKjCoBCsLAmFYSpHP49SVjKuZX1medoLzDhUgtLkjx8G64dknIpDtSxhE
-# QHM6zNWGDSRW5YMug3wwrRQTyREI9f8wBXxZS0/BrxVJL7mtRveYUl6Wu0buLvp/
-# oLBKyVyWz92UU/yPJYK3R7Q9LFvIi6YXoyzxnmV1AJM/yKrmVyZLxz7THYN9Rc1t
-# ysiXhEGamP9J+jHGI5MjgL0izSkMyZWhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 6zUe07ZLOuSFKsVQyZlafa7r47UwDQYJKoZIhvcNAQEBBQAEggIAeVRqHUj9BuDM
+# +7lFGown2ZzT/n/p5Brg1WFgdY5f1EqEqAjv/sOSgQ0pUMQl75njO6yYwrQ0C0eL
+# w6y63rJeOua4ozYfX2D9qvyj4nZuZyTHgVzwrGMbtoQk8+blLuswP29s3L8DHEB5
+# jhjR1n8nSPEZEgdqA5rgl7YNmPTmSfaOx14GsQHavC7f/ghZiKSSoNbLX/Ay641a
+# wk6wgZwyozmfUldxw2iFeplCAybXWCETwr9nNa0wAcnxTi3GnuLtWsmxmRiWCtqX
+# tjpPJjT0wBrRYEfXkeSixFHC8m1e+BFYHAcC7PNCZJiKRlQS0gX+KT46yofmTyxf
+# LDuXjQ+ma+hSSVDh5XT+NCMLhaZIsif8Y2lFkZBMt7PR1w0n19C4EUpVGAzMw/Dr
+# ZkzGIK0fq1B2cg35+PJ+vHgpMkUrUxPWif1+CZ675g3KrwrbFdv0lqjt3gi0obRu
+# kLEpI7nK7KBVo5OIVSQykf23LgaHkZLifQfS5BM9GUB6M72W4BLoRqQYIU2JQMB2
+# ilCUFx70eAbK3rfZISax22EUr0RT/cuprXUeOvSMV9pUbUzM1Ya8xE4gcCmz/Lf4
+# J1jlZSjCxmydKJmYbEI++1fd+pr84hnC6Lh8Z84ld0uatKX9oqyKsNASeygKZquW
+# bKECmpBTFTh6gv5euUfiRV4VfjqSi8ihggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjExWjAvBgkqhkiG9w0BCQQxIgQgCBv7bUeKf4XlM6/wM5ng3yUT
-# 3wQlcN0ekWdnltc375gwDQYJKoZIhvcNAQEBBQAEggIAs1+hyZ/IlAdaI9+wgnCm
-# pc3eYxJltRzeAs8XMnF5SGyj3K5kYVV6XVCjGvWGzjkKBdXBXeDvaRXLSl+kxx7P
-# 9g8rr69vvyvAA9ZUNFx341Dgp4FyzbY4JDrAmISUZUoeRTyiRdL0LVn5BfMyQoCk
-# Bf/mJwod1vpKkvETDDjOQKSAPhmpAVwPFfeeypKYBCLdoPPonp+ib1UPtDDGr1CC
-# wevjcih9mVXEjsYKd/0g+mT3riLATW/4LRERXu29bC7k9bFtQMI1qrEj4OsJXh4b
-# w+TRIcURdlVBIZaGmOeh+YP7eQg+Wu75yu4UBxXmvxkc8wxjRPI2oWA4MfvqT7hE
-# QpHulzptOAkbZ9DXe2dZiq7dnl06szQ64D1SCJFrksBw83njuVi+cGb1G6gjD3AA
-# Y+Oo9T0JmkPbV1foxxeHqT7W0NKe3pOwDO5SD7FXo6wGIF6gcnaHh2cMqEb03inT
-# 6K3talghIvyVsB8SxpqaDoHSADVoPIoaPzUKV4D6vOaOZUtJ10uHvpjwsjGXwNzc
-# bpgF9F5pxP3d3OKbEB/1Z0BSx/vxjHrPWkCwz+QNvA7+U8UWdHfyldz0VpGhznKW
-# iaafpSkHOMc8306mnlJ2gLOaCVoeNEESkkNFYzYQQu7GZ9Xf9zZqFKDbnKQ2KqUG
-# hNxXjJtoPcNE68jrht2J7PA=
+# MjYwMTEwMDEyODEyWjAvBgkqhkiG9w0BCQQxIgQgVZdBoNeFnTjGiE8l3RDL3Z2+
+# knyRHVajPwb0WvsZ3xMwDQYJKoZIhvcNAQEBBQAEggIAuIwqGw9s7pkQHlCb3M5x
+# d59d+WbdDGe9OVBSeDgot++IP9i9idb46QEHgGXg4sgh/4d+zz0ZaqbxgHK3B1Cg
+# Ur7RuzLFRR6ZSp65esn3d06fEUvAAOMvwbUyVef/96vOCfNm4BBvyS2xWP/SUOYO
+# +jqgPkgTNJ5356aAf/OqbCImDig3wcrMjPBvChOXWvlM70s71DUXYWFxFcRgELEe
+# dhwoe9FpWcEtBh7ccJovm1ZRjgdeRn6bTAPxE+lGD2rb+ZDd6AeC3jlF4QIg069j
+# PAQRqouhGy7bIFnXpem0GzoY05AkJ8s7OBtxcC2D4BCdWZKBKsutqB8e/o2MobGc
+# UlelQjTokRvdgDnKGatububXxWtAdw20QLaxthX7j6QKRy5PMDVd3oZGG2eFHeWa
+# GFb0N51sfp93Qulf4v52804revkd+1qNyl/00J0cQWGsisO3SsfM5RGT/pbvuwhN
+# WWcvTk0gNdAMF6lXP1GOaJhGX0ikgOUiHdPVTkLCn0bMtjL4Zk15zLz5512YQLAC
+# Vko3oaewQaa7BAi4iz8PpSXItBM3bz9eHywCqta89ZmT06ERdLOUOekHFBCqY7uQ
+# Q/s8MYHHQtwM/21C2N2Rp+xsSa6s9U2V2OrQcDd0VW6DQOYWmV6VQlA6WMxYdYUi
+# UpTrQwjZeb/9TgkXrL0oooA=
 # SIG # End signature block

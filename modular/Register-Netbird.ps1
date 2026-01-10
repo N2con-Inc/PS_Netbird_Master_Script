@@ -82,9 +82,40 @@ if ($currentVersion) {
     Write-Log "Current NetBird version: $currentVersion" -LogFile $script:LogFile
 }
 
-# Step 2: Register NetBird
+# Step 2: Initialize NetBird service if needed
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 2: Registering NetBird..." -LogFile $script:LogFile
+Write-Log "Step 2: Checking NetBird service configuration..." -LogFile $script:LogFile
+
+$configPath = "$env:ProgramData\Netbird\default.json"
+if (-not (Test-Path $configPath)) {
+    Write-Log "NetBird configuration not found, initializing service..." -LogFile $script:LogFile
+    
+    try {
+        # Install and start service to create config
+        $installOutput = & $netbirdExe service install 2>&1
+        Write-Log "Service install output: $installOutput" -Source "NETBIRD" -LogFile $script:LogFile
+        
+        $startOutput = & $netbirdExe service start 2>&1
+        Write-Log "Service start output: $startOutput" -Source "NETBIRD" -LogFile $script:LogFile
+        
+        Start-Sleep -Seconds 3
+        
+        if (Test-Path $configPath) {
+            Write-Log "NetBird service initialized successfully" -LogFile $script:LogFile
+        } else {
+            Write-Log "Service initialized but config file not created" "WARN" -LogFile $script:LogFile
+        }
+    }
+    catch {
+        Write-Log "Failed to initialize NetBird service: $($_.Exception.Message)" "WARN" -LogFile $script:LogFile
+    }
+} else {
+    Write-Log "NetBird configuration exists" -LogFile $script:LogFile
+}
+
+# Step 3: Register NetBird
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 3: Registering NetBird..." -LogFile $script:LogFile
 Write-Log "Setup Key: $($SetupKey.Substring(0,[Math]::Min(8,$SetupKey.Length)))... (masked)" -LogFile $script:LogFile
 Write-Log "Management URL: $ManagementUrl" -LogFile $script:LogFile
 
@@ -120,9 +151,9 @@ catch {
     exit 1
 }
 
-# Step 3: Wait and verify connection
+# Step 4: Wait and verify connection
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 3: Verifying NetBird connection..." -LogFile $script:LogFile
+Write-Log "Step 4: Verifying NetBird connection..." -LogFile $script:LogFile
 Write-Log "Waiting 10 seconds for connection to establish..." -LogFile $script:LogFile
 Start-Sleep -Seconds 10
 
@@ -159,9 +190,9 @@ if (-not $connected) {
     Write-Log "Note: Registration may still succeed. Check 'netbird status' manually." "WARN" -LogFile $script:LogFile
 }
 
-# Step 4: Remove desktop shortcut
+# Step 5: Remove desktop shortcut
 Write-Log "" -LogFile $script:LogFile
-Write-Log "Step 4: Removing desktop shortcut..." -LogFile $script:LogFile
+Write-Log "Step 5: Removing desktop shortcut..." -LogFile $script:LogFile
 
 if (Remove-DesktopShortcut) {
     Write-Log "Desktop shortcut removed successfully" -LogFile $script:LogFile
@@ -189,8 +220,8 @@ if ($connected) {
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHj/U+cTcg/pYTwcz75YaBnCm
-# CFigghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPgzvVYqYfVKwFUT3N4xWahWX
+# MXmgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -329,33 +360,33 @@ if ($connected) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# a5MQ8hexnEOYETDa5x16r2l5deIwDQYJKoZIhvcNAQEBBQAEggIAyAKjYmEh4npY
-# r4w2XFDmUEutkbSD3hFsZl9Q6iON718v3nCVzatnHtJZh4X4pkMla/o/a07z2kTd
-# DqH/Dwp4mXNa5MSHv3CCUFTzr3M9EXoSeex40zPiiy+J7bnSYacOheHoPX02Uq97
-# yDum+vlWYxt8N8IxObkuO+OxJhByYbY7ABMcXC+mQtsBbtRgxRFs1Jdezhsl9QIQ
-# MChZlUvLs8sKEpMh4NXkZlGPqx4ibK99noZqVOpJ0t0NFKtUy6XGDs6uXDC+91+3
-# LRz34i0oU0Xi62n/T7/9w8zNK4D8iImmWFavAFqbGcJsKZ0CtTLykG4jaqkhUQrx
-# c4tGv+izSVSUDTPMszKy30HveCXarwcWBVVnxIJy/eJK4q8KadH/pIXSyh28ef1Q
-# KBCqQ4ARKDiQ1AipKCXZJe65qJA9vV6MRrahh5j4rxjbuRvENthv19c6qRzm3m9G
-# 535mWIkq/J8QwP+Cpt7DsldaVYv9JWzbJcceroqbKPMuJaKCeRQi1szVc6RGyjQ3
-# HRk291BknJZXdYEwC3NyRqne/jo0kN7hmbRM4QsS/EhwEyRf25f0qAD6mttex4Bw
-# 9C+qxOt8eDdRU0G9UKiwSJZ2WKT5oUUiNRc6Q6cWDBW0eV9t3OOmc7hhq0XNH89A
-# lIbkIHi2pYmSFaOkKu8kMW917z1mjlShggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# z40u0V8snc6DfqmdfPM6pj1Yi5AwDQYJKoZIhvcNAQEBBQAEggIAkm7k3OpoFk/b
+# QH8Xpwe/SfTQgVDwyjF14HqS4PXCkua50leojYmIcOLvJLIXcf9NHQw5s7CErnbA
+# cF8QjMTiPdJse/nAZ+RPQ6odInm0Ygp2xXsCdlvi5PEChQmvE67oILAeMs9bgoxX
+# YH2cLY7NvEN6KRSnM1ryiU9nmwh8qcenAR8Us5scCVt5M/Wsvxm5cVYSO3KV4MZ6
+# nY/KLHUS4+Kz9rzpjcluefTib/+r1i1aXIOq+1Wq+wibE6ufwSumI+pusK+CF5Eb
+# fUFKhfF9gR1NYLQjTInzfgYIgI2ZAyuEO+2daR3rv6oYpeBEaUOTfljwFJqUHts1
+# Ut1FEDgGj29wcqHmi6E+RBgIXhAWEWBDWqZsdssJ9C/HNcUaGLla0vsHPJ2bcaIQ
+# PYjD2krmGjLPS0DHNPoQ0b24pPyYT522LFGnZcTvN7y6S96Yu1ESe7WNg7QOwApd
+# uNPhzEwD1MVtNmwj1rP+7AxGi1PRBPeN+eHeh3aFcQKA64W/jnZw0g36qTYnX7Ur
+# eqXXA1Gc7WpW+X4I5AVD8NA5VkHMKruYCH0jDz/rFqoo7GVGMz0lkefmXAuQT7Fq
+# 1g7i1m/WHpd3U73a5dbVQrW/qfcZVRcrHH8OPAhu0u6nRFWCbav1bMb1PBk+Q1Yg
+# IOf5yyud1auKMJk83ZosApVR1d2PavOhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjExWjAvBgkqhkiG9w0BCQQxIgQgtI8gDwyvUdn2b84lTMpai8jb
-# b01I4W5XwxA1nZaMCFkwDQYJKoZIhvcNAQEBBQAEggIAo3ZllT0VLe9MW7qHirTo
-# hfKXcBQF0Vlit0HHV6EkbH4QcOo80bMC7JjhOwAJ/wkfnDnNLzGHW3qCcqfg4peM
-# yVnPKl/6iaKnaR+2yQVf+UJ9iNW0rDFZY3CmL/q70tph479BS8doO64PXcvlMTot
-# oztRkihG675AAZrxYI5CpctCil6giCBk5SVXjgbkHgmc0K+oONsuCC9WtwVX8G4A
-# y/7iLw/8TEgASxhs8WDUWtZST1j2gaj4dl8Mwi7qeVyI9Qc+r0OzKbpFBSL7Qf5B
-# mX26zwDNDuPmOzfELwY0ikKXrg5CYg/8D/3vlkKIliOV+2czxWAw+SBO1CxBxDBk
-# 4SsLhUOIxi/LytdjyAv6fJBiXjP4timuadI7u826Gcx69sXTa9jlpuhHH9VocQGz
-# 1XqMUiRAtKlcW/s4+r/aXK0Mj38osC1A7Rf6eYvel2CKPin0dkkU3YgW6mxnwxAv
-# hTwKbKwxaMlFlztb2usd6t4Qgikevpmb1IQQi4L5FCWoUWX6n4r70CFGh8W4AXe/
-# lWzlloeljWi7Q9abSF5gg0exVOuQubhUSaae2VRSn/JGs2ciKe8EIXi0z9ZJad6U
-# xH2iY/ocViDPpL1mvQppN1nqk07MOSoQauBDhSZDm7RwrOMHneJigvlaVhyeVHbA
-# IHJ5/8yYn+vc0Re+00OcNjQ=
+# MjYwMTEwMDEyODEzWjAvBgkqhkiG9w0BCQQxIgQgWeYaoDGeyOvHlvTWAybAxQmh
+# /UrCTISIkG+4V9uagZIwDQYJKoZIhvcNAQEBBQAEggIAi9VGCGC3bQmaeSzZUQuQ
+# wniD3+2Erl31YpaQE3HRJrHePXzsBjg9B492UJpFHTU9hFFlUR3pp76fNfvTpzMF
+# VDbgJ9CcQnmZ2oJaLrTSs+iNNhV3R13Y5DDzqSsc41NkT+TrzGjAhiEOtP8Lq2x8
+# P2GB3FFweG/agToz9NX4ufp6TVEwcdKgOXLIv2QPWPGLTeanSFE4f8WvnMywKYf5
+# ccm57YFMvwEdPV2fV/sU7jQ/1IA+HybeBSfpFuh1ZvzQp1lR4AHlVkgPTPvTkxn6
+# ICks7ca5mzTm6MhBF9IeHiJexSQZVYmCaHj3TKWWdyLxGwLUerQHTGNtkbslQFMs
+# qBl8srH+Ac63c90vwkHdXF36HpIiVssdE+hwxvia5Sr/IYSxJYm1z35m5z1+gIuU
+# 4iCCIMZEBoGa0Bg5Tnep27RpcDh/geZBmykO6sgh6S5z8JDYOD7N3aFXMD3SSgoc
+# 1FHdD0Vsk80uiIskTejDmlEMUeQtAy/MWfw11MGPhjT6THJW+zHf8J9OsZpjns5w
+# rMSkCcjUd8yAshWuOx2KpO44Tu2jvzEagGF1BnEub4vNlA6rCVxfI8A2Q+xCqvhz
+# n/LxyO5zBy5yR9fPihwIPQPmDFjnIf+tfQZk+E1GhfxKfSO0lXLUs6DzTFt6Ukga
+# uz3kzsu7e+VPLQcXrbevXwI=
 # SIG # End signature block
