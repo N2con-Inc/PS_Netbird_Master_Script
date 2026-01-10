@@ -1,102 +1,181 @@
 <#
 .SYNOPSIS
-Validates all modular PowerShell scripts for syntax errors
+Unified bootstrap wrapper for NetBird deployment scenarios
 
 .DESCRIPTION
-Runs PowerShell parser validation on all scripts in the modular directory.
-Must be run on Windows with PowerShell 5.1 or later.
+Single bootstrap script that downloads and executes the appropriate NetBird script based on mode.
+Supports both environment variables and parameters for flexible deployment.
+
+Three modes available:
+- Register: Register NetBird with setup key and remove desktop shortcut
+- RegisterUninstallZT: Register NetBird and uninstall ZeroTier
+- Update: Update NetBird to latest version
+
+.PARAMETER Mode
+Deployment mode: Register, RegisterUninstallZT, or Update (optional if $env:NB_MODE is set)
+
+.PARAMETER SetupKey
+NetBird setup key (optional if $env:NB_SETUPKEY is set) - Required for Register modes
+
+.PARAMETER ManagementUrl
+NetBird management server URL (optional if $env:NB_MGMTURL is set)
 
 .EXAMPLE
-.\Validate-Scripts.ps1
+# Scenario 1: Register only (using environment variables)
+$env:NB_MODE="Register"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+
+.EXAMPLE
+# Scenario 2: Register + Uninstall ZeroTier
+$env:NB_MODE="RegisterUninstallZT"; $env:NB_SETUPKEY="your-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+
+.EXAMPLE
+# Scenario 3: Update only
+$env:NB_MODE="Update"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
+
+.EXAMPLE
+# Using parameters instead of environment variables
+irm 'https://...' -OutFile b.ps1; .\b.ps1 -Mode Register -SetupKey "your-key"
+
+.EXAMPLE
+# Using scriptblock with parameters
+& ([ScriptBlock]::Create((irm 'https://...'))) -Mode Register -SetupKey "your-key" -ManagementUrl "https://custom.url"
+
+.NOTES
+Version: 1.0.0
+Parameters override environment variables if both are provided
 #>
 
 [CmdletBinding()]
-param()
-
-$ErrorActionPreference = 'Continue'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "PowerShell Script Syntax Validator" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
-
-# Get all PowerShell files
-$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | 
-    Where-Object { $_.Name -ne "Validate-Scripts.ps1" }
-
-Write-Host "Found $($files.Count) PowerShell files to validate`n" -ForegroundColor Cyan
-
-$passed = 0
-$failed = 0
-$errors = @()
-
-foreach ($file in $files) {
-    $relativePath = $file.FullName.Replace($scriptRoot, ".")
-    Write-Host "Validating: $relativePath" -NoNewline
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Register", "RegisterUninstallZT", "Update")]
+    [string]$Mode,
     
-    try {
-        # Read file content
-        $content = Get-Content $file.FullName | Out-String
-        
-        # Parse with PowerShell parser
-        $parseErrors = $null
-        $null = [System.Management.Automation.PSParser]::Tokenize($content, [ref]$parseErrors)
-        
-        if ($parseErrors -and $parseErrors.Count -gt 0) {
-            Write-Host " [FAIL]" -ForegroundColor Red
-            $failed++
-            foreach ($err in $parseErrors) {
-                $errors += @{
-                    File = $relativePath
-                    Line = $err.Token.StartLine
-                    Column = $err.Token.StartColumn
-                    Message = $err.Message
-                }
-                Write-Host "  Line $($err.Token.StartLine): $($err.Message)" -ForegroundColor Red
-            }
-        } else {
-            Write-Host " [OK]" -ForegroundColor Green
-            $passed++
-        }
+    [Parameter(Mandatory=$false)]
+    [string]$SetupKey,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$ManagementUrl
+)
+
+#Requires -RunAsAdministrator
+
+# Resolve parameters: Script parameters take precedence over environment variables
+$ResolvedMode = if ($Mode) { $Mode } else { $env:NB_MODE }
+$ResolvedSetupKey = if ($SetupKey) { $SetupKey } else { $env:NB_SETUPKEY }
+$ResolvedManagementUrl = if ($ManagementUrl) { $ManagementUrl } else { $env:NB_MGMTURL }
+
+# Default to Register mode if not specified
+if (-not $ResolvedMode) {
+    $ResolvedMode = "Register"
+}
+
+Write-Host "======================================" -ForegroundColor Cyan
+Write-Host "NetBird Deployment Bootstrap v1.0.0" -ForegroundColor Cyan
+Write-Host "======================================" -ForegroundColor White
+Write-Host ""
+Write-Host "Mode: $ResolvedMode"
+
+# Validate mode-specific requirements
+if ($ResolvedMode -eq "Register" -or $ResolvedMode -eq "RegisterUninstallZT") {
+    if (-not $ResolvedSetupKey) {
+        Write-Host ""
+        Write-Host "ERROR: Setup key required for $ResolvedMode mode" -ForegroundColor Red
+        Write-Host "Provide via parameter: -SetupKey 'your-key'" -ForegroundColor Yellow
+        Write-Host "Or environment variable: `$env:NB_SETUPKEY='your-key'" -ForegroundColor Yellow
+        exit 1
     }
-    catch {
-        Write-Host " [ERROR]" -ForegroundColor Red
-        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-        $failed++
-        $errors += @{
-            File = $relativePath
-            Line = "N/A"
-            Column = "N/A"
-            Message = $_.Exception.Message
-        }
+    
+    Write-Host "Setup Key: $($ResolvedSetupKey.Substring(0,[Math]::Min(8,$ResolvedSetupKey.Length)))... (masked)"
+    if ($ResolvedManagementUrl) {
+        Write-Host "Management URL: $ResolvedManagementUrl"
     }
 }
 
-Write-Host "`n======================================" -ForegroundColor Cyan
-Write-Host "Validation Summary:" -ForegroundColor Cyan
-Write-Host "  Total files: $($files.Count)"
-Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
-Write-Host "======================================" -ForegroundColor Cyan
+Write-Host ""
 
-if ($errors.Count -gt 0) {
-    Write-Host "`nErrors Found:" -ForegroundColor Red
-    foreach ($err in $errors) {
-        Write-Host "`n$($err.File)" -ForegroundColor Yellow
-        Write-Host "  Line $($err.Line), Column $($err.Column)" -ForegroundColor Gray
-        Write-Host "  $($err.Message)" -ForegroundColor Red
+# Determine which script to download based on mode
+$ScriptName = switch ($ResolvedMode) {
+    "Register" { "Register-Netbird.ps1" }
+    "RegisterUninstallZT" { "Register-Netbird-UninstallZerotier.ps1" }
+    "Update" { "Update-Netbird.ps1" }
+    default { 
+        Write-Host "ERROR: Invalid mode: $ResolvedMode" -ForegroundColor Red
+        exit 1
     }
+}
+
+$ScriptUrl = "https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/$ScriptName"
+$TempPath = Join-Path $env:TEMP "NetBird-Bootstrap"
+$ScriptPath = Join-Path $TempPath $ScriptName
+
+# Download main script from GitHub
+try {
+    Write-Host "Downloading $ScriptName from GitHub..." -ForegroundColor Yellow
+    
+    if (-not (Test-Path $TempPath)) {
+        New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
+    }
+    
+    # Use WebClient with UTF8 encoding to preserve signatures
+    $webClient = New-Object System.Net.WebClient
+    $webClient.Encoding = [System.Text.Encoding]::UTF8
+    $scriptContent = $webClient.DownloadString($ScriptUrl)
+    
+    # Write with UTF8 no-BOM to preserve signatures
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ScriptPath, $scriptContent, $utf8NoBom)
+    
+    Write-Host "Script downloaded successfully" -ForegroundColor Green
+    Write-Host ""
+}
+catch {
+    Write-Host "Failed to download script: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
-} else {
-    Write-Host "`n[SUCCESS] All scripts validated successfully!" -ForegroundColor Green
-    exit 0
+}
+
+# Build parameter list for main script (only for modes that need parameters)
+$MainScriptArgs = @{}
+
+if ($ResolvedMode -eq "Register" -or $ResolvedMode -eq "RegisterUninstallZT") {
+    $MainScriptArgs['SetupKey'] = $ResolvedSetupKey
+    
+    if ($ResolvedManagementUrl) {
+        $MainScriptArgs['ManagementUrl'] = $ResolvedManagementUrl
+    }
+}
+
+# Execute main script
+$ActionDescription = switch ($ResolvedMode) {
+    "Register" { "NetBird registration" }
+    "RegisterUninstallZT" { "NetBird registration and ZeroTier removal" }
+    "Update" { "NetBird update" }
+}
+
+Write-Host "Executing $ActionDescription..." -ForegroundColor Yellow
+Write-Host "======================================" -ForegroundColor Cyan
+Write-Host ""
+
+try {
+    if ($MainScriptArgs.Count -gt 0) {
+        & $ScriptPath @MainScriptArgs
+    } else {
+        & $ScriptPath
+    }
+    
+    $ExitCode = $LASTEXITCODE
+    exit $ExitCode
+}
+catch {
+    Write-Host "Script execution failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 }
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr08VWxQxf5UWXF2fwFVv6tyy
-# jxugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYTGnLWs9gisv63aNiym0Ky4I
+# 5qygghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -235,33 +314,33 @@ if ($errors.Count -gt 0) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Zy9NWeyr6mRRYy5n2lFe11iyphQwDQYJKoZIhvcNAQEBBQAEggIARPzYSWCvtS8i
-# PyKST5x9ReA0oK+BnLRL/wn4If8zHWW+JgRE49O8mPNfj77WW/2RcO83a8QHo/oq
-# rPwWyEuRMxIvpvqUU9645rHZTchKaZWIDL1Q4Ojsv//YFOUuZB/Q4i0PKdUjWOLs
-# aprFLO4LaFr2gKcsFQ0ciRRkcbha6YLCZII8ev3MFBxoXFqcniqiL9VDajSxaPTk
-# S1Gm9tGCCsgAD+JDPLcbFtQZk/hrn8y8EUJcyH6A6008442rnurZuzZDWOITf/by
-# lNqzOwpmEALOo+/MYTA7qQ2EfPfqySctizt8hOqmx1GwnXxFCe6VQxD1kRRJXHEa
-# S9g6sEoFu6qIOQPrTtxQTvcccH20940Cx7EUmpCYyaBY8qlVcZPitL9P6vmar3I/
-# Pd/wfWabyD9FHlIqzTxWrsmnTZoBTxKzURItPIlAxb+S1y72VS9fZc0/8iru5uH/
-# 54ozUCfLwwTmAbE2rOp/3eVgTrRuSuzB3gZBVO01ydVvlQiazVBrnUVj3TNSk4TA
-# 6QqLoYtupZd8dR8AHjtjCC5mvNsXBJ2/gVQWLvG2OMedtrTCJ4u3rTi1d84wUZiq
-# WSFxHh3Zi3Bf8EbZEnJ3IN/pDNq65zvvX0WscaIZOCbUeAcLUdwja/yJMvoDP6+K
-# DRXhwPveTPMsbh1V8IpcSHCDoePA/lGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# 7k1kl1qvDAwn2a7HY4dPDINHSJQwDQYJKoZIhvcNAQEBBQAEggIApYPX+EaEQowe
+# ctHwsCDbkdr3S3qD/PKFGVstGN8f9TUdhQ+Xq8JxFeKmJZFWNCIhs5YL2S3K1Uak
+# nvBmY4Z1dSMozn9y0rJbgAUkirwsuKsA4cWZFamaIJnU+8lQxGfCrvE1yZIRhVR6
+# Tyts5dEfJ/dwJ15+ecPo6MzbEJw5lbukTcOwN+MAOtR6gW+P32949CvJ5DpDVzJz
+# n71MLmXPXBMUn7TYOw0YB5QfxKkk8d9Q9hC3iGXB3H/QBJhm/vPukBWToymSz/EZ
+# 9xmtHL4tUP/nixciOWlQJXFX84EtTodaF+/IozH+7fVdvQqooeYuTLIyaGvz81Eg
+# C3U+N/dvgzFDxcdKYaaVo7bTtb8TH+RfruS1MqgyjKWrlEsPFo/vZU94rv8LBnjV
+# PErytagEhOgjWJM4WV/4DgsnOqB0ipUTngpO9wto8pnwm6zTk3H9uOeW3O4enPrk
+# KrSgjMW8iVCM/fQKiv5yG7uh06DV5942ylSszXS6couhKo5g5WjtIMm+QBZiQApo
+# GdByvD1vzOXWVvTzitao0RSGLJnHi9mD0K3Vdvdx75+HlBQQwtnOPrahYMk8obnN
+# 732YRPuugsf1SgWl0bWEO2btDUlWt7MwY3eeCCp/Wj6KLps8f9cTOkb/N99bv2uC
+# czAKsIzBEMMuJ7/ztt7UTkPoEu7BkSOhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjEyWjAvBgkqhkiG9w0BCQQxIgQgVCbsiLoL9p0z2Rt3a9z8/qMf
-# +dYTcY6CwK5qiNES9qkwDQYJKoZIhvcNAQEBBQAEggIAAM6mkcQlX/yRvbIl0nP6
-# 5tmVbWW8nvCU9m3ekp48D820GpDGwqIsTRCOAO16QO8MF2rXjCSRWRsOG2VgMv+W
-# t6P8Lds/dIPPDWiSaY+3AMHiWXi9JTOaf3ehTbxct9fAyuhvZ44H4nBaFDNpPR/3
-# 9cRKk81s8YHHyOixTSTTODrNoKQ6iMUMV5dOo3xuNTdIudXBPmTPFNZWAJNRhx/O
-# eCsqdAhQZl8IqVPf5bxReUxHtHnjzoBkHrvLrGwM6STESB0cd8mzc63UYSCbyRdM
-# jW1XXUqSenKc0X1G1brqRLeiVElBLK4PpayOoyXsICOqllUdOmR+8CHhiwIUw44O
-# ZdAjxx0mXqLe5aTuAkN1+e5luX81Rx3taIdgZRVDAvNylO78JW6LG5gKVj00fOta
-# VgrVclXcTj1nnQwIfBcBAQQrLSm+IXhh54tUjvLgePeCGJPqh2nd32bHHaOeN9hp
-# e4pMlPGIbSkGboUJJHdNmFJCvJpRekeqeBHHI0mCyXV6DQFUTyhPEd8/VEBDOk4z
-# XHYfJzk9Kj2XgzHIGYklGQ6xnfk3z6qQ2Bfu1QSn6KOAwDX5rAo8CI3j9hwir2Vt
-# yS/h8lX036OLpPSIoxdRPRYuXVuEHzgvm1r+u4fZrd8AQKpy2Pbp7qEwfVzZt39f
-# evJ0jVRQRwgDwZ6ONBOeWVc=
+# MjYwMTEwMDEwNjEwWjAvBgkqhkiG9w0BCQQxIgQgTcUOhBSfhmfNEGzKvSH5X/60
+# Mi3SmLlyPVoWJ+VvkgkwDQYJKoZIhvcNAQEBBQAEggIAufTDMXUObcmJxEoXwgG7
+# vMBOWnDkdQ29HwSw/VLbbA6E0rrP8SCnvhUoXwrir0X6/roEjKGxkH0d0zlJqwV3
+# rNhmciIJO/ghNzNMjA/nao/mDaxGMyIWkDyvOuFIHV3R+FH8HwBc2JgSPWm1XRod
+# RtmuJtdwXteCtRpWavh4EB1iE8ae+NAZWwGEnYoLpUSKK+rWEKsxGyl7CdV212Da
+# I36Pz0pTqAv3qJsiCZTcW6JLhM44EP9MxO8fFVTHWTMNTBt9t0M3ojxQ2FuKqpyz
+# EOI7PCvkZ+IjEke3FKVZckQRjGqPnMUjDp3/0DI2XCctyVz/76C7+i6vkIiRAypr
+# qlwRictLpOTb7RQFgqbMlTgYjFnU8JgIkPBlmYDpDz05QFl9gIwgmgalx5MMenID
+# 259Hl6mQB0VdONATz6qs4xMTfYHScqz+OgQtF6pZsze9Qx8LzJrgOIQu5xFpjfxH
+# /iemy7uv4F9mK5c6pnzgb+EjjK/9voic2wlF46wJPLrS3B2xf4RX5XzHna9uxt2r
+# 9OuNYWtslMxtnHI4Jjud0+pScUZUY75TU0gQuFeTs8gv9syqKvTKxCygqHQYqAUm
+# 8Ti7cDE800mBIweFbpBN+88nMGsYmLSFa+bwwgxXpp0mhQczkIopRWY2PfrfFvZi
+# kaUuBkQWswdPqetE01VEcNg=
 # SIG # End signature block

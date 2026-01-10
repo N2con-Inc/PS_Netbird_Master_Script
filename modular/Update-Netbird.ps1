@@ -1,102 +1,221 @@
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-Validates all modular PowerShell scripts for syntax errors
+    Update NetBird to the latest version
 
 .DESCRIPTION
-Runs PowerShell parser validation on all scripts in the modular directory.
-Must be run on Windows with PowerShell 5.1 or later.
-
+    Handles Scenario 3: Update NetBird to latest available version.
+    
+    This script:
+    - Checks current installed version
+    - Queries GitHub API for latest NetBird release
+    - Compares versions
+    - Downloads and installs MSI if update is available
+    - Preserves existing registration and configuration
+    - Removes desktop shortcut after update
+    - Logs all actions
+    
 .EXAMPLE
-.\Validate-Scripts.ps1
+    .\Update-Netbird.ps1
+
+.NOTES
+    Script Version: 1.0.0
+    Last Updated: 2026-01-10
+    PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
+    
+    Prerequisites:
+    - NetBird must be already installed
+    - Administrator privileges required
+    - Internet connection to GitHub API
+    
+    Note: Existing NetBird configuration and registration will be preserved
 #>
 
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = 'Continue'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Script Configuration
+$ScriptVersion = "1.0.0"
+$script:LogFile = "$env:TEMP\NetBird-Update-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "PowerShell Script Syntax Validator" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
-
-# Get all PowerShell files
-$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | 
-    Where-Object { $_.Name -ne "Validate-Scripts.ps1" }
-
-Write-Host "Found $($files.Count) PowerShell files to validate`n" -ForegroundColor Cyan
-
-$passed = 0
-$failed = 0
-$errors = @()
-
-foreach ($file in $files) {
-    $relativePath = $file.FullName.Replace($scriptRoot, ".")
-    Write-Host "Validating: $relativePath" -NoNewline
-    
-    try {
-        # Read file content
-        $content = Get-Content $file.FullName | Out-String
-        
-        # Parse with PowerShell parser
-        $parseErrors = $null
-        $null = [System.Management.Automation.PSParser]::Tokenize($content, [ref]$parseErrors)
-        
-        if ($parseErrors -and $parseErrors.Count -gt 0) {
-            Write-Host " [FAIL]" -ForegroundColor Red
-            $failed++
-            foreach ($err in $parseErrors) {
-                $errors += @{
-                    File = $relativePath
-                    Line = $err.Token.StartLine
-                    Column = $err.Token.StartColumn
-                    Message = $err.Message
-                }
-                Write-Host "  Line $($err.Token.StartLine): $($err.Message)" -ForegroundColor Red
-            }
-        } else {
-            Write-Host " [OK]" -ForegroundColor Green
-            $passed++
-        }
-    }
-    catch {
-        Write-Host " [ERROR]" -ForegroundColor Red
-        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-        $failed++
-        $errors += @{
-            File = $relativePath
-            Line = "N/A"
-            Column = "N/A"
-            Message = $_.Exception.Message
-        }
-    }
+# Import shared module
+$ModulePath = Join-Path $PSScriptRoot "NetbirdCommon.psm1"
+if (-not (Test-Path $ModulePath)) {
+    Write-Error "Required module NetbirdCommon.psm1 not found at: $ModulePath"
+    exit 1
 }
 
-Write-Host "`n======================================" -ForegroundColor Cyan
-Write-Host "Validation Summary:" -ForegroundColor Cyan
-Write-Host "  Total files: $($files.Count)"
-Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
-Write-Host "======================================" -ForegroundColor Cyan
+Import-Module $ModulePath -Force
 
-if ($errors.Count -gt 0) {
-    Write-Host "`nErrors Found:" -ForegroundColor Red
-    foreach ($err in $errors) {
-        Write-Host "`n$($err.File)" -ForegroundColor Yellow
-        Write-Host "  Line $($err.Line), Column $($err.Column)" -ForegroundColor Gray
-        Write-Host "  $($err.Message)" -ForegroundColor Red
-    }
+# Main script
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "NetBird Update Script v$ScriptVersion" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "" -LogFile $script:LogFile
+
+# Step 1: Verify NetBird is installed
+Write-Log "Step 1: Verifying NetBird installation..." -LogFile $script:LogFile
+if (-not (Test-NetBirdInstalled)) {
+    Write-Log "NetBird is not installed. Please install NetBird first." "ERROR" -LogFile $script:LogFile
+    Write-Log "Update failed." "ERROR" -LogFile $script:LogFile
     exit 1
+}
+
+$netbirdExe = Get-NetBirdExecutablePath
+Write-Log "NetBird found at: $netbirdExe" -LogFile $script:LogFile
+
+# Step 2: Get current version
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 2: Checking current version..." -LogFile $script:LogFile
+
+$currentVersion = Get-NetBirdVersion
+if (-not $currentVersion) {
+    Write-Log "Could not determine current NetBird version" "WARN" -LogFile $script:LogFile
+    Write-Log "Proceeding with update attempt..." "WARN" -LogFile $script:LogFile
+    $currentVersion = "Unknown"
 } else {
-    Write-Host "`n[SUCCESS] All scripts validated successfully!" -ForegroundColor Green
+    Write-Log "Current NetBird version: $currentVersion" -LogFile $script:LogFile
+}
+
+# Step 3: Query GitHub for latest version
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 3: Checking for latest version on GitHub..." -LogFile $script:LogFile
+
+$latestInfo = Get-LatestNetBirdVersion
+if (-not $latestInfo) {
+    Write-Log "Failed to retrieve latest version from GitHub" "ERROR" -LogFile $script:LogFile
+    Write-Log "Update failed." "ERROR" -LogFile $script:LogFile
+    exit 1
+}
+
+$latestVersion = $latestInfo.Version
+$downloadUrl = $latestInfo.DownloadUrl
+
+Write-Log "Latest NetBird version: $latestVersion" -LogFile $script:LogFile
+Write-Log "Download URL: $downloadUrl" -LogFile $script:LogFile
+
+# Step 4: Compare versions
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 4: Comparing versions..." -LogFile $script:LogFile
+
+if ($currentVersion -eq $latestVersion) {
+    Write-Log "NetBird is already up to date (version $currentVersion)" -LogFile $script:LogFile
+    Write-Log "" -LogFile $script:LogFile
+    Write-Log "[OK] No update needed" -LogFile $script:LogFile
     exit 0
 }
+
+if ($currentVersion -ne "Unknown") {
+    $isNewer = Compare-Versions -Version1 $currentVersion -Version2 $latestVersion
+    if (-not $isNewer) {
+        Write-Log "Current version ($currentVersion) is same or newer than latest ($latestVersion)" -LogFile $script:LogFile
+        Write-Log "No update needed" -LogFile $script:LogFile
+        exit 0
+    }
+}
+
+Write-Log "Update available: $currentVersion -> $latestVersion" -LogFile $script:LogFile
+
+# Step 5: Check if NetBird is connected (for status tracking)
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 5: Checking current connection status..." -LogFile $script:LogFile
+
+$wasConnected = Test-NetBirdConnected
+if ($wasConnected) {
+    Write-Log "NetBird is currently connected" -LogFile $script:LogFile
+} else {
+    Write-Log "NetBird is not currently connected" -LogFile $script:LogFile
+}
+
+# Step 6: Install update
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 6: Installing NetBird update..." -LogFile $script:LogFile
+Write-Log "Downloading and installing version $latestVersion..." -LogFile $script:LogFile
+
+if (-not (Install-NetBirdMsi -DownloadUrl $downloadUrl)) {
+    Write-Log "NetBird update installation failed" "ERROR" -LogFile $script:LogFile
+    Write-Log "Update failed." "ERROR" -LogFile $script:LogFile
+    exit 1
+}
+
+Write-Log "NetBird update installed successfully" -LogFile $script:LogFile
+
+# Step 7: Wait for service to restart
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 7: Waiting for NetBird service to restart..." -LogFile $script:LogFile
+Start-Sleep -Seconds 15
+
+# Step 8: Verify new version
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 8: Verifying updated version..." -LogFile $script:LogFile
+
+$newVersion = Get-NetBirdVersion
+if ($newVersion) {
+    Write-Log "Updated NetBird version: $newVersion" -LogFile $script:LogFile
+    
+    if ($newVersion -eq $latestVersion) {
+        Write-Log "Version update confirmed" -LogFile $script:LogFile
+    } else {
+        Write-Log "Version mismatch - expected $latestVersion, got $newVersion" "WARN" -LogFile $script:LogFile
+    }
+} else {
+    Write-Log "Could not verify updated version" "WARN" -LogFile $script:LogFile
+}
+
+# Step 9: Check connection status
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 9: Checking connection status..." -LogFile $script:LogFile
+
+$isConnected = Test-NetBirdConnected
+if ($isConnected) {
+    Write-Log "NetBird is connected" -LogFile $script:LogFile
+    
+    # Display status
+    $status = Get-NetBirdStatus
+    if ($status) {
+        Write-Log "NetBird Status:" -LogFile $script:LogFile
+        foreach ($line in $status) {
+            Write-Log "  $line" -Source "NETBIRD" -LogFile $script:LogFile
+        }
+    }
+} else {
+    if ($wasConnected) {
+        Write-Log "NetBird is not connected. It was connected before update." "WARN" -LogFile $script:LogFile
+        Write-Log "You may need to re-register with your setup key" "WARN" -LogFile $script:LogFile
+    } else {
+        Write-Log "NetBird is not connected (was not connected before update either)" -LogFile $script:LogFile
+    }
+}
+
+# Step 10: Remove desktop shortcut
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 10: Removing desktop shortcut..." -LogFile $script:LogFile
+
+if (Remove-DesktopShortcut) {
+    Write-Log "Desktop shortcut removed successfully" -LogFile $script:LogFile
+} else {
+    Write-Log "Desktop shortcut removal failed or shortcut not found" "WARN" -LogFile $script:LogFile
+}
+
+# Summary
+Write-Log "" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "Update Complete" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "Previous Version: $currentVersion" -LogFile $script:LogFile
+Write-Log "New Version: $latestVersion" -LogFile $script:LogFile
+Write-Log "Connection Status: $(if ($isConnected) { 'CONNECTED' } else { 'NOT CONNECTED' })" -LogFile $script:LogFile
+Write-Log "Log file: $script:LogFile" -LogFile $script:LogFile
+Write-Log "" -LogFile $script:LogFile
+
+Write-Log "[OK] NetBird update completed successfully" -LogFile $script:LogFile
+exit 0
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr08VWxQxf5UWXF2fwFVv6tyy
-# jxugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUAokwyzaKSi4DJfjgFxeIJDNg
+# pNqgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -235,33 +354,33 @@ if ($errors.Count -gt 0) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Zy9NWeyr6mRRYy5n2lFe11iyphQwDQYJKoZIhvcNAQEBBQAEggIARPzYSWCvtS8i
-# PyKST5x9ReA0oK+BnLRL/wn4If8zHWW+JgRE49O8mPNfj77WW/2RcO83a8QHo/oq
-# rPwWyEuRMxIvpvqUU9645rHZTchKaZWIDL1Q4Ojsv//YFOUuZB/Q4i0PKdUjWOLs
-# aprFLO4LaFr2gKcsFQ0ciRRkcbha6YLCZII8ev3MFBxoXFqcniqiL9VDajSxaPTk
-# S1Gm9tGCCsgAD+JDPLcbFtQZk/hrn8y8EUJcyH6A6008442rnurZuzZDWOITf/by
-# lNqzOwpmEALOo+/MYTA7qQ2EfPfqySctizt8hOqmx1GwnXxFCe6VQxD1kRRJXHEa
-# S9g6sEoFu6qIOQPrTtxQTvcccH20940Cx7EUmpCYyaBY8qlVcZPitL9P6vmar3I/
-# Pd/wfWabyD9FHlIqzTxWrsmnTZoBTxKzURItPIlAxb+S1y72VS9fZc0/8iru5uH/
-# 54ozUCfLwwTmAbE2rOp/3eVgTrRuSuzB3gZBVO01ydVvlQiazVBrnUVj3TNSk4TA
-# 6QqLoYtupZd8dR8AHjtjCC5mvNsXBJ2/gVQWLvG2OMedtrTCJ4u3rTi1d84wUZiq
-# WSFxHh3Zi3Bf8EbZEnJ3IN/pDNq65zvvX0WscaIZOCbUeAcLUdwja/yJMvoDP6+K
-# DRXhwPveTPMsbh1V8IpcSHCDoePA/lGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# uWhQ4X1NFvPgBKnmyj/cipp9HcIwDQYJKoZIhvcNAQEBBQAEggIAK/g/roOjhx6B
+# lj+dudLx4nIJM5yBPLrnFPifqz7Fu10Z/SgI1wnq+Fw2xMh1qpRTdxWGrFvtYKqb
+# 2fK0AEMQ6+0PqFC0gGEM+FuBhLIEAY2xv2kJ9sz9GFeI/GA30KmuSRM8asPfcNUc
+# IwTrxp5Aj+x0aTq+nAXULqGE2gU8hIg+vPBPIfqrHSZ5o3aheejB2J6QCcHdz0A3
+# b9u9qqyfgExGZF7D4CAc2oIj2Cep2szy1eb9UNXhtK6dQQ6zlI5+tMO4GTFhgTr3
+# SdARpsDGOam1UTEff8qN53bdguevsXRCd+pLlSzZyqAIxX3fpPSbgVzbEDqIZQUp
+# ivXGAM8pVjNR/uAv4Zflkt91NZ21Z9RAumXgsCdxojQZlqwJJf3lCtfGfMbhSlaM
+# r8sSN6idnhIolN/+r5IZf1P8f3bZPYJY199DeSv39x73ZpcsCcVE1dRNXt3Ued2b
+# Nu4EbXvvnRsyqdWuWZx+sD46JIFl91MehOeo/gdRStGXrD45BovwXxda8K0R+K/I
+# IVnJNURoFsXGf/UoSJaPUDD0bIw0Yw5WNiNVoDLsvkOwhOQjYw5NnEOKWUq3RnTU
+# eqyjGUrd1+mHAjkt7iQ5/OUDcesjTBTDQJ2y27vqjMo3rgjiQjw9zrEc2NUqp9P0
+# X5/wEZTGklQDJHZCThFuKFCk37CB1gmhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjEyWjAvBgkqhkiG9w0BCQQxIgQgVCbsiLoL9p0z2Rt3a9z8/qMf
-# +dYTcY6CwK5qiNES9qkwDQYJKoZIhvcNAQEBBQAEggIAAM6mkcQlX/yRvbIl0nP6
-# 5tmVbWW8nvCU9m3ekp48D820GpDGwqIsTRCOAO16QO8MF2rXjCSRWRsOG2VgMv+W
-# t6P8Lds/dIPPDWiSaY+3AMHiWXi9JTOaf3ehTbxct9fAyuhvZ44H4nBaFDNpPR/3
-# 9cRKk81s8YHHyOixTSTTODrNoKQ6iMUMV5dOo3xuNTdIudXBPmTPFNZWAJNRhx/O
-# eCsqdAhQZl8IqVPf5bxReUxHtHnjzoBkHrvLrGwM6STESB0cd8mzc63UYSCbyRdM
-# jW1XXUqSenKc0X1G1brqRLeiVElBLK4PpayOoyXsICOqllUdOmR+8CHhiwIUw44O
-# ZdAjxx0mXqLe5aTuAkN1+e5luX81Rx3taIdgZRVDAvNylO78JW6LG5gKVj00fOta
-# VgrVclXcTj1nnQwIfBcBAQQrLSm+IXhh54tUjvLgePeCGJPqh2nd32bHHaOeN9hp
-# e4pMlPGIbSkGboUJJHdNmFJCvJpRekeqeBHHI0mCyXV6DQFUTyhPEd8/VEBDOk4z
-# XHYfJzk9Kj2XgzHIGYklGQ6xnfk3z6qQ2Bfu1QSn6KOAwDX5rAo8CI3j9hwir2Vt
-# yS/h8lX036OLpPSIoxdRPRYuXVuEHzgvm1r+u4fZrd8AQKpy2Pbp7qEwfVzZt39f
-# evJ0jVRQRwgDwZ6ONBOeWVc=
+# MjYwMTEwMDEwNjEyWjAvBgkqhkiG9w0BCQQxIgQguQ9YJbAQShcNqmmiMITgbZQm
+# wzaYD3Tnjzb2+CADHlwwDQYJKoZIhvcNAQEBBQAEggIAa8uWkxxVL6PLCDDHl+lJ
+# t1cIq3huoEnka0CSqsIDdGUa3yGq2FZwaVk48n/TUgAV8tjPw1rr77WQ14pvY0ll
+# G/XXccfemqb+LLQ498d3qprCLOudPbulMkVTTiwlRO15XPHGeVlO96yaMf3rz5D3
+# U2QWGutDYB9mfFzGAW8ecmC/mwBYKs1pldGymxPeFPV3Q8q4W+OzAGaS1OXcPaJO
+# 2rlR14p1BQWm8vJ3GmK8VdhZsfYMyC3+U2j80zn4blrP3kmYkPkLrmMqeBMo+JRq
+# hq58k7WnuVWsfAjX/guys0OtiaFcL+bHFM6kYAKvy9Zh3EXFTV8rcGD7Sf+GZ9oT
+# Dq20TLUuoUt/OQV5dtqXPmgWDuAshNPcUr/dm6CUf8jdQMTEZnsx+m/vXOQYTj3Z
+# nuuPnJuuk/9Ehtr1wxQ2J0LNHVnoe+L+XHWSbJgJKJN3D87462j77kTkXLV9mOl3
+# 4+jqo4CKVJj7cJRs7incwkiH9vpHcjRYztqN8zGPyC7ysl39ssMh1L+aCNcVfFdI
+# Ko7EPLE85Xzx+4462mGiGY1atzlrKvZdZrNYG23TkZao/LK8S3x2ad4k0Wh1DoGT
+# yiuQXBcIgJ+/+dT3U5sBEhU0myrTeUBo4WFpxkvhYzyX6V/LIGJvAzLtjMKXFK1A
+# ERF/Q3F9QfSHdHrn3Os7lTU=
 # SIG # End signature block

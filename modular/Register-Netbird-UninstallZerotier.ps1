@@ -1,102 +1,228 @@
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-Validates all modular PowerShell scripts for syntax errors
+    Register NetBird with setup key and uninstall ZeroTier
 
 .DESCRIPTION
-Runs PowerShell parser validation on all scripts in the modular directory.
-Must be run on Windows with PowerShell 5.1 or later.
+    Handles Scenario 2: NetBird is already installed, ZeroTier also installed.
+    
+    This script:
+    - Verifies NetBird is installed
+    - Checks if ZeroTier is installed
+    - Registers NetBird using setup key
+    - Waits for connection confirmation
+    - Uninstalls ZeroTier
+    - Removes desktop shortcut from Public Desktop
+    - Logs all actions
+    
+.PARAMETER SetupKey
+    NetBird setup key for registration (REQUIRED)
+
+.PARAMETER ManagementUrl
+    NetBird management server URL (optional, defaults to https://api.netbird.io:443)
 
 .EXAMPLE
-.\Validate-Scripts.ps1
+    .\Register-Netbird-UninstallZerotier.ps1 -SetupKey "your-setup-key-here"
+
+.EXAMPLE
+    .\Register-Netbird-UninstallZerotier.ps1 -SetupKey "your-key" -ManagementUrl "https://netbird.company.com"
+
+.NOTES
+    Script Version: 1.0.0
+    Last Updated: 2026-01-10
+    PowerShell Compatibility: Windows PowerShell 5.1+ and PowerShell 7+
+    
+    Prerequisites:
+    - NetBird must be already installed
+    - Administrator privileges required
+    - Valid setup key from NetBird dashboard
+    
+    Warning: This script will remove ZeroTier from the system
 #>
 
 [CmdletBinding()]
-param()
-
-$ErrorActionPreference = 'Continue'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "PowerShell Script Syntax Validator" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
-
-# Get all PowerShell files
-$files = Get-ChildItem -Path $scriptRoot -Recurse -Include *.ps1 | 
-    Where-Object { $_.Name -ne "Validate-Scripts.ps1" }
-
-Write-Host "Found $($files.Count) PowerShell files to validate`n" -ForegroundColor Cyan
-
-$passed = 0
-$failed = 0
-$errors = @()
-
-foreach ($file in $files) {
-    $relativePath = $file.FullName.Replace($scriptRoot, ".")
-    Write-Host "Validating: $relativePath" -NoNewline
+param(
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$SetupKey,
     
-    try {
-        # Read file content
-        $content = Get-Content $file.FullName | Out-String
-        
-        # Parse with PowerShell parser
-        $parseErrors = $null
-        $null = [System.Management.Automation.PSParser]::Tokenize($content, [ref]$parseErrors)
-        
-        if ($parseErrors -and $parseErrors.Count -gt 0) {
-            Write-Host " [FAIL]" -ForegroundColor Red
-            $failed++
-            foreach ($err in $parseErrors) {
-                $errors += @{
-                    File = $relativePath
-                    Line = $err.Token.StartLine
-                    Column = $err.Token.StartColumn
-                    Message = $err.Message
-                }
-                Write-Host "  Line $($err.Token.StartLine): $($err.Message)" -ForegroundColor Red
-            }
-        } else {
-            Write-Host " [OK]" -ForegroundColor Green
-            $passed++
-        }
+    [Parameter(Mandatory=$false)]
+    [string]$ManagementUrl = "https://api.netbird.io:443"
+)
+
+# Script Configuration
+$ScriptVersion = "1.0.0"
+$script:LogFile = "$env:TEMP\NetBird-Register-UninstallZT-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+# Import shared module
+$ModulePath = Join-Path $PSScriptRoot "NetbirdCommon.psm1"
+if (-not (Test-Path $ModulePath)) {
+    Write-Error "Required module NetbirdCommon.psm1 not found at: $ModulePath"
+    exit 1
+}
+
+Import-Module $ModulePath -Force
+
+# Main script
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "NetBird Registration + ZeroTier Removal Script v$ScriptVersion" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "" -LogFile $script:LogFile
+
+# Step 1: Verify NetBird is installed
+Write-Log "Step 1: Verifying NetBird installation..." -LogFile $script:LogFile
+if (-not (Test-NetBirdInstalled)) {
+    Write-Log "NetBird is not installed. Please install NetBird before running this script." "ERROR" -LogFile $script:LogFile
+    Write-Log "Installation failed." "ERROR" -LogFile $script:LogFile
+    exit 1
+}
+
+$netbirdExe = Get-NetBirdExecutablePath
+Write-Log "NetBird found at: $netbirdExe" -LogFile $script:LogFile
+
+# Get current version
+$currentVersion = Get-NetBirdVersion
+if ($currentVersion) {
+    Write-Log "Current NetBird version: $currentVersion" -LogFile $script:LogFile
+}
+
+# Step 2: Check ZeroTier installation
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 2: Checking for ZeroTier installation..." -LogFile $script:LogFile
+$zerotierInstalled = Test-ZeroTierInstalled
+
+if ($zerotierInstalled) {
+    Write-Log "ZeroTier is installed - will be removed after NetBird registration" -Source "ZEROTIER" -LogFile $script:LogFile
+} else {
+    Write-Log "ZeroTier is not installed - skipping uninstall step" -Source "ZEROTIER" -LogFile $script:LogFile
+}
+
+# Step 3: Register NetBird
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 3: Registering NetBird..." -LogFile $script:LogFile
+Write-Log "Setup Key: $($SetupKey.Substring(0,[Math]::Min(8,$SetupKey.Length)))... (masked)" -LogFile $script:LogFile
+Write-Log "Management URL: $ManagementUrl" -LogFile $script:LogFile
+
+try {
+    # Build netbird up command
+    $upArgs = @("up", "--setup-key", $SetupKey)
+    
+    # Only add management-url if it's not the default
+    if ($ManagementUrl -ne "https://api.netbird.io:443") {
+        $upArgs += "--management-url"
+        $upArgs += $ManagementUrl
     }
-    catch {
-        Write-Host " [ERROR]" -ForegroundColor Red
-        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
-        $failed++
-        $errors += @{
-            File = $relativePath
-            Line = "N/A"
-            Column = "N/A"
-            Message = $_.Exception.Message
+    
+    Write-Log "Executing: netbird up --setup-key [MASKED]$(if ($ManagementUrl -ne 'https://api.netbird.io:443') { ' --management-url ' + $ManagementUrl })" -LogFile $script:LogFile
+    
+    $output = & $netbirdExe $upArgs 2>&1
+    $exitCode = $LASTEXITCODE
+    
+    Write-Log "Command output: $output" -Source "NETBIRD" -LogFile $script:LogFile
+    Write-Log "Exit code: $exitCode" -Source "NETBIRD" -LogFile $script:LogFile
+    
+    if ($exitCode -ne 0) {
+        Write-Log "NetBird registration command failed with exit code: $exitCode" "ERROR" -Source "NETBIRD" -LogFile $script:LogFile
+        Write-Log "Registration failed." "ERROR" -LogFile $script:LogFile
+        exit 1
+    }
+    
+    Write-Log "NetBird registration command completed successfully" -Source "NETBIRD" -LogFile $script:LogFile
+}
+catch {
+    Write-Log "NetBird registration failed: $($_.Exception.Message)" "ERROR" -Source "NETBIRD" -LogFile $script:LogFile
+    Write-Log "Registration failed." "ERROR" -LogFile $script:LogFile
+    exit 1
+}
+
+# Step 4: Wait and verify connection
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 4: Verifying NetBird connection..." -LogFile $script:LogFile
+Write-Log "Waiting 10 seconds for connection to establish..." -LogFile $script:LogFile
+Start-Sleep -Seconds 10
+
+$maxAttempts = 6
+$attemptDelay = 5
+$connected = $false
+
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Log "Connection check attempt $attempt/$maxAttempts..." -LogFile $script:LogFile
+    
+    if (Test-NetBirdConnected) {
+        $connected = $true
+        Write-Log "NetBird is connected!" -LogFile $script:LogFile
+        
+        # Get and display status
+        $status = Get-NetBirdStatus
+        if ($status) {
+            Write-Log "NetBird Status:" -LogFile $script:LogFile
+            foreach ($line in $status) {
+                Write-Log "  $line" -Source "NETBIRD" -LogFile $script:LogFile
+            }
         }
+        break
+    }
+    
+    if ($attempt -lt $maxAttempts) {
+        Write-Log "Not connected yet, waiting $attemptDelay seconds..." "WARN" -LogFile $script:LogFile
+        Start-Sleep -Seconds $attemptDelay
     }
 }
 
-Write-Host "`n======================================" -ForegroundColor Cyan
-Write-Host "Validation Summary:" -ForegroundColor Cyan
-Write-Host "  Total files: $($files.Count)"
-Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
-Write-Host "======================================" -ForegroundColor Cyan
+if (-not $connected) {
+    Write-Log "NetBird did not connect within expected time." "WARN" -LogFile $script:LogFile
+    Write-Log "WARNING: Proceeding with ZeroTier uninstall despite connection issue" "WARN" -LogFile $script:LogFile
+}
 
-if ($errors.Count -gt 0) {
-    Write-Host "`nErrors Found:" -ForegroundColor Red
-    foreach ($err in $errors) {
-        Write-Host "`n$($err.File)" -ForegroundColor Yellow
-        Write-Host "  Line $($err.Line), Column $($err.Column)" -ForegroundColor Gray
-        Write-Host "  $($err.Message)" -ForegroundColor Red
+# Step 5: Uninstall ZeroTier
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 5: Uninstalling ZeroTier..." -LogFile $script:LogFile
+
+if ($zerotierInstalled) {
+    Write-Log "Attempting to uninstall ZeroTier..." -Source "ZEROTIER" -LogFile $script:LogFile
+    
+    if (Uninstall-ZeroTier) {
+        Write-Log "ZeroTier uninstalled successfully" -Source "ZEROTIER" -LogFile $script:LogFile
+    } else {
+        Write-Log "ZeroTier uninstall failed. Manual removal may be required." "WARN" -Source "ZEROTIER" -LogFile $script:LogFile
     }
-    exit 1
 } else {
-    Write-Host "`n[SUCCESS] All scripts validated successfully!" -ForegroundColor Green
+    Write-Log "ZeroTier not installed - skipping uninstall" -Source "ZEROTIER" -LogFile $script:LogFile
+}
+
+# Step 6: Remove desktop shortcut
+Write-Log "" -LogFile $script:LogFile
+Write-Log "Step 6: Removing NetBird desktop shortcut..." -LogFile $script:LogFile
+
+if (Remove-DesktopShortcut) {
+    Write-Log "Desktop shortcut removed successfully" -LogFile $script:LogFile
+} else {
+    Write-Log "Desktop shortcut removal failed or shortcut not found" "WARN" -LogFile $script:LogFile
+}
+
+# Summary
+Write-Log "" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "Operation Complete" -LogFile $script:LogFile
+Write-Log "======================================" -LogFile $script:LogFile
+Write-Log "NetBird Status: $(if ($connected) { 'CONNECTED' } else { 'PENDING' })" -LogFile $script:LogFile
+Write-Log "ZeroTier Status: $(if ($zerotierInstalled) { 'UNINSTALLED' } else { 'NOT INSTALLED' })" -LogFile $script:LogFile
+Write-Log "Log file: $script:LogFile" -LogFile $script:LogFile
+Write-Log "" -LogFile $script:LogFile
+
+if ($connected) {
+    Write-Log "[OK] NetBird registration and ZeroTier removal completed successfully" -LogFile $script:LogFile
+    exit 0
+} else {
+    Write-Log "[WARN] Operations completed but NetBird connection pending" "WARN" -LogFile $script:LogFile
     exit 0
 }
 
 # SIG # Begin signature block
 # MIIf7QYJKoZIhvcNAQcCoIIf3jCCH9oCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr08VWxQxf5UWXF2fwFVv6tyy
-# jxugghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULf64Fwkz6bGPxmH31MPVER0Q
+# WtSgghj5MIIFjTCCBHWgAwIBAgIQDpsYjvnQLefv21DiCEAYWjANBgkqhkiG9w0B
 # AQwFADBlMQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYD
 # VQQLExB3d3cuZGlnaWNlcnQuY29tMSQwIgYDVQQDExtEaWdpQ2VydCBBc3N1cmVk
 # IElEIFJvb3QgQ0EwHhcNMjIwODAxMDAwMDAwWhcNMzExMTA5MjM1OTU5WjBiMQsw
@@ -235,33 +361,33 @@ if ($errors.Count -gt 0) {
 # CQEWEXN1cHBvcnRAbjJjb24uY29tAgg0bTKO/3ZtbTAJBgUrDgMCGgUAoHgwGAYK
 # KwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYBBAGCNwIB
 # BDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG9w0BCQQxFgQU
-# Zy9NWeyr6mRRYy5n2lFe11iyphQwDQYJKoZIhvcNAQEBBQAEggIARPzYSWCvtS8i
-# PyKST5x9ReA0oK+BnLRL/wn4If8zHWW+JgRE49O8mPNfj77WW/2RcO83a8QHo/oq
-# rPwWyEuRMxIvpvqUU9645rHZTchKaZWIDL1Q4Ojsv//YFOUuZB/Q4i0PKdUjWOLs
-# aprFLO4LaFr2gKcsFQ0ciRRkcbha6YLCZII8ev3MFBxoXFqcniqiL9VDajSxaPTk
-# S1Gm9tGCCsgAD+JDPLcbFtQZk/hrn8y8EUJcyH6A6008442rnurZuzZDWOITf/by
-# lNqzOwpmEALOo+/MYTA7qQ2EfPfqySctizt8hOqmx1GwnXxFCe6VQxD1kRRJXHEa
-# S9g6sEoFu6qIOQPrTtxQTvcccH20940Cx7EUmpCYyaBY8qlVcZPitL9P6vmar3I/
-# Pd/wfWabyD9FHlIqzTxWrsmnTZoBTxKzURItPIlAxb+S1y72VS9fZc0/8iru5uH/
-# 54ozUCfLwwTmAbE2rOp/3eVgTrRuSuzB3gZBVO01ydVvlQiazVBrnUVj3TNSk4TA
-# 6QqLoYtupZd8dR8AHjtjCC5mvNsXBJ2/gVQWLvG2OMedtrTCJ4u3rTi1d84wUZiq
-# WSFxHh3Zi3Bf8EbZEnJ3IN/pDNq65zvvX0WscaIZOCbUeAcLUdwja/yJMvoDP6+K
-# DRXhwPveTPMsbh1V8IpcSHCDoePA/lGhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
+# mX4sMMWk+l2dlORHLz0WV/MczYUwDQYJKoZIhvcNAQEBBQAEggIAzEGq8OGo1tP6
+# 3xrSXRVPlFLMtJtydZForNUuWMBJwAFZRmWhzpMwXsNrqVQSiI9FRet0X8Rcd36E
+# 0kL6JlOQ9hTF4ww3CjTzZL+DSd3RKdjLbkBacMtuER3y5DZwIWdhTH7hmQTnEkyo
+# HwqQANDJ3CAfW4c4BNAWlUu/ilsa+R/gdkDB2uyKg6HJq63DQeLz0evpbnilKkVL
+# 2cOk3R1sIwir5nSIAIAmugdzBrG2icMWwmmJjKzr402XFtJPooLdR3fKgr3jqIkp
+# G1ky31ndcBUfnZpIo8+HBBWU1GvoBLzYMp1DK6hCQRUSZ4X476wSXGiPnNSb/PIr
+# ZaCs9bC0L13wPH+HM/ZHC5ylQlgfPXojG7gNpAworvIUnrWho8rCf69Q5gq1WeLw
+# RVnzMgB+k/dxoroo0V1cmIkGumyzf0A+BYGZop1QwktSo9pcnCU9zTqh2yCvKqzW
+# D0dx6kFoKjCoBCsLAmFYSpHP49SVjKuZX1medoLzDhUgtLkjx8G64dknIpDtSxhE
+# QHM6zNWGDSRW5YMug3wwrRQTyREI9f8wBXxZS0/BrxVJL7mtRveYUl6Wu0buLvp/
+# oLBKyVyWz92UU/yPJYK3R7Q9LFvIi6YXoyzxnmV1AJM/yKrmVyZLxz7THYN9Rc1t
+# ysiXhEGamP9J+jHGI5MjgL0izSkMyZWhggMmMIIDIgYJKoZIhvcNAQkGMYIDEzCC
 # Aw8CAQEwfTBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQsIEluYy4x
 # QTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5nIFJTQTQw
 # OTYgU0hBMjU2IDIwMjUgQ0ExAhAKgO8YS43xBYLRxHanlXRoMA0GCWCGSAFlAwQC
 # AQUAoGkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcN
-# MjYwMTEwMDEwNjEyWjAvBgkqhkiG9w0BCQQxIgQgVCbsiLoL9p0z2Rt3a9z8/qMf
-# +dYTcY6CwK5qiNES9qkwDQYJKoZIhvcNAQEBBQAEggIAAM6mkcQlX/yRvbIl0nP6
-# 5tmVbWW8nvCU9m3ekp48D820GpDGwqIsTRCOAO16QO8MF2rXjCSRWRsOG2VgMv+W
-# t6P8Lds/dIPPDWiSaY+3AMHiWXi9JTOaf3ehTbxct9fAyuhvZ44H4nBaFDNpPR/3
-# 9cRKk81s8YHHyOixTSTTODrNoKQ6iMUMV5dOo3xuNTdIudXBPmTPFNZWAJNRhx/O
-# eCsqdAhQZl8IqVPf5bxReUxHtHnjzoBkHrvLrGwM6STESB0cd8mzc63UYSCbyRdM
-# jW1XXUqSenKc0X1G1brqRLeiVElBLK4PpayOoyXsICOqllUdOmR+8CHhiwIUw44O
-# ZdAjxx0mXqLe5aTuAkN1+e5luX81Rx3taIdgZRVDAvNylO78JW6LG5gKVj00fOta
-# VgrVclXcTj1nnQwIfBcBAQQrLSm+IXhh54tUjvLgePeCGJPqh2nd32bHHaOeN9hp
-# e4pMlPGIbSkGboUJJHdNmFJCvJpRekeqeBHHI0mCyXV6DQFUTyhPEd8/VEBDOk4z
-# XHYfJzk9Kj2XgzHIGYklGQ6xnfk3z6qQ2Bfu1QSn6KOAwDX5rAo8CI3j9hwir2Vt
-# yS/h8lX036OLpPSIoxdRPRYuXVuEHzgvm1r+u4fZrd8AQKpy2Pbp7qEwfVzZt39f
-# evJ0jVRQRwgDwZ6ONBOeWVc=
+# MjYwMTEwMDEwNjExWjAvBgkqhkiG9w0BCQQxIgQgCBv7bUeKf4XlM6/wM5ng3yUT
+# 3wQlcN0ekWdnltc375gwDQYJKoZIhvcNAQEBBQAEggIAs1+hyZ/IlAdaI9+wgnCm
+# pc3eYxJltRzeAs8XMnF5SGyj3K5kYVV6XVCjGvWGzjkKBdXBXeDvaRXLSl+kxx7P
+# 9g8rr69vvyvAA9ZUNFx341Dgp4FyzbY4JDrAmISUZUoeRTyiRdL0LVn5BfMyQoCk
+# Bf/mJwod1vpKkvETDDjOQKSAPhmpAVwPFfeeypKYBCLdoPPonp+ib1UPtDDGr1CC
+# wevjcih9mVXEjsYKd/0g+mT3riLATW/4LRERXu29bC7k9bFtQMI1qrEj4OsJXh4b
+# w+TRIcURdlVBIZaGmOeh+YP7eQg+Wu75yu4UBxXmvxkc8wxjRPI2oWA4MfvqT7hE
+# QpHulzptOAkbZ9DXe2dZiq7dnl06szQ64D1SCJFrksBw83njuVi+cGb1G6gjD3AA
+# Y+Oo9T0JmkPbV1foxxeHqT7W0NKe3pOwDO5SD7FXo6wGIF6gcnaHh2cMqEb03inT
+# 6K3talghIvyVsB8SxpqaDoHSADVoPIoaPzUKV4D6vOaOZUtJ10uHvpjwsjGXwNzc
+# bpgF9F5pxP3d3OKbEB/1Z0BSx/vxjHrPWkCwz+QNvA7+U8UWdHfyldz0VpGhznKW
+# iaafpSkHOMc8306mnlJ2gLOaCVoeNEESkkNFYzYQQu7GZ9Xf9zZqFKDbnKQ2KqUG
+# hNxXjJtoPcNE68jrht2J7PA=
 # SIG # End signature block

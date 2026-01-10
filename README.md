@@ -1,6 +1,6 @@
 # NetBird PowerShell Deployment Scripts
 
-**Modern, modular PowerShell automation for NetBird VPN deployments on Windows**
+**Simplified, scenario-based PowerShell automation for NetBird VPN on Windows**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
@@ -8,98 +8,76 @@
 
 ## Overview
 
-This repository provides a comprehensive modular system for deploying, managing, and updating NetBird VPN clients on Windows systems. Designed for enterprise automation, Intune deployments, and bootstrap scenarios.
+Streamlined PowerShell scripts for the three most common NetBird deployment scenarios. Deploy with a single bootstrap URL using mode selection - simple, elegant, and maintainable.
 
 ### Key Features
 
-- **Modular Architecture**: Separate modules for installation, registration, diagnostics, updates, and more
-- **Bootstrap Pattern**: One-line deployment - scripts fetched fresh from GitHub
-- **Automated Updates**: Built-in scheduled task management with version control
-- **Multiple Deployment Modes**: Standard, OOBE, ZeroTier migration, Diagnostics
+- **Three Focused Scripts**: Register, Register+UninstallZeroTier, Update
+- **Unified Bootstrap**: Single URL with mode selection for all scenarios
+- **Always Fresh**: Scripts fetched from GitHub on each run
+- **No Complex Orchestration**: Simple scripts, no module loading or launchers
 - **Code Signed**: All scripts digitally signed for enterprise security
-- **Environment Variable Configuration**: No local files needed on client systems
-- **Comprehensive Logging**: Detailed logs for troubleshooting and auditing
+- **Environment Variable Support**: Flexible parameter or env var configuration
+- **Comprehensive Logging**: Detailed logs and Windows Event Log integration
 
 ## Quick Start
 
-### Standard Installation
+**One Bootstrap URL, Three Modes** - All scenarios use the same URL with mode selection:
+
+### Scenario 1: Register NetBird
+
+NetBird is already installed, just register and clean up:
 
 ```powershell
-# With setup key
-$env:NB_SETUPKEY = "your-setup-key-here"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-
-# Custom management server
-$env:NB_SETUPKEY = "your-key"
-$env:NB_MGMTURL = "https://netbird.example.com"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+$env:NB_MODE="Register"; $env:NB_SETUPKEY="your-setup-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
-### OOBE Deployment (Windows Setup Phase)
+### Scenario 2: Register + Remove ZeroTier
+
+NetBird and ZeroTier both installed, register NetBird and uninstall ZeroTier:
 
 ```powershell
-$env:NB_MODE = "OOBE"
-$env:NB_SETUPKEY = "your-key-here"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+$env:NB_MODE="RegisterUninstallZT"; $env:NB_SETUPKEY="your-setup-key"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
-### ZeroTier Migration
+### Scenario 3: Update to Latest
+
+Update NetBird to the latest version:
 
 ```powershell
-$env:NB_MODE = "ZeroTier"
-$env:NB_SETUPKEY = "your-key-here"
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
+$env:NB_MODE="Update"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
-### Automated Updates
+### With Custom Management Server
 
 ```powershell
-# Update to latest version now
-[System.Environment]::SetEnvironmentVariable('NB_UPDATE_LATEST', '1', 'Process')
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/bootstrap.ps1' | iex
-
-# Setup weekly scheduled updates (version-controlled)
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Create-NetbirdUpdateTask.ps1' -OutFile Create-NetbirdUpdateTask.ps1
-.\Create-NetbirdUpdateTask.ps1 -UpdateMode Target -Schedule Weekly -NonInteractive
+$env:NB_MODE="Register"; $env:NB_SETUPKEY="your-key"; $env:NB_MGMTURL="https://netbird.company.com"; irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/Bootstrap-Netbird.ps1' | iex
 ```
 
 ## Documentation
 
-Comprehensive documentation is available in the `modular/` directory:
+- **[modular/README.md](modular/README.md)** - Complete documentation for the simplified system
+- **[archive/modular/README.md](archive/modular/README.md)** - Documentation for the archived complex system
 
-- **[modular/README.md](modular/README.md)** - Complete system documentation
-- **[modular/QUICK_START.md](modular/QUICK_START.md)** - Fast deployment examples
-- **[modular/UPDATE_GUIDE.md](modular/UPDATE_GUIDE.md)** - Update management guide
-- **[modular/INTUNE_GUIDE.md](modular/INTUNE_GUIDE.md)** - Intune/MDM deployment
-- **[modular/MODULE_LOADING.md](modular/MODULE_LOADING.md)** - Architecture details
+## Three Deployment Modes
 
-## Deployment Modes
-
-| Mode | Use Case | Key Features |
-|------|----------|-------------|
-| **Standard** | Normal Windows installations | Full feature set, version detection, service management |
-| **OOBE** | Windows setup phase | Bypasses user profile dependencies, USB deployment |
-| **ZeroTier** | VPN migration | Automated migration with rollback support |
-| **Diagnostics** | Troubleshooting | Status checks, connectivity tests, log export |
-| **UpdateToLatest** | Version updates | Auto-update to newest NetBird release |
-| **UpdateToTarget** | Controlled updates | Update to specific version from GitHub config |
+| Mode | Use Case | Script |
+|------|----------|--------|
+| **Register** | NetBird installed, needs registration | `Register-Netbird.ps1` |
+| **RegisterUninstallZT** | NetBird + ZeroTier installed, migrate to NetBird | `Register-Netbird-UninstallZerotier.ps1` |
+| **Update** | Update NetBird to latest version | `Update-Netbird.ps1` |
 
 ## Environment Variables
 
-All configuration is done via environment variables for maximum flexibility:
+Configuration via environment variables or parameters:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NB_MODE` | Deployment mode | `Standard`, `OOBE`, `ZeroTier`, `Diagnostics` |
-| `NB_SETUPKEY` | NetBird setup key | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
-| `NB_MGMTURL` | Management server URL | `https://api.netbird.io` |
-| `NB_VERSION` | Target version | `0.60.8` |
-| `NB_FULLCLEAR` | Full config reset | `1` |
-| `NB_FORCEREINSTALL` | Force reinstall | `1` |
-| `NB_UPDATE_LATEST` | Update to latest | `1` |
-| `NB_UPDATE_TARGET` | Update to target | `1` |
+| Variable | Description | Required For | Example |
+|----------|-------------|--------------|---------|  
+| `NB_MODE` | Deployment mode | All | `Register`, `RegisterUninstallZT`, `Update` |
+| `NB_SETUPKEY` | NetBird setup key | Register modes | `77530893-E8C4-44FC-AABF-7A0511D9558E` |
+| `NB_MGMTURL` | Management server URL | Optional | `https://api.netbird.io:443` (default) |
 
-See [modular/README.md](modular/README.md) for complete environment variable reference.
+**Note**: Parameters override environment variables when both are provided.
 
 ## Requirements
 
@@ -110,26 +88,27 @@ See [modular/README.md](modular/README.md) for complete environment variable ref
 
 ## Architecture
 
-### Modular Design
+### Simplified Design
 
 The system consists of:
 
-- **bootstrap.ps1** - Entry point, environment parsing, launcher fetching
-- **netbird.launcher.ps1** - Orchestration, module loading, workflow execution
-- **modules/** - Functional modules (core, registration, diagnostics, updates, etc.)
-- **config/** - Configuration files (module manifest, target versions)
+- **Bootstrap-Netbird.ps1** - Unified bootstrap with mode selection
+- **Register-Netbird.ps1** - Registers NetBird and removes desktop shortcut
+- **Register-Netbird-UninstallZerotier.ps1** - Registers NetBird and uninstalls ZeroTier
+- **Update-Netbird.ps1** - Updates NetBird to latest version
+- **NetbirdCommon.psm1** - Shared functions module
 
 ### Bootstrap Pattern
 
 ```
-User Command → bootstrap.ps1 → netbird.launcher.ps1 → Load Modules → Execute Workflow
+User Command → Bootstrap-Netbird.ps1 → Downloads Main Script → Executes
 ```
 
 This pattern ensures:
 - Scripts always fetched fresh from GitHub
 - No local file management needed
 - Single source of truth
-- Easy updates and maintenance
+- Simple, focused scripts
 
 ## Use Cases
 
@@ -153,17 +132,6 @@ This pattern ensures:
 - Legacy VPN replacement
 - Multi-site rollouts
 
-## Interactive Mode
-
-For manual deployments, run the launcher interactively:
-
-```powershell
-# Download and run launcher
-irm 'https://raw.githubusercontent.com/N2con-Inc/PS_Netbird_Master_Script/main/modular/netbird.launcher.ps1' -OutFile netbird.launcher.ps1
-.\netbird.launcher.ps1
-```
-
-The interactive menu provides guided wizards for all deployment scenarios.
 
 ## Code Signing
 
@@ -174,32 +142,25 @@ All PowerShell scripts are digitally signed with a code signing certificate:
 
 This ensures script integrity and enables execution on systems with `AllSigned` execution policy.
 
-## Version Management
+## Archived Systems
 
-### Modular System Version
+Two previous system versions have been archived:
 
-The modular system uses semantic versioning tracked in:
-- `modular/config/module-manifest.json` - Overall system version
-- Individual module versions in manifest
-
-### Updating NetBird
-
-NetBird client versions are managed separately:
-- Latest version automatically detected from GitHub
-- Target version controlled via `modular/config/target-version.txt`
-- Version compliance enforcement available
-
-## Legacy Scripts (Archived)
-
-The original monolithic scripts have been archived:
-
+### Original Monolithic Scripts (archive/)
 - **Location**: `archive/` directory
-- **Status**: No longer maintained
 - **Scripts**: `netbird.extended.ps1`, `netbird.oobe.ps1`, `netbird.zerotier-migration.ps1`
+- **Status**: No longer maintained
 
-See [archive/README.md](archive/README.md) for details and migration guidance.
+See [archive/README.md](archive/README.md) for details.
 
-**All new deployments should use the modular system.**
+### Complex Modular System (archive/modular/)
+- **Location**: `archive/modular/` directory
+- **System**: Launcher-based orchestration with module loading, scheduled tasks, version locking
+- **Status**: Archived January 2026 (superseded by simplified scripts)
+
+See [archive/modular/README.md](archive/modular/README.md) for migration guidance.
+
+**All new deployments should use the simplified script system.**
 
 ## Support and Contributing
 
@@ -215,30 +176,33 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ```
 PS_Netbird_Master_Script/
-├── modular/                    # Modular system (ACTIVE)
-│   ├── bootstrap.ps1          # Bootstrap entry point
-│   ├── netbird.launcher.ps1   # Main launcher/orchestrator
-│   ├── modules/               # Functional modules
-│   ├── config/                # Configuration files
-│   ├── README.md              # Complete documentation
-│   ├── QUICK_START.md         # Quick start guide
-│   ├── UPDATE_GUIDE.md        # Update management
-│   └── INTUNE_GUIDE.md        # Intune deployment
-├── archive/                    # Legacy monolithic scripts (DEPRECATED)
-│   ├── netbird.extended.ps1
+├── modular/                                    # Simplified scripts (ACTIVE)
+│   ├── Bootstrap-Netbird.ps1                  # Unified bootstrap
+│   ├── Register-Netbird.ps1                   # Scenario 1
+│   ├── Register-Netbird-UninstallZerotier.ps1 # Scenario 2
+│   ├── Update-Netbird.ps1                     # Scenario 3
+│   ├── NetbirdCommon.psm1                     # Shared module
+│   ├── Sign-Scripts.ps1                       # Code signing
+│   └── README.md                              # Complete documentation
+├── archive/                                    # Archived systems
+│   ├── modular/                               # Complex modular system (archived Jan 2026)
+│   │   ├── bootstrap.ps1
+│   │   ├── netbird.launcher.ps1
+│   │   ├── modules/
+│   │   └── README.md
+│   ├── netbird.extended.ps1                   # Original monolithic scripts
 │   ├── netbird.oobe.ps1
-│   └── docs/                  # Legacy documentation
-├── README.md                   # This file
-└── CLAUDE.md                   # AI assistant context
-
+│   └── README.md
+├── README.md                                   # This file
+└── CLAUDE.md                                   # AI assistant context
 ```
 
 ## Getting Help
 
-1. Check the **[modular/QUICK_START.md](modular/QUICK_START.md)** guide
-2. Review **[modular/README.md](modular/README.md)** for detailed documentation
+1. Review **[modular/README.md](modular/README.md)** for complete documentation
+2. Check **Quick Start** examples above for your scenario
 3. Search existing [GitHub Issues](https://github.com/N2con-Inc/PS_Netbird_Master_Script/issues)
-4. Open a new issue with detailed information
+4. Open a new issue with detailed information and log files
 
 ---
 
